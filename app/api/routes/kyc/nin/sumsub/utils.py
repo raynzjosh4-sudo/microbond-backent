@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 SUMSUB_APP_TOKEN = settings.SUMSUB_APP_TOKEN
 SUMSUB_SECRET_KEY = settings.SUMSUB_SECRET_KEY
+SUMSUB_LEVEL_NAME = settings.SUMSUB_LEVEL_NAME
 SUMSUB_BASE_URL = "https://api.sumsub.com"
 
 def generate_sumsub_signature(method: str, path: str, body: bytes = b'') -> dict:

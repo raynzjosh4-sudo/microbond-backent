@@ -1,0 +1,249 @@
+That is a brilliant and deeply practical product architecture for the Ugandan market. In many households here, phones, lines, or National IDs are shared among family members, and forcing a strict 1:1 rigid boundary upfront can kill user adoption.
+
+By building a **Multi-Tiered KYC & Account Linking Model**, you solve this elegantly:
+
+1. **Tier 1 (Instant Phone Verification):** The user verifies ownership of the SIM card via your Africa's Talking OTP and background telecom name check, letting them into the app immediately without friction.
+2. **Tier 2 (Family / Shared NIN Association):** If a user's SIM is registered under a parent or guardian's National ID (NIN), your system allows linking that verified NIN to multiple family accounts or group members, while tracking the relationship.
+3. **Tier 3 (Action-Based Rate Limiting):** Unverified or dependent accounts can participate, save, and join groups, but high-risk actions (like large withdrawals or moving significant capital) are rate-limited or require a secondary verification step (such as an approval prompt sent to the parent/guardian's primary verified phone/NIN).
+
+---
+
+### How to Model This in Your Database (`models.py`)
+
+To support this relationship and tiering cleanly in FastAPI and Supabase, your `User` model can include fields for verification tiers, parental linkage, and transaction limits:
+
+```python
+from datetime import datetime
+from typing import Optional
+from sqlmodel import SQLModel, Field
+
+class User(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    phone_number: str = Field(index=True, unique=True)
+    full_name: Optional[str] = Field(default=None)
+    
+    # KYC & Verification Status
+    is_phone_verified: bool = Field(default=False)
+    kyc_tier: int = Field(default=1)  # Tier 1: Phone only, Tier 2: Linked NIN, Tier 3: Full Independent ID
+    nin: Optional[str] = Field(default=None, index=True) # National ID number (can be shared/linked)
+    
+    # Family/Guardian Linkage (for accounts sharing a parent's NIN)
+    guardian_id: Optional[int] = Field(default=None, foreignKey="user.id")
+    is_dependent_account: bool = Field(default=False)
+    
+    # Transaction safety limits based on tier
+    daily_withdrawal_limit: float = Field(default=50000.0) # e.g., 50k UGX limit for Tier 1
+    
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+```
+
+---
+
+### Next Step for Your Flow
+
+When a user finishes the OTP verification step we built earlier, your background task can evaluate:
+
+* Does this phone number return a clean name? Yes $\rightarrow$ Create user at **Tier 1**.
+* Does the user want to skip ID upload? Yes $\rightarrow$ Allow them straight into the app dashboard with standard rate limits.
+* Do they want to upgrade their limits by linking a parent's verified NIN already in the system? $\rightarrow$ Trigger the guardian linkage flow.
+
+Where would you like to build next—implementing the **background task to fetch and save the user's name** right after OTP verification, or defining the 
+**rate-limiting logic for withdrawals** based on their KYC tier?
+
+
+Your APIs have some basic error handling (like raising HTTPException with 500 or 400 statuses), but they can definitely be strengthened.
+
+Here is what is currently missing or could be improved to make these APIs production-ready and robust:
+
+1. Handling Validation Errors (e.g., Phone Sanitization)
+Currently, if sanitize_uganda_phone(payload.phone_number) throws an error (like a ValueError for a malformed phone number), FastAPI will likely crash with an unhandled 500 Internal Server Error. Fix: You should catch validation errors and return a 400 Bad Request so the client knows they sent bad data.
+
+2. Database Exception Handling
+Database operations (session.commit()) can fail for various reasons (e.g., connection drops, race conditions). If a commit fails, it will cause an unhandled 500 error. Fix: Wrap database commits in a try...except block, perform a session.rollback() on failure, and raise a clean 500 error.
+
+3. Explicit Response Models & Status Codes
+While FastAPI defaults to returning a 200 status code, explicitly defining the response_model and status_code in the @router.post decorator is a best practice. It automatically documents your API in Swagger UI and validates the output data. Fix: Add status_code=status.HTTP_200_OK to the decorators and define Pydantic models for the responses (e.g., OTPRequestResponse, OTPVerifyResponse).
+
+4. Rate Limiting (Crucial for SMS APIs)
+APIs that send SMS are prime targets for abuse (SMS bombing), which can cost you a lot of money. Right now, a malicious user could call /request-otp thousands of times a minute. Fix: Implement rate limiting (e.g., max 3 OTP requests per phone number every 5 minutes). You can also add a check to prevent requesting a new OTP if an active one was sent less than 60 seconds ago.
+
+5. Token Generation on Login
+In verify_otp, you successfully verify the user, but you just return their user_id. In a real-world scenario, you usually need to return a session token (like a JWT) so the user can authenticate subsequent requests to your protected endpoints.
+
+Example of how we can strengthen /request-otp:
+python
+from sqlalchemy.exc import SQLAlchemyError
+@router.post(
+    "/request-otp", 
+    summary="Request SMS OTP",
+    status_code=status.HTTP_200_OK, # Explicit success status
+    # response_model=OTPRequestResponse # Ideally add a Pydantic model here
+)
+def request_otp(payload: OTPRequest, session: Session = Depends(get_session)):
+    # 1. Handle Validation errors properly
+    try:
+        phone = sanitize_uganda_phone(payload.phone_number)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        
+    # [Optional] Add check here to see if an OTP was sent in the last 60 seconds...
+    otp_code = generate_6digit_code()
+    expiry = datetime.now(timezone.utc) + timedelta(minutes=5)
+    try:
+        # Invalidate older codes...
+        existing_otps = session.exec(
+            select(OTPRecord).where(
+                OTPRecord.phone_number == phone, 
+                OTPRecord.is_used == False
+            )
+        ).all()
+        for record in existing_otps:
+            record.is_used = True
+            session.add(record)
+        new_otp = OTPRecord(phone_number=phone, code=otp_code, expires_at=expiry)
+        session.add(new_otp)
+        
+        # 2. Safely commit with a rollback fallback
+        session.commit()
+    except SQLAlchemyError:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database error occurred while processing OTP."
+        )
+    # 3. Send SMS
+    sent = send_real_otp_sms(phone_number=phone, code=otp_code)
+    if not sent:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, # 503 is better for 3rd party service failures
+            detail="Failed to send SMS OTP. Please try again later."
+        )
+    return {
+        "status": "success",
+        "message": f"OTP sent to {phone}",
+        "expires_in_seconds": 300
+    }
+Would you like me to go ahead and refactor the entire at_otp_auth.py file to include these safety measures, robust error handling, and response models?
+
+5:56 AM
+
+
+For full regulatory compliance in Uganda—especially when scaling Microbond to handle financial savings, micro-bonds, and larger withdrawals—phone number verification is just **Tier 1**. To lift rate limits and unlock full capabilities, you need **Tier 2/3 National ID (NIN) verification** directly against Uganda's central NIRA (National Identification and Registration Authority) database.
+
+Given that your backend is built on Python/FastAPI and you want a clean integration path, here is how you can implement ID KYC:
+
+---
+
+### The Recommended Path: Laboremus (STREAMLINE API)
+
+For a Ugandan-centric fintech like Microbond, **Laboremus Uganda (STREAMLINE API)** provides direct, native integration into the central NIRA database.
+
+* **What it verifies:** You pass a user's NIN and their full name/DOB, and the API queries NIRA in real-time, returning an audit-grade verified status, exact legal names, date of birth, gender, and card status.
+* **Developer Experience:** They offer **STREAMLINE Flex**, which allows local developers to sign up quickly, top up via mobile money on a pay-per-check model with no monthly minimums, and test immediately.
+
+---
+
+### How to Implement NIN Verification in FastAPI
+
+When a user wants to upgrade their tier (or link a parent/guardian's shared NIN), your mobile app will send the NIN to a new FastAPI endpoint.
+
+Here is the clean implementation blueprint for your backend:
+
+#### 1. Add the Request Schema (`schemas.py`)
+
+```python
+from pydantic import BaseModel, Field
+
+class NINVerificationRequest(BaseModel):
+    phone_number: str
+    nin: str = Field(..., min_length=14, max_length=14, description="Ugandan 14-character NIN")
+
+```
+
+#### 2. Create the Laboremus Integration Service (`laboremus_service.py`)
+
+```python
+import os
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
+LABOREMUS_API_KEY = os.getenv("LABOREMUS_API_KEY")
+LABOREMUS_BASE_URL = os.getenv("LABOREMUS_BASE_URL", "https://api.laboremus.ug") # Example staging/prod endpoint
+
+def verify_nin_with_nira(nin: str):
+    """
+    Sends a NIN lookup request to Laboremus NIRA gateway
+    """
+    url = f"{LABOREMUS_BASE_URL}/v1/kyc/nira"
+    headers = {
+        "Authorization": f"Bearer {LABOREMUS_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "nin": nin
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+    
+    if response.status_code == 200:
+        data = response.json()
+        return {
+            "verified": True,
+            "full_name": data.get("full_name"),
+            "dob": data.get("dob"),
+            "gender": data.get("gender"),
+            "raw_data": data
+        }
+    else:
+        return {
+            "verified": False,
+            "error": response.text
+        }
+
+```
+
+#### 3. Wire it into your FastAPI Router (`auth.py` or `kyc.py`)
+
+```python
+from fastapi import APIRouter, Depends, HTTPException
+from sqlmodel import Session
+# Assuming you have a get_session dependency and User model setup
+# from database import get_session
+# from models import User
+
+router = APIRouter(prefix="/api/v1/kyc", tags=["KYC"])
+
+@router.post("/verify-nin")
+def verify_user_nin(payload: NINVerificationRequest):
+    # 1. Call Laboremus NIRA API wrapper
+    result = verify_nin_with_nira(payload.nin)
+    
+    if not result["verified"]:
+        raise HTTPException(status_code=400, detail=f"NIN Verification failed: {result.get('error')}")
+    
+    # 2. Update user profile in Supabase database (Tier upgrade)
+    # user = db.exec(select(User).where(User.phone_number == payload.phone_number)).first()
+    # user.nin = payload.nin
+    # user.kyc_tier = 2  # Upgraded to full ID tier
+    # user.full_name = result["full_name"]
+    # db.commit()
+
+    return {
+        "status": "success",
+        "message": "NIN successfully verified via NIRA!",
+        "full_name": result["full_name"],
+        "kyc_tier": 2
+    }
+
+```
+
+---
+
+### Alternative: Smile ID
+
+If you prefer a pan-African SDK that supports offline/online ID document capture alongside NIN lookups, you can use **Smile ID's Python Server Library**. You would initialize it with your Partner ID and API Key, then call their Web API for ID verification.
+
+Would you like to register for a **Laboremus STREAMLINE Flex** account to grab your API keys for testing NIRA lookups, or would you like to build out the database logic to handle linking a single NIN across multiple family/dependent accounts?

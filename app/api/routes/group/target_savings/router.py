@@ -5,7 +5,7 @@ import uuid
 from app.core.database import get_session
 from app.models.group.group import Group, GroupMembership
 from app.models.user.user import User
-from app.models.group.settings import GroupSettings
+from app.models.group.settings import GroupFinancialSettings, GroupGovernanceSettings, GroupCommunicationSettings, GroupVisibilitySettings
 from app.models.group.long_term import TargetSavingsGroupDetails
 from app.schemas.target_savings_group_create_request import TargetSavingsGroupCreateRequest
 
@@ -53,10 +53,10 @@ def create_group(request: TargetSavingsGroupCreateRequest, session: Session = De
     session.add(new_group)
     
     # 3b. Create Group Settings separately
-    new_settings = GroupSettings(
-        group_id=new_group_id
-    )
-    session.add(new_settings)
+    session.add(GroupFinancialSettings(group_id=new_group_id))
+    session.add(GroupGovernanceSettings(group_id=new_group_id))
+    session.add(GroupCommunicationSettings(group_id=new_group_id))
+    session.add(GroupVisibilitySettings(group_id=new_group_id))
     
     # 3c. Save Target Savings Details
     target_details = TargetSavingsGroupDetails(

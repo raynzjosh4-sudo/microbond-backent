@@ -19,7 +19,15 @@ class SetAppPinResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
-@router.post("/pin/set", response_model=SetAppPinResponse, summary="Set App PIN for the user", status_code=status.HTTP_200_OK)
+from app.core.rate_limit import RateLimiter
+
+@router.post(
+    "/pin/set", 
+    response_model=SetAppPinResponse, 
+    summary="Set App PIN for the user", 
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(RateLimiter(times=5, seconds=60))]
+)
 def set_app_pin(
     payload: SetAppPinRequest, 
     session: Session = Depends(get_session),

@@ -14,6 +14,15 @@ class KycProfile(SQLModel, table=True):
     overall_status: str = Field(default="UNVERIFIED")
     rejection_reason: Optional[str] = Field(default=None)
     
+    first_name: Optional[str] = Field(default=None)
+    last_name: Optional[str] = Field(default=None)
+    middle_name: Optional[str] = Field(default=None)
+    gender: Optional[str] = Field(default=None)
+    nin: Optional[str] = Field(default=None, unique=True, index=True)
+    dob: Optional[str] = Field(default=None)
+    document_id: Optional[str] = Field(default=None)
+    photo_base64: Optional[str] = Field(default=None)
+    
     # SIM Verification fields flattened (could also use JSON)
     sim_msisdn: Optional[str] = Field(default=None)
     sim_telecom_provider: Optional[str] = Field(default=None)

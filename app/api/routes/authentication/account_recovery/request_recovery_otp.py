@@ -7,7 +7,7 @@ from app.core.database import get_session
 from app.models.user.user import User
 from app.models.auth.otp import OTPRecord
 from app.communications.sms_service import send_real_otp_sms, sanitize_uganda_phone
-from app.api.routes.authentication.otp.africastalking.functions.utils import generate_6digit_code
+from app.api.routes.authentication.otp.africastalking.utils import generate_6digit_code
 from app.core.security import verify_pin
 
 router = APIRouter()

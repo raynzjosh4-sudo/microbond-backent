@@ -8,14 +8,14 @@ def init_db():
     import app.models.user.user
     import app.models.user.kyc
     import app.models.user.invite
-    import app.models.user.settings
-    import app.models.user.trust
-    import app.models.user.linked_account
+    import app.models.user.userpayoutaccount.payout_destination
+    import app.models.user.userpaymentmethod.payment_method
     import app.models.auth.otp
     import app.models.group.group
     import app.models.group.settings
     import app.models.group.rotating
     import app.models.group.long_term
+    import app.models.group.report
     
     SQLModel.metadata.create_all(engine)
 

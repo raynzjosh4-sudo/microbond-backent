@@ -1,5 +1,6 @@
 from typing import Optional
 from sqlmodel import SQLModel, Field
+from sqlalchemy import Column, BigInteger
 from datetime import datetime, timezone
 
 def utc_now():
@@ -11,9 +12,10 @@ class RotatingGroupDetails(SQLModel, table=True):
     
     contribution_amount: float
     payouts_per_cycle: int
-    number_of_cycles: int # Automatically calculated (e.g. math.ceil(max_members / payouts_per_cycle))
-    collection_days_interval: int
-    group_start_time: str
+    number_of_cycles: Optional[int] = Field(default=None) # Automatically calculated or None if infinite
+    collection_frequency_days: int
+    collection_time: str
+    group_start_time: int = Field(sa_column=Column(BigInteger))
     
     payout_order_strategy: str
     is_payout_order_locked: bool = Field(default=False)

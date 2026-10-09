@@ -8,7 +8,7 @@ from app.models.user.user import User
 from app.models.auth.otp import OTPRecord
 from app.communications.sms_service import sanitize_uganda_phone
 from app.api.dependencies import get_current_user
-from app.api.routes.authentication.otp.africastalking.functions.kyc import fetch_and_save_kyc
+from app.api.routes.kyc.phone.fetch_and_save_kyc import fetch_and_save_kyc
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 
 router = APIRouter()

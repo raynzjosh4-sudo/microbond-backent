@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     
     SUMSUB_APP_TOKEN: str = ""
     SUMSUB_SECRET_KEY: str = ""
+    SUMSUB_LEVEL_NAME: str = "ld-text-based-level"
     
     PREMBLY_SECRET_KEY: str = ""
     PREMBLY_PUBLIC_KEY: str = ""
@@ -20,6 +21,21 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "a_very_secret_and_long_string_for_production_jwt" # In production, set this in .env
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 # 7 days
+    
+    # Sentry Error Logging
+    SENTRY_DSN: str = ""
+    SENTRY_ENVIRONMENT: str = "development"
+    
+    # Redis for Rate Limiting
+    REDIS_URL: str = "redis://localhost:6379"
+    
+    # Security / CORS
+    ALLOWED_ORIGINS: list[str] = [
+        "http://localhost:3000",        # Local React web testing
+        "http://localhost:8000",        # Local development
+        "https://app.microbond.com",    # Your future production frontend
+        # Android / iOS don't strictly use CORS, but keeping this secure prevents web scraping!
+    ]
 
     # Reads from a local .env file
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
