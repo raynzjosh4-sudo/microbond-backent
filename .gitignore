@@ -1,0 +1,10 @@
+# Virtual Environment
+venv/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+
+# Environment Secrets
+.env
+firebase_credentials.json
