@@ -1,0 +1,16 @@
+from pydantic import BaseModel
+import uuid
+
+class OTPRequestResponse(BaseModel):
+    status: str
+    message: str
+    expires_in_seconds: int
+
+class OTPVerifyResponse(BaseModel):
+    status: str
+    access_token: str
+    token_type: str = "bearer"
+    user_id: uuid.UUID | None
+    phone_number: str
+    is_new_user: bool
+    is_profile_complete: bool

@@ -7,6 +7,8 @@ from app.core.database import get_session
 from app.models.user.user import User
 from app.models.auth.otp import OTPRecord
 from app.communications.sms_service import sanitize_uganda_phone
+from app.core.security import create_access_token
+from datetime import timedelta
 
 router = APIRouter()
 
@@ -53,7 +55,10 @@ def verify_recovery_otp(payload: VerifyRecoveryOTPRequest, session: Session = De
             detail="An error occurred while verifying the OTP. Please try again."
         )
         
-    temp_token = f"temp_rec_token_{user.id}"
+    temp_token = create_access_token(
+        data={"sub": str(user.id), "phone": user.phone_number, "scope": "recovery"},
+        expires_delta=timedelta(minutes=15)
+    )
     
     return VerifyRecoveryOTPResponse(
         status="success",

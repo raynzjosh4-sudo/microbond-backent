@@ -3,6 +3,7 @@ from sqlmodel import Session, select
 from app.models.user.user import User
 from app.api.dependencies import get_current_firebase_user
 from app.core.database import get_session
+from app.core.security import create_access_token
 
 # Specifically scoped for OTP Authentication
 router = APIRouter(prefix="/api/v1/auth/otp", tags=["OTP Authentication"])
@@ -43,8 +44,13 @@ def verify_otp_login(
         session.refresh(user)
         is_new_user = True
 
+    # Generate our own internal JWT token for subsequent API requests
+    access_token = create_access_token(data={"sub": str(user.id), "phone": user.phone_number})
+
     return {
         "status": "success",
+        "access_token": access_token,
+        "token_type": "bearer",
         "user_id": user.id,
         "firebase_uid": user.firebase_uid,
         "phone_number": user.phone_number,
