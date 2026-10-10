@@ -2,6 +2,7 @@ from typing import Optional
 from sqlmodel import SQLModel, Field
 from datetime import datetime, timezone
 from sqlalchemy import Column, BigInteger, String
+import uuid
 
 def utc_now():
     return int(datetime.now(timezone.utc).timestamp() * 1000)
@@ -59,7 +60,7 @@ class GroupChatMessage(SQLModel, table=True):
 class GroupPoll(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     group_id: str = Field(foreign_key="group.group_id", index=True)
-    creator_id: str = Field(foreign_key="user.id")
+    creator_id: uuid.UUID = Field(foreign_key="user.id")
     
     question: str = Field(max_length=500)
     options: str = Field(description="JSON serialized list of options")
@@ -74,7 +75,7 @@ class GroupPoll(SQLModel, table=True):
 
 class GroupPollVote(SQLModel, table=True):
     poll_id: int = Field(foreign_key="grouppoll.id", primary_key=True)
-    user_id: str = Field(foreign_key="user.id", primary_key=True)
+    user_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True)
     
     selected_option: str = Field()
     
