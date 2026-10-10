@@ -9,11 +9,37 @@ services:
     envVars:
       - key: DATABASE_URL
         sync: false
-      - key: PREMBLY_APP_ID
+      - key: SECRET_KEY
+        sync: false
+      - key: PREMBLY_PUBLIC_KEY
         sync: false
       - key: PREMBLY_SECRET_KEY
         sync: false
-      - key: AFRICASTALKING_USERNAME
+      - key: AT_USERNAME
         sync: false
-      - key: AFRICASTALKING_API_KEY
+      - key: AT_API_KEY
+        sync: false
+      - key: SUMSUB_APP_TOKEN
+        sync: false
+      - key: SUMSUB_SECRET_KEY
+        sync: false
+      - key: MTN_API_USER
+        sync: false
+      - key: MTN_SUBSCRIPTION_KEY
+        sync: false
+      - key: MTN_API_SECRET
+        sync: false
+      - key: AIRTEL_CLIENT_ID
+        sync: false
+      - key: AIRTEL_CLIENT_SECRET
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_ENDPOINT_URL
+        sync: false
+      - key: R2_BUCKET_NAME
         sync: false
