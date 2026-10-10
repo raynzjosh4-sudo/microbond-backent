@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlmodel import Session
 import uuid
 
@@ -12,7 +12,7 @@ from app.schemas.target_savings_group_create_request import TargetSavingsGroupCr
 router = APIRouter(prefix="/api/v1/groups/target-savings", tags=["Target Savings Groups"])
 
 @router.post("/create")
-def create_group(request: TargetSavingsGroupCreateRequest, session: Session = Depends(get_session)):
+def create_group(request: TargetSavingsGroupCreateRequest, background_tasks: BackgroundTasks, session: Session = Depends(get_session)):
     # 1. Authenticate / Find creator user
     creator = session.query(User).filter(User.phone_number == request.created_by_phone).first()
     if not creator:
@@ -90,6 +90,17 @@ def create_group(request: TargetSavingsGroupCreateRequest, session: Session = De
     except Exception as e:
         session.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        
+    # --- CHAT INTEGRATION ---
+    from app.api.routes.group.chat.messages import broadcast_system_message_sync
+    broadcast_system_message_sync(
+        group_id=new_group_id,
+        message_text=f"{creator.full_name} created the group '{new_group.name}'.",
+        message_type="SYSTEM_EVENT",
+        sender_id=str(creator.id),
+        session=session,
+        background_tasks=background_tasks
+    )
         
     return {
         "status": "success",

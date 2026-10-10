@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from .rotating.rotating_endpoints import router as rotating_router
 from .target_savings.router import router as target_savings_router
 from .settings.update_general import router as settings_router
+from .settings.update_group_profile import router as update_group_profile_router
 from .settings.update_privacy import router as privacy_router
 from .settings.update_permissions import router as permissions_router
 from .settings.update_financial import router as financial_settings_router
@@ -15,6 +16,7 @@ from .membership.payment_method import router as group_payment_method_router
 from .membership.proxy_contributor import router as proxy_contributor_router
 from .membership.export_data import router as export_data_router
 from .membership.leave_group import router as leave_group_router
+from .membership.add_member import router as add_member_router
 from .report.submit_report import router as report_group_router
 from .rotating.turn_swaps import router as turn_swaps_router
 from .rotating.admin_payout_order import router as admin_payout_order_router
@@ -38,12 +40,19 @@ from .membership.statement import router as statement_router
 from .report.weekly_report import router as weekly_report_router
 from .report.dashboard_analytics import router as dashboard_analytics_router
 from .report.universal_analytics import router as universal_analytics_router
+from .chat.media import router as chat_media_router
+from .chat.messages import router as chat_messages_router
+from .chat.websocket import router as chat_websocket_router
+from .chat.polls import router as chat_polls_router
+from .create_group import router as create_group_router
 
 router = APIRouter()
+router.include_router(create_group_router)
 
 router.include_router(rotating_router)
 router.include_router(target_savings_router)
 router.include_router(settings_router)
+router.include_router(update_group_profile_router)
 router.include_router(privacy_router)
 router.include_router(permissions_router)
 router.include_router(financial_settings_router)
@@ -57,6 +66,7 @@ router.include_router(group_payment_method_router)
 router.include_router(proxy_contributor_router)
 router.include_router(export_data_router)
 router.include_router(leave_group_router)
+router.include_router(add_member_router)
 router.include_router(report_group_router)
 router.include_router(turn_swaps_router)
 router.include_router(admin_payout_order_router)
@@ -80,3 +90,7 @@ router.include_router(statement_router)
 router.include_router(weekly_report_router)
 router.include_router(dashboard_analytics_router)
 router.include_router(universal_analytics_router)
+router.include_router(chat_media_router)
+router.include_router(chat_messages_router)
+router.include_router(chat_websocket_router)
+router.include_router(chat_polls_router)

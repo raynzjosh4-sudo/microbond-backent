@@ -36,6 +36,14 @@ class Settings(BaseSettings):
         "https://app.microbond.com",    # Your future production frontend
         # Android / iOS don't strictly use CORS, but keeping this secure prevents web scraping!
     ]
+    
+    # Cloudflare R2 Credentials
+    R2_ACCOUNT_ID: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_ENDPOINT_URL: str = ""
+    R2_BUCKET_NAME: str = ""
+    R2_PUBLIC_DOMAIN: str = "" # e.g. "https://pub-xxxx.r2.dev" or custom domain
 
     # Reads from a local .env file
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

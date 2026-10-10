@@ -18,7 +18,7 @@ from fastapi_limiter.depends import RateLimiter
     description="Generates a 6-digit OTP and sends it via Africa's Talking SMS. Invalidates any previous unverified OTPs. Max 3 free requests per 24 hours.",
     status_code=status.HTTP_200_OK,
     response_model=OTPRequestResponse,
-    dependencies=[Depends(RateLimiter(times=5, seconds=60))] # Redis DDoS protection (5 req/min per IP)
+    # dependencies=[Depends(RateLimiter(times=5, seconds=60))] # Temporarily disabled: Requires Redis
 )
 def request_otp(payload: OTPRequest, session: Session = Depends(get_session)):
     # 1. Handle phone validation errors

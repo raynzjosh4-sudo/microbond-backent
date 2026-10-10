@@ -69,6 +69,17 @@ def get_dynamic_metric(
             "filters": [],
             "chart_type": "bar_chart"
         },
+        "penalty_amount": {
+            "title": "Total Penalty Amount",
+            "y_axis_label": "Amount",
+            "unit": "UGX",
+            "model": GroupPenalty,
+            "time_field": GroupPenalty.created_at,
+            "value_field": GroupPenalty.penalty_amount,
+            "aggregation": "sum",
+            "filters": [],
+            "chart_type": "bar_chart"
+        },
         "total_contributions": {
             "title": "Actual Contributions Collected",
             "y_axis_label": "Amount",

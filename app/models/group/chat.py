@@ -1,24 +1,81 @@
 from typing import Optional
 from sqlmodel import SQLModel, Field
 from datetime import datetime, timezone
-from sqlalchemy import Column, BigInteger
+from sqlalchemy import Column, BigInteger, String
 
 def utc_now():
     return int(datetime.now(timezone.utc).timestamp() * 1000)
 
+class GroupChatReadReceipt(SQLModel, table=True):
+    """
+    Tracks which users have read which messages in a group chat.
+    Crucial for WhatsApp's 'Double Blue Tick' feature in group settings.
+    """
+    message_id: int = Field(foreign_key="groupchatmessage.id", primary_key=True)
+    user_id: str = Field(primary_key=True)
+    read_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger))
+
 class GroupChatMessage(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
+    
+    # WhatsApp style: Client-generated UUID to prevent duplicate sends and track local status
+    client_message_id: Optional[str] = Field(default=None, unique=True, index=True)
+    
     group_id: str = Field(foreign_key="group.group_id", index=True)
     
     # We use a string for sender_id so we can put UUIDs or "SYSTEM" for automated messages
     sender_id: str = Field(index=True) 
     
-    message_type: str = Field(default="TEXT", description="TEXT, IMAGE, SYSTEM_EVENT, VOTE")
-    message_text: str = Field(..., description="The actual text content")
-    media_url: Optional[str] = Field(default=None, description="URL if an image or file is attached")
+    # Message Classification
+    message_type: str = Field(default="TEXT", description="TEXT, MEDIA, SYSTEM_EVENT, VOTE")
+    
+    # Text content (acts as caption if media is attached)
+    # Production: limited to 4000 chars to prevent DB bloat/DDoS
+    message_text: Optional[str] = Field(
+        default=None, 
+        max_length=4000, 
+        sa_column=Column(String(4000)),
+        description="The actual text content or caption"
+    )
+    
+    # Media specific fields (WhatsApp style)
+    media_url: Optional[str] = Field(default=None, description="URL to the Cloudflare R2 storage")
+    media_type: Optional[str] = Field(default=None, description="IMAGE, VIDEO, AUDIO, DOCUMENT, VOICE_NOTE")
+    media_mime_type: Optional[str] = Field(default=None, description="e.g. image/jpeg, video/mp4")
+    media_size_bytes: Optional[int] = Field(default=None, description="File size in bytes")
+    media_duration_seconds: Optional[int] = Field(default=None, description="For audio/video playback length")
     
     # For WhatsApp-like features
     reply_to_message_id: Optional[int] = Field(default=None, foreign_key="groupchatmessage.id")
+    
+    # Status and State
+    status: str = Field(default="SENT", description="SENT, DELIVERED, READ")
     is_deleted: bool = Field(default=False)
+    
+    # Production: Indexes on time fields for fast pagination and offline syncing
+    created_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger, index=True))
+    updated_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger, index=True))
+
+class GroupPoll(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    group_id: str = Field(foreign_key="group.group_id", index=True)
+    creator_id: str = Field(foreign_key="user.id")
+    
+    question: str = Field(max_length=500)
+    options: str = Field(description="JSON serialized list of options")
+    
+    # E.g., 'KICK_MEMBER', 'APPROVE_LOAN', 'CUSTOM'
+    poll_type: str = Field(default="CUSTOM") 
+    
+    status: str = Field(default="OPEN", description="OPEN, CLOSED, EXECUTED")
+    
+    expires_at: int = Field(sa_column=Column(BigInteger))
+    created_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger))
+
+class GroupPollVote(SQLModel, table=True):
+    poll_id: int = Field(foreign_key="grouppoll.id", primary_key=True)
+    user_id: str = Field(foreign_key="user.id", primary_key=True)
+    
+    selected_option: str = Field()
     
     created_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger))

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 import uuid
@@ -10,6 +10,7 @@ from app.models.user.user import User
 from app.models.group.group import GroupMembership
 from app.models.group.finance import GuarantorPledge
 from app.models.group.settings import GroupGovernanceSettings
+from app.api.routes.group.chat.messages import broadcast_system_message_sync
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Membership"])
 
@@ -24,6 +25,7 @@ class ReviewVouchRequest(BaseModel):
 def submit_endorsement(
     group_id: str,
     request: VouchRequest,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
@@ -79,6 +81,18 @@ def submit_endorsement(
     session.add(new_pledge)
     session.commit()
     session.refresh(new_pledge)
+    
+    # --- CHAT INTEGRATION ---
+    borrower = session.get(User, request.borrower_user_id)
+    borrower_name = borrower.full_name if borrower else "a member"
+    broadcast_system_message_sync(
+        group_id=group_id,
+        message_text=f"{current_user.full_name} vouched for {borrower_name} up to ${request.maximum_liability_amount:,.2f}.",
+        message_type="TRUST_EVENT",
+        sender_id=str(current_user.id),
+        session=session,
+        background_tasks=background_tasks
+    )
     
     return {
         "status": "success",

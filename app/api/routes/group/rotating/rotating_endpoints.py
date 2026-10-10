@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any
 from sqlmodel import Session
@@ -13,12 +13,16 @@ from app.api.dependencies import get_current_user
 router = APIRouter(prefix="/api/v1/groups/rotating", tags=["Rotating Groups"])
 
 from app.api.routes.group.rotating.update import router as update_router
+from app.api.routes.group.rotating.auction import router as auction_router
+
 router.include_router(update_router)
+router.include_router(auction_router)
 
 from app.schemas.rotating_group_create_request import RotatingGroupCreateRequest
 @router.post("/create")
 def create_group(
     request: RotatingGroupCreateRequest, 
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
@@ -172,6 +176,17 @@ def create_group(
     
     session.commit()
     session.refresh(new_group)
+    
+    # --- CHAT INTEGRATION ---
+    from app.api.routes.group.chat.messages import broadcast_system_message_sync
+    broadcast_system_message_sync(
+        group_id=new_group_id,
+        message_text=f"{creator.full_name} created the group '{new_group.name}'.",
+        message_type="SYSTEM_EVENT",
+        sender_id=str(creator.id),
+        session=session,
+        background_tasks=background_tasks
+    )
     
     return {
         "status": "success",

@@ -1,0 +1,8 @@
+venv/
+.env
+.git/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+scratch_android_models/
