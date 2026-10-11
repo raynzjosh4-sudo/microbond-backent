@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api.routes.authentication.account_recovery import request_recovery_otp, verify_recovery_otp, set_app_pin, request_phone_change_otp, verify_phone_change_otp, change_app_pin, request_forgot_pin_otp, verify_forgot_pin_otp
+from app.api.routes.authentication.account_recovery import request_recovery_otp, verify_recovery_otp, set_app_pin, request_phone_change_otp, verify_phone_change_otp, change_app_pin, request_forgot_pin_otp, verify_forgot_pin_otp, verify_app_pin
 
 from app.core.database import init_db
 from fastapi.middleware.cors import CORSMiddleware
@@ -51,6 +51,7 @@ app.include_router(otp_router.router)
 app.include_router(request_recovery_otp.router, tags=["Account Recovery"])
 app.include_router(verify_recovery_otp.router, tags=["Account Recovery"])
 app.include_router(set_app_pin.router, tags=["Account Recovery"])
+app.include_router(verify_app_pin.router, tags=["Account Recovery"])
 app.include_router(change_app_pin.router, tags=["Account Recovery"])
 app.include_router(request_forgot_pin_otp.router, tags=["Account Recovery"])
 app.include_router(verify_forgot_pin_otp.router, tags=["Account Recovery"])
