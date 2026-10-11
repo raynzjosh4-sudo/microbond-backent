@@ -25,7 +25,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.cron.group_launcher import start_scheduler
+from app.cronjobs.core.scheduler import start_scheduler
 import redis.asyncio as redis
 from fastapi_limiter import FastAPILimiter
 

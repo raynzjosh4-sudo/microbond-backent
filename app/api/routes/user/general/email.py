@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel, EmailStr
 from sqlmodel import Session, select
 from app.core.database import get_session
-from app.api.dependencies.auth import get_current_user
+from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.user.security_email import UserSecurityEmail
 from app.services.communication.email_service import EmailNotificationService
