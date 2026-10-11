@@ -53,13 +53,52 @@ def verify_otp(
         user_stmt = select(User).where(User.phone_number == phone)
         user = session.exec(user_stmt).first()
         is_new = False
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
 
         if not user:
             user = User(
-                phone_number=phone, is_phone_verified=True, is_profile_complete=False
+                phone_number=phone, 
+                is_phone_verified=True, 
+                is_profile_complete=False,
+                primary_device_id=payload.device_id
             )
             session.add(user)
             is_new = True
+        else:
+            # SIM-Swap / Account Takeover Detection
+            if payload.device_id:
+                if user.primary_device_id is None:
+                    # First time capturing hardware fingerprint
+                    user.primary_device_id = payload.device_id
+                elif user.primary_device_id != payload.device_id:
+                    # The device changed! Hardware mismatch detected (Potential SIM-Swap / Account Takeover).
+                    # 1. Lock down financial movements for 48 hours.
+                    user.primary_device_id = payload.device_id
+                    user.security_cooldown_until = now_ms + (48 * 60 * 60 * 1000)
+                    
+                    # 2. Invalidate KYC state: require biometric/NIN re-verification
+                    user.kyc_status = "RE_VERIFICATION_REQUIRED"
+                    user.kyc_tier = 0
+
+                    # 3. Fire Out-of-Band Email Alert if verified backup email exists
+                    from app.models.user.security_email import UserSecurityEmail
+                    sec_email = session.exec(
+                        select(UserSecurityEmail).where(
+                            UserSecurityEmail.user_id == user.id,
+                            UserSecurityEmail.is_verified == True
+                        )
+                    ).first()
+
+                    if sec_email:
+                        from app.services.communication.email_service import EmailNotificationService
+                        background_tasks.add_task(
+                            EmailNotificationService.send_security_alert_new_device,
+                            sec_email.email,
+                            user.phone_number,
+                            payload.device_id,
+                            48
+                        )
+            session.add(user)
 
         session.commit()
         session.refresh(user)

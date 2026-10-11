@@ -1,7 +1,7 @@
 from typing import Optional
 from sqlmodel import SQLModel, Field
 from datetime import datetime, timezone
-from sqlalchemy import Column, BigInteger, String
+from sqlalchemy import Column, BigInteger, String, Index
 import uuid
 
 def utc_now():
@@ -17,6 +17,10 @@ class GroupChatReadReceipt(SQLModel, table=True):
     read_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger))
 
 class GroupChatMessage(SQLModel, table=True):
+    __table_args__ = (
+        Index("ix_chat_group_active_created", "group_id", "is_deleted", "created_at"),
+    )
+
     id: Optional[int] = Field(default=None, primary_key=True)
     
     # WhatsApp style: Client-generated UUID to prevent duplicate sends and track local status

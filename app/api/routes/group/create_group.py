@@ -49,11 +49,20 @@ def create_unified_group(
     Handles the 10-step frontend wizard to create a group in a single atomic database transaction.
     Sets up the Group, Wallet, Settings, Membership, and injects the initialization chat message.
     """
-    # 1. Enforcement / Eligibility Checks
-    if current_user.kyc_tier < 1:
+    # 1. Enforcement / Eligibility Checks (Progressive Unlocks)
+    from app.services.group.group_auth_service import get_permitted_group_creation_types, SavingsGroupType
+    
+    # Try to map the string type to the Enum
+    try:
+        requested_type = SavingsGroupType(request.type)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid group type: {request.type}")
+        
+    allowed_types = get_permitted_group_creation_types(session, current_user.id)
+    if requested_type not in allowed_types:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail="You must complete KYC Tier 1 to create groups."
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"You are not authorized to create a {request.type} group yet. Improve your KYC, trust score, or group health to unlock this feature."
         )
         
     # 1b. Spam / DoS Protection (Max 5 active groups per user)

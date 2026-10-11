@@ -1,80 +1,11 @@
 import logging
+import time
 from sqlmodel import Session, select
 from app.core.database import engine
-from app.models.group.group import Group
 from app.models.group.finance import MemberObligation, GroupPenalty
 from app.models.group.settings import GroupFinancialSettings
-import time
 
 logger = logging.getLogger(__name__)
-
-def process_daily_health_ratings():
-    """
-    Cron Job that wakes up to recalculate the health grade of all active groups.
-    It counts obligations and updates the static health_grade columns in the Group table.
-    """
-    with Session(engine) as session:
-        # Get all ACTIVE groups
-        active_groups = session.exec(
-            select(Group).where(Group.status == "ACTIVE")
-        ).all()
-        
-        if not active_groups:
-            return
-            
-        logger.info(f"Health Processor woke up: Processing {len(active_groups)} groups.")
-        
-        for group in active_groups:
-            try:
-                # Get all obligations for this group
-                obligations = session.exec(
-                    select(MemberObligation).where(MemberObligation.group_id == group.group_id)
-                ).all()
-                
-                total_obligations = len(obligations)
-                if total_obligations == 0:
-                    group.health_grade = "A+"
-                    group.on_time_repayment_rate_pct = 100.0
-                    group.active_default_rate_pct = 0.0
-                    session.add(group)
-                    continue
-                    
-                on_time_count = sum(1 for o in obligations if o.status == "PAID")
-                default_count = sum(1 for o in obligations if o.status == "DEFAULTED")
-                late_count = sum(1 for o in obligations if o.status == "LATE")
-                
-                completed_obligations = on_time_count + late_count + default_count
-                
-                if completed_obligations > 0:
-                    on_time_percentage = (on_time_count / completed_obligations) * 100
-                    default_percentage = (default_count / completed_obligations) * 100
-                else:
-                    on_time_percentage = 100.0
-                    default_percentage = 0.0
-                    
-                # Determine Grade based on stats
-                grade = "A+"
-                
-                if default_percentage > 10:
-                    grade = "D"
-                elif default_percentage > 0 or on_time_percentage < 80:
-                    grade = "C"
-                elif on_time_percentage < 95:
-                    grade = "B"
-                    
-                # Update group fields
-                group.health_grade = grade
-                group.on_time_repayment_rate_pct = on_time_percentage
-                group.active_default_rate_pct = default_percentage
-                
-                session.add(group)
-                
-            except Exception as e:
-                logger.error(f"Error processing health rating for group {group.group_id}: {str(e)}")
-                
-        # Commit all updates
-        session.commit()
-        logger.info("Finished processing health ratings.")
 
 def process_late_penalties_and_grace_periods():
     """

@@ -11,12 +11,12 @@ class GroupWallet(SQLModel, table=True):
     group_id: str = Field(foreign_key="group.group_id", index=True, unique=True)
     
     # The primary pool where member contributions for the current cycle go
-    pooled_funds: float = Field(default=0.0, description="Virtual balance of member contributions")
+    pooled_funds: int = Field(default=0, description="Virtual balance of member contributions", sa_column=Column(BigInteger))
     
     # The reserve/cut pool
-    reserve_funds: float = Field(default=0.0, description="Virtual balance for admin cuts, late fees, or emergencies")
+    reserve_funds: int = Field(default=0, description="Virtual balance for admin cuts, late fees, or emergencies", sa_column=Column(BigInteger))
     
     # Total historical processed out of the group
-    total_lifetime_payouts: float = Field(default=0.0, description="Total amount paid out to members over time")
+    total_lifetime_payouts: int = Field(default=0, description="Total amount paid out to members over time", sa_column=Column(BigInteger))
     
     updated_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger))

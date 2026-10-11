@@ -41,10 +41,7 @@ class Group(SQLModel, table=True):
     shared_media_count: int = Field(default=0)
     shared_ledger_entry_count: int = Field(default=0)
     
-    # Group Health & Discovery
-    health_grade: str = Field(default="A+", description="A+, A, B, C, D")
-    on_time_repayment_rate_pct: float = Field(default=100.0)
-    active_default_rate_pct: float = Field(default=0.0)
+    # Group Health & Discovery are now tracked in the separate GroupHealth table
     
     # Audit
     created_at: int = Field(default_factory=utc_now)

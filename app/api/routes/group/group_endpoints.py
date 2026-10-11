@@ -45,9 +45,15 @@ from .chat.messages import router as chat_messages_router
 from .chat.websocket import router as chat_websocket_router
 from .chat.polls import router as chat_polls_router
 from .create_group import router as create_group_router
+from .settings.audit_report_delivery import router as audit_report_delivery_router
+from .dashboard_summary import router as dashboard_summary_router
+from .deposit_pipeline import router as deposit_pipeline_router
 
 router = APIRouter()
 router.include_router(create_group_router)
+router.include_router(audit_report_delivery_router)
+router.include_router(dashboard_summary_router)
+router.include_router(deposit_pipeline_router)
 
 router.include_router(rotating_router)
 router.include_router(target_savings_router)

@@ -51,6 +51,11 @@ class GroupGovernanceSettings(SQLModel, table=True):
     approval_strategy: str = Field(default="Majority Vote")
     quorum_percentage: str = Field(default="60%")
     
+    # Deadlock / Hostage Protection (Time-Locked Quorum Decay)
+    enable_quorum_decay: bool = Field(default=True)
+    quorum_decay_hours: int = Field(default=48, description="Hours before required approvals start dropping")
+    quorum_decay_minimum_approvals: int = Field(default=2, description="The absolute floor that quorum can decay to")
+    
     # Trust & Members
     require_guarantors: bool = Field(default=False)
     guarantor_count: int = Field(default=2)
@@ -98,6 +103,12 @@ class GroupCommunicationSettings(SQLModel, table=True):
     data_retention_days: int = Field(default=730, description="Number of days to keep data")
     chat_history_cleanup_days: int = Field(default=90) # auto-delete older than
     preserve_financial_records: bool = Field(default=True)
+    
+    # Audit Ledger Delivery & Financial Statements
+    enable_automated_audit_dispatch: bool = Field(default=True, description="Enables scheduled or on-demand dispatch of audit ledgers via email")
+    audit_report_recipient_email: Optional[str] = Field(default=None, description="Designated email for receiving group statements/audits")
+    dispatch_monthly_compliance_statement: bool = Field(default=True, description="Send automated monthly compliance statements to admin/treasurer")
+    export_file_format: str = Field(default="PDF", description="Preferred export format: PDF or CSV")
     
     updated_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger))
 

@@ -14,8 +14,8 @@ class MemberObligation(SQLModel, table=True):
     user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
     cycle_number: int = Field(default=1, index=True)
     
-    amount_due: float
-    amount_paid: float = Field(default=0.0)
+    amount_due: int = Field(sa_column=Column(BigInteger))
+    amount_paid: int = Field(default=0, sa_column=Column(BigInteger))
     due_date: int = Field(sa_column=Column(BigInteger)) # Epoch ms
     
     # Status: PENDING, PAID, LATE, DEFAULTED
@@ -31,8 +31,8 @@ class GroupPayout(SQLModel, table=True):
     user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
     cycle_number: int = Field(default=1, index=True)
     
-    amount_expected: float
-    amount_received: float = Field(default=0.0)
+    amount_expected: int = Field(sa_column=Column(BigInteger))
+    amount_received: int = Field(default=0, sa_column=Column(BigInteger))
     
     # Status: PENDING, PROCESSING, COMPLETED, FAILED, ON_HOLD
     status: str = Field(default="PENDING", index=True)
@@ -48,7 +48,7 @@ class GroupPenalty(SQLModel, table=True):
     user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
     obligation_id: Optional[int] = Field(default=None, foreign_key="memberobligation.id")
     
-    penalty_amount: float
+    penalty_amount: int = Field(sa_column=Column(BigInteger))
     reason: str
     
     is_paid: bool = Field(default=False, index=True)
@@ -62,7 +62,7 @@ class GuarantorPledge(SQLModel, table=True):
     guarantor_user_id: uuid.UUID = Field(foreign_key="user.id", index=True) # UUID
     borrower_user_id: uuid.UUID = Field(foreign_key="user.id", index=True) # UUID
     
-    maximum_liability_amount: float
+    maximum_liability_amount: int = Field(sa_column=Column(BigInteger))
     
     # Status: ACTIVE (protecting), TRIGGERED (funds frozen/taken), RELEASED (safe)
     status: str = Field(default="ACTIVE", index=True)
