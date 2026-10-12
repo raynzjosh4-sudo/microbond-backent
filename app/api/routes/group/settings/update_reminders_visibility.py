@@ -15,6 +15,8 @@ class UpdateRemindersVisibilityRequest(BaseModel):
     vis_send_daily_group_summaries: Optional[bool] = None
     vis_post_weekly_financial_reports: Optional[bool] = None
     vis_send_deposit_due_prompts: Optional[bool] = None
+    vis_send_dues_due_prompts: Optional[bool] = None
+    vis_send_loan_due_prompts: Optional[bool] = None
     vis_daily_summary_time: Optional[bool] = None
     vis_weekly_report_day: Optional[bool] = None
 
@@ -49,10 +51,15 @@ def update_reminders_visibility_settings(
         settings.vis_post_weekly_financial_reports = request.vis_post_weekly_financial_reports
     if request.vis_send_deposit_due_prompts is not None:
         settings.vis_send_deposit_due_prompts = request.vis_send_deposit_due_prompts
+    if request.vis_send_dues_due_prompts is not None:
+        settings.vis_send_dues_due_prompts = request.vis_send_dues_due_prompts
+    if request.vis_send_loan_due_prompts is not None:
+        settings.vis_send_loan_due_prompts = request.vis_send_loan_due_prompts
     if request.vis_daily_summary_time is not None:
         settings.vis_daily_summary_time = request.vis_daily_summary_time
     if request.vis_weekly_report_day is not None:
         settings.vis_weekly_report_day = request.vis_weekly_report_day
+
 
     session.add(settings)
     session.commit()

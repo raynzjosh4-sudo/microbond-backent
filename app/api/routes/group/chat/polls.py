@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 import json
 import time
+import uuid
 
 from app.core.database import get_session
 from app.api.dependencies import get_current_user
@@ -59,10 +60,10 @@ def create_poll(
     
     # 3. Broadcast to chat
     # We send a special 'VOTE' message containing the poll ID so the UI renders a poll card
-    poll_data = new_poll.model_dump()
+    poll_data = new_poll.model_dump(mode="json")
     broadcast_system_message_sync(
         group_id=group_id,
-        message_text=json.dumps({"poll_id": new_poll.id, "question": new_poll.question, "options": request.options}),
+        message_text=json.dumps({"poll_id": str(new_poll.id), "question": new_poll.question, "options": request.options}),
         message_type="VOTE",
         sender_id=str(current_user.id),
         session=session,
@@ -74,7 +75,7 @@ def create_poll(
 @router.post("/{group_id}/chat/polls/{poll_id}/vote", summary="Vote on a poll")
 def vote_on_poll(
     group_id: str,
-    poll_id: int,
+    poll_id: uuid.UUID,
     request: VoteRequest,
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
@@ -108,7 +109,7 @@ def vote_on_poll(
     existing_vote = session.exec(
         select(GroupPollVote).where(
             GroupPollVote.poll_id == poll_id,
-            GroupPollVote.user_id == str(current_user.id)
+            GroupPollVote.user_id == current_user.id
         )
     ).first()
     
@@ -118,22 +119,21 @@ def vote_on_poll(
     else:
         new_vote = GroupPollVote(
             poll_id=poll_id,
-            user_id=str(current_user.id),
+            user_id=current_user.id,
             selected_option=request.selected_option
         )
         session.add(new_vote)
         
     session.commit()
     
-    # 4. (Optional) Broadcast a silent real-time update to update the UI vote counts
-    # This ensures everyone sees the bars move in real-time
+    # 4. Broadcast a silent real-time update to update the UI vote counts
     from app.services.websocket_manager import ws_manager
     background_tasks.add_task(
         ws_manager.broadcast_to_group,
         group_id,
         {
             "event_type": "POLL_VOTE_UPDATE",
-            "poll_id": poll_id
+            "poll_id": str(poll_id)
         }
     )
 

@@ -16,6 +16,7 @@ class UpdateMilestoneSettingsRequest(BaseModel):
     announce_system_events: Optional[bool] = None
     post_security_rule_updates: Optional[bool] = None
     post_group_approval_polls: Optional[bool] = None
+    post_loan_approval_polls: Optional[bool] = None
     notify_important_rule_changes: Optional[bool] = None
 
 @router.patch("/{group_id}/settings/milestones", summary="Admin: Update Milestones & Security Settings")
@@ -51,8 +52,11 @@ def update_milestone_settings(
         settings.post_security_rule_updates = request.post_security_rule_updates
     if request.post_group_approval_polls is not None:
         settings.post_group_approval_polls = request.post_group_approval_polls
+    if request.post_loan_approval_polls is not None:
+        settings.post_loan_approval_polls = request.post_loan_approval_polls
     if request.notify_important_rule_changes is not None:
         settings.notify_important_rule_changes = request.notify_important_rule_changes
+
 
     session.add(settings)
     session.commit()

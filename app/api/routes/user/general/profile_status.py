@@ -11,10 +11,21 @@ def get_user_status(phone_number: str, session: Session = Depends(get_session)):
     Fetch the user's current profile status.
     This is useful for when the app restarts and needs to check if KYC is completed.
     """
-    if not phone_number.startswith("+"):
-        phone_number = "+" + phone_number.strip()
+    # Normalize phone numbers (e.g. 0704903741 -> +256704903741)
+    clean_phone = phone_number.strip().replace(" ", "").replace("-", "")
+    if clean_phone.startswith("0"):
+        normalized_phone = "+256" + clean_phone[1:]
+    elif clean_phone.startswith("256"):
+        normalized_phone = "+" + clean_phone
+    elif not clean_phone.startswith("+"):
+        normalized_phone = "+" + clean_phone
+    else:
+        normalized_phone = clean_phone
 
-    statement = select(User).where(User.phone_number == phone_number)
+    alt_phone = normalized_phone.lstrip("+")
+    statement = select(User).where(
+        (User.phone_number == normalized_phone) | (User.phone_number == alt_phone)
+    )
     user = session.exec(statement).first()
 
     if not user:
@@ -31,7 +42,7 @@ def get_user_status(phone_number: str, session: Session = Depends(get_session)):
     }
 
 from app.api.dependencies import get_current_user
-from app.services.group.group_auth_service import get_permitted_group_creation_types
+from app.services.group.group_auth_service import evaluate_group_creation_permissions
 from typing import List
 
 @router.get("/me/allowed-groups", summary="Get Authorized Group Creation Types")
@@ -40,12 +51,16 @@ def get_allowed_groups(
     current_user: User = Depends(get_current_user)
 ) -> dict:
     """
-    Returns a list of group types the current user is allowed to create, 
-    based on their KYC tier, trust score, and historical group health.
-    The Android app will use this array to conditionally render UI cards.
+    Returns the group types the current user is allowed to create, 
+    including the reasons for each unlocked or locked group type
+    based on KYC tier, trust score, and historical group health.
     """
-    allowed_types = get_permitted_group_creation_types(session, current_user.id)
+    evaluation = evaluate_group_creation_permissions(session, current_user.id)
     return {
         "status": "success",
-        "allowed_groups": [g.value for g in allowed_types]
+        "allowed_groups": evaluation["allowed_groups"],
+        "reasons": evaluation["reasons"],
+        "allowed_group_details": evaluation["allowed_group_details"],
+        "groups": evaluation["all_groups"]
     }
+

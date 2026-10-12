@@ -32,6 +32,9 @@ import app.models.group.group
 import app.models.group.settings
 import app.models.group.rotating
 import app.models.group.long_term
+import app.models.group.welfare_event
+import app.models.group.investment_association
+import app.models.group.bill_split
 import app.models.group.chat
 import app.models.group.wallet
 import app.models.group.finance
@@ -86,6 +89,7 @@ def run_migrations_online() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args={"sslmode": "require"},
     )
 
     with connectable.connect() as connection:

@@ -15,30 +15,34 @@ def check_and_launch_pending_groups():
     """
     current_time_epoch = int(datetime.utcnow().timestamp())
     
-    with Session(engine) as session:
-        # Find all groups that are PENDING and have reached their start time
-        pending_groups = session.query(Group).join(RotatingGroupDetails, Group.group_id == RotatingGroupDetails.group_id).filter(
-            Group.status == "PENDING",
-            RotatingGroupDetails.is_payout_order_locked == False,
-            RotatingGroupDetails.group_start_time <= current_time_epoch
-        ).all()
-        
-        if not pending_groups:
-            return
+    try:
+        with Session(engine) as session:
+            # Find all groups that are PENDING and have reached their start time
+            pending_groups = session.query(Group).join(RotatingGroupDetails, Group.group_id == RotatingGroupDetails.group_id).filter(
+                Group.status == "PENDING",
+                RotatingGroupDetails.is_payout_order_locked == False,
+                RotatingGroupDetails.group_start_time <= current_time_epoch
+            ).all()
             
-        logger.info(f"Auto-Launcher woke up: Found {len(pending_groups)} groups ready to launch.")
-        
-        for group in pending_groups:
-            try:
-                # Wrap each group launch in its own transaction sub-block (SAVEPOINT)
-                session.begin_nested()
-                success = execute_group_launch(session, group.group_id)
-                if success:
-                    logger.info(f"Successfully auto-launched group {group.group_id}")
-                session.commit()
-            except Exception as e:
-                session.rollback()
-                logger.error(f"Error auto-launching group {group.group_id}: {str(e)}")
-        
-        # Commit all successful sub-transactions to the DB
-        session.commit()
+            if not pending_groups:
+                return
+                
+            logger.info(f"Auto-Launcher woke up: Found {len(pending_groups)} groups ready to launch.")
+            
+            for group in pending_groups:
+                try:
+                    # Wrap each group launch in its own transaction sub-block (SAVEPOINT)
+                    session.begin_nested()
+                    success = execute_group_launch(session, group.group_id)
+                    if success:
+                        logger.info(f"Successfully auto-launched group {group.group_id}")
+                    session.commit()
+                except Exception as e:
+                    session.rollback()
+                    logger.error(f"Error auto-launching group {group.group_id}: {str(e)}")
+            
+            # Commit all successful sub-transactions to the DB
+            session.commit()
+    except Exception as e:
+        logger.warning(f"Auto-launcher skipped cycle (database unreachable or timing out): {e}")
+

@@ -20,7 +20,7 @@ class UpdatePermissionsSettingsRequest(BaseModel):
     # Admin Permissions
     admins_must_approve_new_members: Optional[bool] = None
     
-@router.put("/{group_id}/settings/permissions", summary="Update Group Permissions Settings")
+@router.patch("/{group_id}/settings/permissions", summary="Update Group Permissions Settings")
 def update_group_permissions_settings(
     group_id: str, 
     request: UpdatePermissionsSettingsRequest, 

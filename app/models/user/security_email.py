@@ -1,5 +1,6 @@
 from typing import Optional
 from sqlmodel import SQLModel, Field
+from sqlalchemy import Column, BigInteger
 from datetime import datetime, timezone
 import uuid
 
@@ -19,7 +20,7 @@ class UserSecurityEmail(SQLModel, table=True):
     
     # Verification Security State
     verification_token: Optional[str] = Field(default=None, description="Current pending verification OTP/token")
-    verification_expires_at: Optional[int] = Field(default=None, description="Epoch ms expiration for the verification code")
+    verification_expires_at: Optional[int] = Field(default=None, sa_column=Column(BigInteger, nullable=True), description="Epoch ms expiration for the verification code")
     
     created_at: datetime = Field(default_factory=utc_now)
     verified_at: Optional[datetime] = Field(default=None)

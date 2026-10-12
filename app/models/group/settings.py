@@ -35,6 +35,15 @@ class GroupFinancialSettings(SQLModel, table=True):
     enable_timelock: bool = Field(default=True)
     timelock_duration_hours: int = Field(default=24)
     
+    # Fund Stability, Liquidity & Reminders
+    liquidity_buffer_percentage: float = Field(default=10.0, description="Percentage of group funds reserved as liquid buffer")
+    enable_late_fee_escalation: bool = Field(default=True, description="Escalate late penalty fees each cycle a payment remains missed")
+    contribution_reminder_days_before: int = Field(default=2, description="Days before due date to schedule reminder")
+    auto_debit_consent_required: bool = Field(default=True, description="Permit automatic collection only from members who opted in")
+    emergency_contact_name: Optional[str] = Field(default=None, description="Name of contact for urgent payment issues")
+    emergency_contact_phone: Optional[str] = Field(default=None, description="Phone of contact for urgent payment issues")
+    enable_sms_call_reminders: bool = Field(default=True, description="Send automated SMS and phone call reminders")
+    
     updated_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger))
 
 class GroupGovernanceSettings(SQLModel, table=True):
@@ -91,12 +100,19 @@ class GroupCommunicationSettings(SQLModel, table=True):
     weekly_report_day: str = Field(default="Friday")
     weekly_report_time: str = Field(default="17:00")
     send_deposit_due_prompts: bool = Field(default=True)
+    send_dues_due_prompts: bool = Field(default=True, description="Prompt members when dues subscription cycles are approaching due date")
+    send_loan_due_prompts: bool = Field(default=True, description="Prompt members when loan repayment deadlines approach")
+    broadcast_individual_dues_receipts: bool = Field(default=True, description="Broadcast individual dues receipts in group chat")
+    broadcast_individual_loan_receipts: bool = Field(default=True, description="Broadcast individual loan repayment receipts in group chat")
+    announce_dues_adjustment_updates: bool = Field(default=True, description="Post notice when admin adjusts dues rates or policies")
+    announce_loan_disbursement_updates: bool = Field(default=True, description="Post notice when loan disbursement occurs")
     
     # Milestones & Security
     share_financial_snapshots: bool = Field(default=True)
     announce_system_events: bool = Field(default=True)
     post_security_rule_updates: bool = Field(default=True)
     post_group_approval_polls: bool = Field(default=True)
+    post_loan_approval_polls: bool = Field(default=True, description="Post loan review and voting polls in chat")
     notify_important_rule_changes: bool = Field(default=True)
     
     # Records & Cleanup
@@ -135,10 +151,24 @@ class GroupVisibilitySettings(SQLModel, table=True):
     vis_enforce_payout_holds: bool = Field(default=False)
     vis_substitute_member_allowance: bool = Field(default=False)
     
+    # Dues & Loan Administration Visibility
+    vis_dues_schedule: bool = Field(default=False, description="Hide/show dues amount and frequency from members")
+    vis_allow_installments: bool = Field(default=False, description="Hide/show allow installments toggle from members")
+    vis_arrears_policy: bool = Field(default=False, description="Hide/show arrears policy details from members")
+    vis_fee_exemptions: bool = Field(default=False, description="Hide/show fee exemptions management from members")
+    vis_interest_rates: bool = Field(default=False, description="Hide/show investment interest rates from members")
+    vis_loan_guarantor_rules: bool = Field(default=False, description="Hide/show loan guarantor rules from members")
+    vis_max_borrowing_limit: bool = Field(default=False, description="Hide/show maximum borrowing limit from members")
+    vis_early_repayment_discount: bool = Field(default=False, description="Hide/show early repayment discount from members")
+    vis_new_share_issuance: bool = Field(default=False, description="Hide/show new share issuance rules from members")
+    vis_default_asset_seizure: bool = Field(default=False, description="Hide/show default asset seizure recovery actions from members")
+
     vis_multi_signature_roster: bool = Field(default=False)
     vis_active_audit_status: bool = Field(default=False)
     vis_approval_quorum: bool = Field(default=False)
     vis_pending_payout_queue: bool = Field(default=False)
+    vis_pending_dues_adjustments: bool = Field(default=False, description="Hide/show pending dues adjustments from members")
+    vis_pending_loans: bool = Field(default=False, description="Hide/show pending loans queue from members")
     vis_require_multi_signature: bool = Field(default=False)
     vis_time_lock_disbursals: bool = Field(default=False)
     
@@ -147,18 +177,27 @@ class GroupVisibilitySettings(SQLModel, table=True):
     vis_contribution_reminder_schedule: bool = Field(default=False)
     vis_liquidity_buffer_coverage: bool = Field(default=False)
     vis_late_fee_escalation: bool = Field(default=False)
+    vis_auto_debit_consent: bool = Field(default=False, description="Hide/show auto-debit consent toggle from members")
+    vis_emergency_contact: bool = Field(default=False, description="Hide/show emergency contact setting from members")
+    vis_sms_call_reminders: bool = Field(default=False, description="Hide/show SMS/call reminders toggle from members")
     
     vis_download_official_statement: bool = Field(default=True)
     vis_chat_history_cleanup: bool = Field(default=True)
     
     vis_broadcast_individual_deposit_receipts: bool = Field(default=True)
+    vis_broadcast_individual_dues_receipts: bool = Field(default=True)
+    vis_broadcast_individual_loan_receipts: bool = Field(default=True, description="Hide/show loan repayment receipts in chat")
     vis_announce_payout_updates: bool = Field(default=True)
+    vis_announce_dues_adjustment_updates: bool = Field(default=True)
+    vis_announce_loan_disbursement_updates: bool = Field(default=True, description="Hide/show loan disbursement updates in chat")
     vis_show_transfer_receipts: bool = Field(default=True)
     vis_announce_admin_transactions: bool = Field(default=True)
     
     vis_send_daily_group_summaries: bool = Field(default=True)
     vis_post_weekly_financial_reports: bool = Field(default=True)
     vis_send_deposit_due_prompts: bool = Field(default=True)
+    vis_send_dues_due_prompts: bool = Field(default=True)
+    vis_send_loan_due_prompts: bool = Field(default=True, description="Hide/show loan repayment due prompts")
     vis_daily_summary_time: bool = Field(default=True)
     vis_weekly_report_day: bool = Field(default=True)
     
@@ -166,6 +205,9 @@ class GroupVisibilitySettings(SQLModel, table=True):
     vis_announce_system_events: bool = Field(default=True)
     vis_post_security_rule_updates: bool = Field(default=True)
     vis_post_group_approval_polls: bool = Field(default=True)
+    vis_post_loan_approval_polls: bool = Field(default=True, description="Hide/show loan approval polls")
     vis_notify_important_rule_changes: bool = Field(default=True)
+    notify_important_rule_changes: bool = Field(default=True)
     
     updated_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger))
+

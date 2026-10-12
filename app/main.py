@@ -41,9 +41,9 @@ async def on_startup():
     try:
         redis_conn = redis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
         await FastAPILimiter.init(redis_conn)
-        print("✅ Redis Rate Limiter initialized successfully")
+        print("[Redis] Rate Limiter initialized successfully")
     except Exception as e:
-        print(f"⚠️ Could not connect to Redis for Rate Limiting: {e}")
+        print(f"[Redis warning] Could not connect to Redis for Rate Limiting: {e}")
 
 # Auth and Recovery
 from app.api.routes.authentication.otp import main_router as otp_router

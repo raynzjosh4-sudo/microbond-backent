@@ -76,3 +76,4 @@ tzdata==2026.5
 tzlocal==5.4.4
 urllib3==2.8.0
 uvicorn==0.54.0
+resend==2.49.1

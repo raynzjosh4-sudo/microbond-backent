@@ -129,15 +129,8 @@ def create_group(
                     detail="Admin assigned list exceeds the maximum member capacity."
                 )
                 
-        # Handle IMMEDIATE start time
+        # group_start_time is always a Unix epoch int (ms) — use directly
         start_time_val = request.group_start_time
-        if isinstance(start_time_val, str) and start_time_val.upper() == "IMMEDIATE":
-            start_time_val = int(time.time())
-        else:
-            try:
-                start_time_val = int(start_time_val)
-            except ValueError:
-                start_time_val = int(time.time())
                 
         rotating_details = RotatingGroupDetails(
             group_id=new_group_id,
@@ -166,9 +159,9 @@ def create_group(
         user_id=creator.id,
         role="ADMIN",
         title="Creator",
-        status="ACTIVE",
-        private_settings={}
+        status="ACTIVE"
     )
+    session.add(new_membership)
     # 5. Create the Group Wallet
     from app.models.group.wallet import GroupWallet
     new_wallet = GroupWallet(group_id=new_group_id)

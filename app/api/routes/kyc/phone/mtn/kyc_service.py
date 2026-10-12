@@ -3,6 +3,9 @@ import httpx
 import base64
 import logging
 from typing import Optional, Dict
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 

@@ -19,7 +19,10 @@ class GroupPaymentMethodResponse(BaseModel):
     payment_method_id: Optional[str]
     provider_name: str
     account_number: str
-    account_name: str
+    account_name: Optional[str] = None
+    verified_name: Optional[str] = None
+    is_verified: Optional[bool] = None
+    verification_type: Optional[str] = None
     masked_number: str
     is_fallback: bool
 
@@ -82,7 +85,10 @@ def get_group_payment_method(
                 payment_method_id=pm.id,
                 provider_name=pm.provider_name,
                 account_number=pm.account_number,
-                account_name=pm.account_name,
+                account_name=pm.verified_name or "Unknown",
+                verified_name=pm.verified_name,
+                is_verified=pm.is_verified,
+                verification_type=pm.verification_type,
                 masked_number=mask_account_number(pm.account_number),
                 is_fallback=False
             )
@@ -94,7 +100,10 @@ def get_group_payment_method(
             payment_method_id=default_pm.id,
             provider_name=default_pm.provider_name,
             account_number=default_pm.account_number,
-            account_name=default_pm.account_name,
+            account_name=default_pm.verified_name or "Unknown",
+            verified_name=default_pm.verified_name,
+            is_verified=default_pm.is_verified,
+            verification_type=default_pm.verification_type,
             masked_number=mask_account_number(default_pm.account_number),
             is_fallback=True
         )
@@ -105,6 +114,9 @@ def get_group_payment_method(
         provider_name="Mobile Money (Registered Number)",
         account_number=current_user.phone_number,
         account_name=current_user.full_name or "Unknown",
+        verified_name=current_user.full_name,
+        is_verified=True,
+        verification_type="FALLBACK",
         masked_number=mask_account_number(current_user.phone_number),
         is_fallback=True
     )

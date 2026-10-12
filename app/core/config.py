@@ -1,8 +1,13 @@
+from pathlib import Path
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+ENV_FILE = BASE_DIR / ".env"
 
 class Settings(BaseSettings):
     # Your Postgres connection string
-    DATABASE_URL: str = "postgresql+psycopg2://postgres.gibejqmneuccurybpdfv:Joshraynz4%40gmail.com@aws-1-eu-central-1.pooler.supabase.com:6543/postgres"
+    DATABASE_URL: str = "postgresql+psycopg2://postgres.gibejqmneuccurybpdfv:Joshraynz4%40gmail.com@aws-1-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=require"
     
     FIREBASE_CREDENTIALS_PATH: str = "firebase_credentials.json"
     
@@ -17,10 +22,25 @@ class Settings(BaseSettings):
     PREMBLY_SECRET_KEY: str = ""
     PREMBLY_PUBLIC_KEY: str = ""
     
+    # Resend Email Service
+    RESEND_API_KEY: str = ""
+    RESEND_FROM_EMAIL: str = "Microbond <no-reply@mail.crimchart.com>"
+
+    # Public Supabase Storage URL for email assets
+    # Format: https://<project-ref>.supabase.co/storage/v1/object/public/email-assets
+    EMAIL_ASSET_BASE_URL: str = "https://gibejqmneuccurybpdfv.supabase.co/storage/v1/object/public/email-assets"
+    
     # JWT Settings
-    SECRET_KEY: str = "a_very_secret_and_long_string_for_production_jwt" # In production, set this in .env
+    SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 # 7 days
+    
+    @field_validator("SECRET_KEY", mode="after")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        if not v or not v.strip():
+            return "a_very_secret_and_long_string_for_production_jwt"
+        return v
     
     # Sentry Error Logging
     SENTRY_DSN: str = ""
@@ -45,7 +65,12 @@ class Settings(BaseSettings):
     R2_BUCKET_NAME: str = ""
     R2_PUBLIC_DOMAIN: str = "" # e.g. "https://pub-xxxx.r2.dev" or custom domain
 
-    # Reads from a local .env file
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # Reads from local .env files (backend root or current working dir)
+    model_config = SettingsConfigDict(
+        env_file=[str(ENV_FILE), ".env"], 
+        env_file_encoding="utf-8", 
+        extra="ignore"
+    )
 
 settings = Settings()
+

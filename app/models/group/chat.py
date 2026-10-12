@@ -1,7 +1,7 @@
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from sqlmodel import SQLModel, Field
 from datetime import datetime, timezone
-from sqlalchemy import Column, BigInteger, String, Index
+from sqlalchemy import Column, BigInteger, String, Index, JSON, Float, Integer
 import uuid
 
 def utc_now():
@@ -12,7 +12,7 @@ class GroupChatReadReceipt(SQLModel, table=True):
     Tracks which users have read which messages in a group chat.
     Crucial for WhatsApp's 'Double Blue Tick' feature in group settings.
     """
-    message_id: int = Field(foreign_key="groupchatmessage.id", primary_key=True)
+    message_id: uuid.UUID = Field(foreign_key="groupchatmessage.id", primary_key=True)
     user_id: str = Field(primary_key=True)
     read_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger))
 
@@ -21,7 +21,7 @@ class GroupChatMessage(SQLModel, table=True):
         Index("ix_chat_group_active_created", "group_id", "is_deleted", "created_at"),
     )
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4, primary_key=True)
     
     # WhatsApp style: Client-generated UUID to prevent duplicate sends and track local status
     client_message_id: Optional[str] = Field(default=None, unique=True, index=True)
@@ -49,9 +49,19 @@ class GroupChatMessage(SQLModel, table=True):
     media_mime_type: Optional[str] = Field(default=None, description="e.g. image/jpeg, video/mp4")
     media_size_bytes: Optional[int] = Field(default=None, description="File size in bytes")
     media_duration_seconds: Optional[int] = Field(default=None, description="For audio/video playback length")
+    media_width: Optional[int] = Field(default=None, description="Image/video pixel width")
+    media_height: Optional[int] = Field(default=None, description="Image/video pixel height")
+    aspect_ratio: Optional[float] = Field(default=None, description="Calculated aspect ratio (width / height)")
+
+    # Multi-file gallery / albums (list of media objects with url, dimensions, ratio, mime, etc.)
+    attachments: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        sa_column=Column(JSON),
+        description="List of media attachments with URLs, dimensions, and aspect ratios"
+    )
     
     # For WhatsApp-like features
-    reply_to_message_id: Optional[int] = Field(default=None, foreign_key="groupchatmessage.id")
+    reply_to_message_id: Optional[uuid.UUID] = Field(default=None, foreign_key="groupchatmessage.id")
     
     # Status and State
     status: str = Field(default="SENT", description="SENT, DELIVERED, READ")
@@ -62,7 +72,7 @@ class GroupChatMessage(SQLModel, table=True):
     updated_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger, index=True))
 
 class GroupPoll(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4, primary_key=True)
     group_id: str = Field(foreign_key="group.group_id", index=True)
     creator_id: uuid.UUID = Field(foreign_key="user.id")
     
@@ -78,7 +88,7 @@ class GroupPoll(SQLModel, table=True):
     created_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger))
 
 class GroupPollVote(SQLModel, table=True):
-    poll_id: int = Field(foreign_key="grouppoll.id", primary_key=True)
+    poll_id: uuid.UUID = Field(foreign_key="grouppoll.id", primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="user.id", primary_key=True)
     
     selected_option: str = Field()

@@ -22,8 +22,8 @@ class RotatingGroupCreateRequest(BaseModel):
     maximum_member_capacity: Optional[int] = Field(default=None, ge=2, description="Must be a whole number, e.g. 20. Optional for infinite cycles.")
     payouts_per_cycle: int = Field(..., ge=1, description="Members paid per cycle, e.g. 1")
     collection_frequency_days: int = Field(..., ge=0, description="0 means daily at specific time, 7 means weekly, etc.")
-    collection_time: str = Field(..., description="Time of day for collection e.g. 17:00")
-    group_start_time: str = Field(..., description="'IMMEDIATE' or exact datetime string the group kicks off")
+    collection_time: Optional[int] = Field(default=None, description="Optional Unix epoch timestamp (ms) for collection time, e.g. 1700000000000")
+    group_start_time: int = Field(..., description="Unix epoch timestamp (ms) when the group kicks off, e.g. 1700000000000")
     
     # Strategy & Overrides
     payout_order_strategy: PayoutOrderStrategy = Field(..., description="Must be selected by user")

@@ -119,6 +119,7 @@ def verify_otp(
             phone_number=user.phone_number,
             is_new_user=is_new,
             is_profile_complete=user.is_profile_complete,
+            has_app_pin=bool(user.hashed_pin is not None),
         )
     except HTTPException:
         # Re-raise HTTP exceptions so they aren't caught by the general DB exception handler

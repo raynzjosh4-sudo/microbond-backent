@@ -26,9 +26,11 @@ def list_my_payment_methods(
             id=pm.id,
             provider_name=pm.provider_name,
             account_number=pm.account_number,
-            account_name=pm.account_name,
+            verified_name=pm.verified_name,
+            is_verified=pm.is_verified,
             is_default=pm.is_default,
-            masked_number=mask_account_number(pm.account_number)
+            masked_number=mask_account_number(pm.account_number),
+            verification_type=pm.verification_type,
         )
         for pm in methods
     ]

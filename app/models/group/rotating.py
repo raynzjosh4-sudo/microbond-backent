@@ -14,7 +14,7 @@ class RotatingGroupDetails(SQLModel, table=True):
     payouts_per_cycle: int
     number_of_cycles: Optional[int] = Field(default=None) # Automatically calculated or None if infinite
     collection_frequency_days: int
-    collection_time: str
+    collection_time: Optional[str] = Field(default=None)
     group_start_time: int = Field(sa_column=Column(BigInteger))
     
     payout_order_strategy: str
@@ -32,4 +32,4 @@ class RotatingGroupDetails(SQLModel, table=True):
     enforce_payout_holds: bool
     
     current_cycle: int = Field(default=1)
-    created_at: int = Field(default_factory=utc_now)
+    created_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger))

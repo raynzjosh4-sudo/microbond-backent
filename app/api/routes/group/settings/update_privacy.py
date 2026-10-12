@@ -22,7 +22,7 @@ class UpdatePrivacySettingsRequest(BaseModel):
     vis_report_reserve_fund: Optional[bool] = None
     vis_report_escrow_holds: Optional[bool] = None
     
-@router.put("/{group_id}/settings/privacy", summary="Update Group Privacy Settings")
+@router.patch("/{group_id}/settings/privacy", summary="Update Group Privacy Settings")
 def update_group_privacy_settings(
     group_id: str, 
     request: UpdatePrivacySettingsRequest, 

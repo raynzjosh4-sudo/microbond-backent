@@ -14,3 +14,4 @@ class OTPVerifyResponse(BaseModel):
     phone_number: str
     is_new_user: bool
     is_profile_complete: bool
+    has_app_pin: bool = False

@@ -108,7 +108,12 @@ def _format_destination_response(dest: UserPayoutDestination, source: str) -> di
             "id": dest.id,
             "provider_name": dest.provider_name,
             "account_number": dest.account_number,
-            "account_name": dest.account_name,
+            "verified_name": dest.verified_name,
+            "account_name": dest.verified_name,  # Backward compatibility for mobile client
+            "account_type": dest.account_type,
+            "is_verified": dest.is_verified,
+            "verification_type": dest.verification_type,
             "masked_number": _mask_number(dest.account_number)
         }
     }
+

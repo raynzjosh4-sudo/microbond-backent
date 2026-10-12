@@ -13,7 +13,11 @@ router = APIRouter(prefix="/api/v1/groups", tags=["Group Settings"])
 
 class UpdateTransactionMessagesRequest(BaseModel):
     broadcast_individual_deposit_receipts: Optional[bool] = None
+    broadcast_individual_dues_receipts: Optional[bool] = None
+    broadcast_individual_loan_receipts: Optional[bool] = None
     announce_payout_updates: Optional[bool] = None
+    announce_dues_adjustment_updates: Optional[bool] = None
+    announce_loan_disbursement_updates: Optional[bool] = None
     show_transfer_receipts: Optional[bool] = None
     announce_admin_transactions: Optional[bool] = None
 
@@ -44,15 +48,24 @@ def update_transaction_message_settings(
 
     if request.broadcast_individual_deposit_receipts is not None:
         settings.broadcast_individual_deposit_receipts = request.broadcast_individual_deposit_receipts
+    if request.broadcast_individual_dues_receipts is not None:
+        settings.broadcast_individual_dues_receipts = request.broadcast_individual_dues_receipts
+    if request.broadcast_individual_loan_receipts is not None:
+        settings.broadcast_individual_loan_receipts = request.broadcast_individual_loan_receipts
         
     if request.announce_payout_updates is not None:
         settings.announce_payout_updates = request.announce_payout_updates
+    if request.announce_dues_adjustment_updates is not None:
+        settings.announce_dues_adjustment_updates = request.announce_dues_adjustment_updates
+    if request.announce_loan_disbursement_updates is not None:
+        settings.announce_loan_disbursement_updates = request.announce_loan_disbursement_updates
         
     if request.show_transfer_receipts is not None:
         settings.show_transfer_receipts = request.show_transfer_receipts
         
     if request.announce_admin_transactions is not None:
         settings.announce_admin_transactions = request.announce_admin_transactions
+
 
     session.add(settings)
     session.commit()

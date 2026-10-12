@@ -15,6 +15,9 @@ class UpdateLiquidityVisibilityRequest(BaseModel):
     vis_contribution_reminder_schedule: Optional[bool] = None
     vis_liquidity_buffer_coverage: Optional[bool] = None
     vis_late_fee_escalation: Optional[bool] = None
+    vis_auto_debit_consent: Optional[bool] = None
+    vis_emergency_contact: Optional[bool] = None
+    vis_sms_call_reminders: Optional[bool] = None
 
 @router.patch("/{group_id}/settings/liquidity-visibility", summary="Admin: Update Liquidity & Reminders Visibility")
 def update_liquidity_visibility_settings(
@@ -47,6 +50,12 @@ def update_liquidity_visibility_settings(
         settings.vis_liquidity_buffer_coverage = request.vis_liquidity_buffer_coverage
     if request.vis_late_fee_escalation is not None:
         settings.vis_late_fee_escalation = request.vis_late_fee_escalation
+    if request.vis_auto_debit_consent is not None:
+        settings.vis_auto_debit_consent = request.vis_auto_debit_consent
+    if request.vis_emergency_contact is not None:
+        settings.vis_emergency_contact = request.vis_emergency_contact
+    if request.vis_sms_call_reminders is not None:
+        settings.vis_sms_call_reminders = request.vis_sms_call_reminders
 
     session.add(settings)
     session.commit()

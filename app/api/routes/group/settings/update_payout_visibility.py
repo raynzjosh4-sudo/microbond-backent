@@ -17,8 +17,26 @@ class UpdatePayoutVisibilityRequest(BaseModel):
     vis_grace_period_window: Optional[bool] = None
     vis_enforce_payout_holds: Optional[bool] = None
     vis_substitute_member_allowance: Optional[bool] = None
+    
+    # Dues administration visibility
+    vis_dues_schedule: Optional[bool] = None
+    vis_allow_installments: Optional[bool] = None
+    vis_arrears_policy: Optional[bool] = None
+    vis_fee_exemptions: Optional[bool] = None
+    vis_pending_dues_adjustments: Optional[bool] = None
 
-@router.patch("/{group_id}/settings/payout-visibility", summary="Admin: Update Payout Rules Visibility")
+    # Investment club rules & borrowing visibility
+    vis_interest_rates: Optional[bool] = None
+    vis_loan_guarantor_rules: Optional[bool] = None
+    vis_max_borrowing_limit: Optional[bool] = None
+    vis_early_repayment_discount: Optional[bool] = None
+    vis_new_share_issuance: Optional[bool] = None
+    vis_default_asset_seizure: Optional[bool] = None
+    vis_pending_loans: Optional[bool] = None
+
+@router.patch("/{group_id}/settings/payout-visibility", summary="Admin: Update Payout / Dues Rules Visibility")
+@router.patch("/{group_id}/settings/dues-visibility", summary="Admin: Update Dues Administration Visibility")
+@router.patch("/{group_id}/settings/investment-visibility", summary="Admin: Update Investment Rules Visibility")
 def update_payout_visibility_settings(
     group_id: str, 
     request: UpdatePayoutVisibilityRequest, 
@@ -54,6 +72,33 @@ def update_payout_visibility_settings(
     if request.vis_substitute_member_allowance is not None:
         settings.vis_substitute_member_allowance = request.vis_substitute_member_allowance
 
+    if request.vis_dues_schedule is not None:
+        settings.vis_dues_schedule = request.vis_dues_schedule
+    if request.vis_allow_installments is not None:
+        settings.vis_allow_installments = request.vis_allow_installments
+    if request.vis_arrears_policy is not None:
+        settings.vis_arrears_policy = request.vis_arrears_policy
+    if request.vis_fee_exemptions is not None:
+        settings.vis_fee_exemptions = request.vis_fee_exemptions
+    if request.vis_pending_dues_adjustments is not None:
+        settings.vis_pending_dues_adjustments = request.vis_pending_dues_adjustments
+
+    if request.vis_interest_rates is not None:
+        settings.vis_interest_rates = request.vis_interest_rates
+    if request.vis_loan_guarantor_rules is not None:
+        settings.vis_loan_guarantor_rules = request.vis_loan_guarantor_rules
+    if request.vis_max_borrowing_limit is not None:
+        settings.vis_max_borrowing_limit = request.vis_max_borrowing_limit
+    if request.vis_early_repayment_discount is not None:
+        settings.vis_early_repayment_discount = request.vis_early_repayment_discount
+    if request.vis_new_share_issuance is not None:
+        settings.vis_new_share_issuance = request.vis_new_share_issuance
+    if request.vis_default_asset_seizure is not None:
+        settings.vis_default_asset_seizure = request.vis_default_asset_seizure
+    if request.vis_pending_loans is not None:
+        settings.vis_pending_loans = request.vis_pending_loans
+
     session.add(settings)
     session.commit()
-    return {"status": "success", "message": "Payout rules visibility settings updated successfully."}
+    return {"status": "success", "message": "Payout / Dues / Investment rules visibility settings updated successfully."}
+

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
+from sqlalchemy import cast, String
 from typing import Optional
 from pydantic import BaseModel
 import datetime
@@ -19,7 +20,8 @@ class UpdateRotatingSettingsRequest(BaseModel):
     payout_order_strategy: Optional[str] = None
     require_guarantor: Optional[bool] = None
 
-@router.put("/{group_id}/settings/rotating")
+@router.put("/{group_id}/settings/rotating", summary="Update Rotating Group Settings")
+@router.patch("/{group_id}/settings/rotating", summary="Partial Update Rotating Group Settings")
 def update_rotating_group_settings(
     group_id: str,
     request: UpdateRotatingSettingsRequest,
@@ -32,8 +34,9 @@ def update_rotating_group_settings(
         
     admin_membership = session.query(GroupMembership).filter(
         GroupMembership.group_id == group.group_id,
-        GroupMembership.user_id == current_user.id,
-        GroupMembership.role == "ADMIN"
+        cast(GroupMembership.user_id, String) == str(current_user.id),
+        GroupMembership.role == "ADMIN",
+        GroupMembership.status == "ACTIVE"
     ).first()
     
     if not admin_membership:

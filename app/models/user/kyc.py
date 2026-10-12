@@ -1,5 +1,6 @@
 from typing import Optional
 from sqlmodel import SQLModel, Field
+from sqlalchemy import Column, BigInteger
 import uuid
 from datetime import datetime, timezone
 
@@ -29,10 +30,10 @@ class KycProfile(SQLModel, table=True):
     sim_registered_name: Optional[str] = Field(default=None)
     is_mobile_money_active: bool = Field(default=False)
     is_sim_name_matched: bool = Field(default=False)
-    sim_verified_at: Optional[int] = Field(default=None)
+    sim_verified_at: Optional[int] = Field(default=None, sa_column=Column(BigInteger))
     
     # Telecom KYC & SIM-Swap Tripwire Fields
-    last_known_sim_registration_timestamp: Optional[int] = Field(default=None, description="Epoch ms of the carrier SIM registration/swap")
+    last_known_sim_registration_timestamp: Optional[int] = Field(default=None, sa_column=Column(BigInteger), description="Epoch ms of the carrier SIM registration/swap")
     sim_swap_detected: bool = Field(default=False, description="True if a recent SIM change occurred at telecom level")
     last_carrier_subscriber_id: Optional[str] = Field(default=None, description="Carrier internal subscriber hash/identifier")
     

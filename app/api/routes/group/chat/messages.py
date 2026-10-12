@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
-from typing import Optional, List
+from typing import Optional, List, Union
 from pydantic import BaseModel
 
 from app.core.database import get_session
@@ -8,11 +8,15 @@ from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import GroupMembership
 from app.models.group.chat import GroupChatMessage
+from app.models.group.settings import GroupGovernanceSettings
 from app.services.websocket_manager import ws_manager
 
 from fastapi import BackgroundTasks
 import uuid
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.services.push_notifications import notify_all_group_members
 
@@ -50,7 +54,7 @@ def broadcast_system_message_sync(
         group_id,
         {
             "event_type": "NEW_MESSAGE",
-            "message": system_message.model_dump()
+            "message": system_message.model_dump(mode="json")
         }
     )
     
@@ -76,7 +80,7 @@ class SendMessageRequest(BaseModel):
     media_mime_type: Optional[str] = None
     media_size_bytes: Optional[int] = None
     media_duration_seconds: Optional[int] = None
-    reply_to_message_id: Optional[int] = None
+    reply_to_message_id: Optional[Union[str, int]] = None
 
 @router.post("/{group_id}/chat/messages", summary="Send a chat message to the group")
 async def send_chat_message(
@@ -101,14 +105,49 @@ async def send_chat_message(
     if not membership:
         raise HTTPException(status_code=403, detail="You must be an active member to send messages to this group.")
 
-    # 2. Idempotency check (prevent duplicate messages on bad network)
+    # 2. Check Governance Permissions: Only admins can send messages if members_can_send_messages is false
+    if membership.role != "ADMIN":
+        gov_settings = session.exec(
+            select(GroupGovernanceSettings).where(GroupGovernanceSettings.group_id == group_id)
+        ).first()
+        if gov_settings and not gov_settings.members_can_send_messages:
+            raise HTTPException(
+                status_code=403,
+                detail="Only group admins can send messages in this group."
+            )
+
+    # 3. Idempotency check (prevent duplicate messages on bad network)
     existing_msg = session.exec(
         select(GroupChatMessage).where(GroupChatMessage.client_message_id == request.client_message_id)
     ).first()
     if existing_msg:
         return {"message": "Message already sent", "data": existing_msg}
 
-    # 3. Save to database
+    # 3. Sanitize and resolve reply_to_message_id (accepts message UUID id or client_message_id)
+    reply_id: Optional[uuid.UUID] = None
+    if request.reply_to_message_id is not None:
+        raw_val = str(request.reply_to_message_id).strip()
+        if raw_val and raw_val != "0" and raw_val.lower() != "string" and raw_val.lower() != "null":
+            # 1. Try finding message directly by primary key UUID
+            try:
+                candidate_uuid = uuid.UUID(raw_val)
+                ref_msg = session.exec(
+                    select(GroupChatMessage).where(GroupChatMessage.id == candidate_uuid)
+                ).first()
+                if ref_msg:
+                    reply_id = ref_msg.id
+            except ValueError:
+                candidate_uuid = None
+
+            # 2. If not found by primary key, try looking up by client_message_id
+            if reply_id is None:
+                ref_msg = session.exec(
+                    select(GroupChatMessage).where(GroupChatMessage.client_message_id == raw_val)
+                ).first()
+                if ref_msg:
+                    reply_id = ref_msg.id
+
+    # 4. Save to database
     new_message = GroupChatMessage(
         client_message_id=request.client_message_id,
         group_id=group_id,
@@ -120,7 +159,7 @@ async def send_chat_message(
         media_mime_type=request.media_mime_type,
         media_size_bytes=request.media_size_bytes,
         media_duration_seconds=request.media_duration_seconds,
-        reply_to_message_id=request.reply_to_message_id,
+        reply_to_message_id=reply_id,
         status="SENT"
     )
 
@@ -130,14 +169,15 @@ async def send_chat_message(
         session.refresh(new_message)
     except Exception as e:
         session.rollback()
-        raise HTTPException(status_code=500, detail="Failed to save message.")
+        logger.exception(f"Failed to save message in group {group_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to save message: {str(e)}")
 
     # 4. Trigger WebSockets to broadcast this to active clients instantly
     await ws_manager.broadcast_to_group(
         group_id,
         {
             "event_type": "NEW_MESSAGE",
-            "message": new_message.model_dump()
+            "message": new_message.model_dump(mode="json")
         },
         exclude_user_id=str(current_user.id) # The sender already has the message locally
     )

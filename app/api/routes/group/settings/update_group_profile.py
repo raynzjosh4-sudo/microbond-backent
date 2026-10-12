@@ -80,7 +80,7 @@ def update_group_profile(
         changes.append("description")
         group.description = request.description
     if request.group_image_url is not None and request.group_image_url != group.group_image_url:
-        changes.append("group image")
+        changes.append("image")
         group.group_image_url = request.group_image_url
         
     session.add(group)
@@ -98,12 +98,17 @@ def update_group_profile(
             changes_str = " and ".join(changes)
             system_text = f"{current_user.full_name} changed the group {changes_str}."
             
+            chat_media_url = request.group_image_url if (request.group_image_url is not None and "image" in changes) else None
+            chat_media_type = "IMAGE" if chat_media_url else None
+
             system_message = GroupChatMessage(
                 client_message_id=str(uuid.uuid4()),
                 group_id=group_id,
                 sender_id=str(current_user.id),
                 message_type="SYSTEM_EVENT",
                 message_text=system_text,
+                media_url=chat_media_url,
+                media_type=chat_media_type,
                 status="SENT"
             )
             session.add(system_message)

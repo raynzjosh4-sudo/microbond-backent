@@ -1,7 +1,7 @@
 from typing import Optional, Any
 from sqlmodel import SQLModel, Field, JSON
 import uuid
-from sqlalchemy import Column
+from sqlalchemy import Column, BigInteger
 from datetime import datetime, timezone
 
 def utc_now():
@@ -25,7 +25,7 @@ class Group(SQLModel, table=True):
     
     # Financials & Timing
     currency: str = Field(default="UGX")
-    total_balance: int = Field(default=0) # Storing as integer/long
+    total_balance: int = Field(default=0, sa_column=Column(BigInteger)) # Storing as BigInteger
     
     # We remove the heavy JSON columns. Settings and Purpose data 
     # will be stored in separate dedicated tables (e.g. GroupSettings) 
@@ -44,8 +44,8 @@ class Group(SQLModel, table=True):
     # Group Health & Discovery are now tracked in the separate GroupHealth table
     
     # Audit
-    created_at: int = Field(default_factory=utc_now)
-    updated_at: int = Field(default_factory=utc_now)
+    created_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger))
+    updated_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger))
 
 class GroupMembership(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -79,6 +79,14 @@ class GroupMembership(SQLModel, table=True):
     show_previews: bool = Field(default=True)
     include_chat_in_export: bool = Field(default=False)
     
+    # SMS & Email Reminder Preferences (per-group)
+    sms_reminders_opted_in: bool = Field(default=False, description="Member consented to SMS reminders in this group")
+    sms_reminder_hours_before: int = Field(default=24, description="How many hours before the due date to send the SMS reminder")
+    sms_fee_acknowledged: bool = Field(default=False, description="Member has been warned about the 50 UGX per-deposit SMS fee")
+    pending_sms_fee_ugx: int = Field(default=0, description="Accumulated SMS fee UGX to deduct on next deposit")
+    email_reminders_opted_in: bool = Field(default=True, description="Member opted in to email reminders in this group")
+    email_reminder_hours_before: int = Field(default=24, description="How many hours before due date to send the email reminder")
+    
     # Chat state
     is_favorite: bool = Field(default=False)
     is_chat_locked: bool = Field(default=False)
@@ -86,5 +94,5 @@ class GroupMembership(SQLModel, table=True):
     
     # Lifecycle
     invited_by_user_id: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id")
-    joined_at: int = Field(default_factory=utc_now)
-    left_at: Optional[int] = Field(default=None)
+    joined_at: int = Field(default_factory=utc_now, sa_column=Column(BigInteger))
+    left_at: Optional[int] = Field(default=None, sa_column=Column(BigInteger, nullable=True))

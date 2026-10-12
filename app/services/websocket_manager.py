@@ -114,7 +114,7 @@ class ConnectionManager:
         if exclude_user_id:
             message["_exclude_user_id"] = exclude_user_id
             
-        json_message = json.dumps(message)
+        json_message = json.dumps(message, default=str)
         
         if self.is_redis_connected:
             try:

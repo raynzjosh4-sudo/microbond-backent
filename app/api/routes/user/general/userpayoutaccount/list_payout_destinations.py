@@ -29,8 +29,12 @@ def list_my_payout_destinations(
             id=dest.id,
             provider_name=dest.provider_name,
             account_number=dest.account_number,
-            account_name=dest.account_name,
+            account_name=dest.account_name or dest.verified_name,
+            account_type=dest.account_type,
+            verified_name=dest.verified_name,
+            is_verified=dest.is_verified,
             is_default=dest.is_default,
-            masked_number=_mask_number(dest.account_number)
+            masked_number=_mask_number(dest.account_number),
+            verification_type=dest.verification_type,
         ))
     return results

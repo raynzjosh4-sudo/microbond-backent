@@ -20,7 +20,10 @@ def start_scheduler():
         trigger=IntervalTrigger(minutes=1),
         id="auto_launch_groups",
         name="Check and launch pending groups",
-        replace_existing=True
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=30
     )
     
     # Run the Late Fee Processor daily (every 24 hours). We'll set it to 1 hour for safety to catch any new missed obligations that day.

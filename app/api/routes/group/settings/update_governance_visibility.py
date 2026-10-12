@@ -16,6 +16,7 @@ class UpdateGovernanceVisibilityRequest(BaseModel):
     vis_active_audit_status: Optional[bool] = None
     vis_approval_quorum: Optional[bool] = None
     vis_pending_payout_queue: Optional[bool] = None
+    vis_pending_dues_adjustments: Optional[bool] = None
     vis_require_multi_signature: Optional[bool] = None
     vis_time_lock_disbursals: Optional[bool] = None
 
@@ -52,6 +53,8 @@ def update_governance_visibility_settings(
         settings.vis_approval_quorum = request.vis_approval_quorum
     if request.vis_pending_payout_queue is not None:
         settings.vis_pending_payout_queue = request.vis_pending_payout_queue
+    if request.vis_pending_dues_adjustments is not None:
+        settings.vis_pending_dues_adjustments = request.vis_pending_dues_adjustments
     if request.vis_require_multi_signature is not None:
         settings.vis_require_multi_signature = request.vis_require_multi_signature
     if request.vis_time_lock_disbursals is not None:
