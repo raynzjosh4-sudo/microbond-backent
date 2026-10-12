@@ -4,6 +4,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from app.cronjobs.launcher.group_launcher import check_and_launch_pending_groups
 from app.cronjobs.finance.late_fee_processor import process_daily_late_fees
+from app.cronjobs.finance.payout_disbursement_worker import process_due_group_payouts
 from app.cronjobs.health.daily_health_ratings import process_daily_health_ratings
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,18 @@ def start_scheduler():
         coalesce=True,
         max_instances=1,
         misfire_grace_time=30
+    )
+
+    # Run the automated group payout disbursement worker every 2 minutes
+    scheduler.add_job(
+        process_due_group_payouts,
+        trigger=IntervalTrigger(minutes=2),
+        id="process_group_payouts",
+        name="Process Due Group Payout Disbursements",
+        replace_existing=True,
+        coalesce=True,
+        max_instances=1,
+        misfire_grace_time=60
     )
     
     # Run the Late Fee Processor daily (every 24 hours). We'll set it to 1 hour for safety to catch any new missed obligations that day.
@@ -46,3 +59,4 @@ def start_scheduler():
     
     scheduler.start()
     logger.info("APScheduler started: Cron Jobs running.")
+

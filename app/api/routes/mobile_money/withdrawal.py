@@ -16,8 +16,9 @@ class InitiateWithdrawalRequest(BaseModel):
 
 @router.post(
     "/initiate",
-    summary="High-Security Wallet Withdrawal",
-    description="Protected by live Telecom KYC & SIM-Swap Tripwire Guard plus Server-Side App PIN verification."
+    summary="[Deprecated] Manual Wallet Withdrawal",
+    description="Deprecated: Microbond automatically disburses funds directly to members' chosen payout accounts via the background payout worker on cycle maturity.",
+    deprecated=True
 )
 async def initiate_wallet_withdrawal(
     payload: InitiateWithdrawalRequest,
@@ -25,25 +26,12 @@ async def initiate_wallet_withdrawal(
     session: Session = Depends(get_session)
 ):
     """
-    If the line was swapped in the last 72 hours, or if the user is in a 
-    Security Cooldown / KYC Re-verification state, this endpoint aborts with HTTP 403.
-    Requires valid App PIN for step-up transaction execution.
+    Microbond does not require manual wallet withdrawals.
+    Group funds are automatically swept and disbursed to the member's chosen payout
+    account (MTN MoMo, Airtel Money, or Bank) by the background disbursement worker.
     """
-    if not current_user.hashed_pin:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You must set up an App PIN before performing withdrawals."
-        )
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Manual wallet withdrawals are not required. Group funds are automatically disbursed to your chosen payout destination when your cycle matures."
+    )
 
-    if not verify_pin(payload.app_pin, current_user.hashed_pin):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect App PIN. Withdrawal aborted."
-        )
-
-    return {
-        "status": "success",
-        "message": f"Withdrawal of {payload.amount} UGX to {payload.destination_msisdn} authorized.",
-        "account_id": str(current_user.id),
-        "telecom_kyc_verified": True
-    }

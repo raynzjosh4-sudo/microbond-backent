@@ -79,3 +79,78 @@ async def upload_file_to_r2(file: UploadFile, folder: str = "chat-media") -> Opt
     except Exception as e:
         logger.error(f"Unexpected error during R2 upload: {e}", exc_info=True)
         return None
+
+
+def delete_file_from_r2(public_url_or_key: str) -> bool:
+    """
+    Deletes a previously-uploaded object from Cloudflare R2.
+
+    Accepts either:
+    - A full public URL: "https://pub-xxx.r2.dev/avatars/uuid.jpg"
+    - A raw object key:  "avatars/uuid.jpg"
+
+    Returns True if deleted (or already gone), False on error.
+    """
+    client = get_r2_client()
+    if not client:
+        return False
+
+    try:
+        # Strip the public domain prefix if present to get the raw object key
+        key = public_url_or_key
+        if getattr(settings, "R2_PUBLIC_DOMAIN", None) and key.startswith(settings.R2_PUBLIC_DOMAIN):
+            base = settings.R2_PUBLIC_DOMAIN.rstrip("/")
+            key = key[len(base):].lstrip("/")
+
+        client.delete_object(Bucket=settings.R2_BUCKET_NAME, Key=key)
+        logger.info(f"[R2] Deleted object: {key}")
+        return True
+    except ClientError as e:
+        logger.error(f"[R2] ClientError deleting object '{key}': {e}")
+        return False
+    except Exception as e:
+        logger.error(f"[R2] Unexpected error deleting object '{key}': {e}", exc_info=True)
+        return False
+
+
+async def upload_bytes_to_r2(
+    file_bytes: bytes,
+    folder: str,
+    content_type: str,
+    extension: str,
+) -> Optional[str]:
+    """
+    Uploads raw bytes to R2 (used when the caller has already read the file
+    into memory for validation, so we cannot seek the UploadFile stream again).
+    Returns the public CDN URL or object key.
+    """
+    import io as _io
+    client = get_r2_client()
+    if not client:
+        return None
+
+    try:
+        unique_filename = f"{uuid.uuid4()}.{extension}"
+        object_key = f"{folder}/{unique_filename}"
+
+        await asyncio.to_thread(
+            _upload_to_s3_sync,
+            client,
+            _io.BytesIO(file_bytes),
+            settings.R2_BUCKET_NAME,
+            object_key,
+            content_type,
+        )
+
+        if getattr(settings, "R2_PUBLIC_DOMAIN", None):
+            base_url = settings.R2_PUBLIC_DOMAIN.rstrip("/")
+            return f"{base_url}/{object_key}"
+
+        return object_key
+
+    except ClientError as e:
+        logger.error(f"[R2] ClientError uploading bytes: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"[R2] Unexpected error uploading bytes: {e}", exc_info=True)
+        return None

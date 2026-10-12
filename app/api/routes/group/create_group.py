@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional
-from sqlmodel import Session
+from sqlmodel import Session, select
 import uuid
 
 from app.core.database import get_session
@@ -65,7 +65,28 @@ def create_unified_group(
             detail=f"You are not authorized to create a {request.type} group yet. Improve your KYC, trust score, or group health to unlock this feature."
         )
         
-    # 1b. Spam / DoS Protection (Max 5 active groups per user)
+    # 1b. Running Group Guard — cannot create a new group while owning a group that
+    #     has live funds (total_balance > 0) or active co-members, because abandoning
+    #     or mis-managing a live group risks other people's pooled money.
+    running_owned_groups = session.exec(
+        select(Group).where(
+            Group.created_by_user_id == current_user.id,
+            Group.status == "ACTIVE",
+            (Group.total_balance > 0) | (Group.member_count > 1)
+        )
+    ).all()
+
+    if running_owned_groups:
+        names = ", ".join(f"'{g.name}'" for g in running_owned_groups)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"You cannot create a new group while you are still managing a running group: {names}. "
+                "Please close or transfer ownership of your active group(s) first to protect your members' funds."
+            )
+        )
+
+    # 1c. Spam / DoS Protection (Max 5 active groups per user)
     from sqlalchemy import func
     owned_groups_count = session.exec(
         select(func.count()).where(

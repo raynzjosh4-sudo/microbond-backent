@@ -1,5 +1,6 @@
 import time
 import secrets
+import asyncio
 from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -14,6 +15,8 @@ from app.models.group.rotating import RotatingGroupDetails
 from app.models.group.finance import MemberObligation, GroupPenalty
 from app.models.user.security_email import UserSecurityEmail
 from app.communications.sms_service import SMS_FEE_UGX, send_deposit_receipt_sms
+from app.core.firebase_config import send_push_notification
+from app.services.push_notifications import notify_all_group_members
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Deposit Pipeline"])
 
@@ -246,6 +249,42 @@ def trigger_post_deposit_notifications(
             membership.pending_sms_fee_ugx = 0
             session.add(membership)
             session.commit()
+
+        # 3. Push: personal deposit receipt to the depositor
+        if user.fcm_token:
+            send_push_notification(
+                token=user.fcm_token,
+                title="Deposit Received ✅",
+                body=f"Your {currency} {amount_deposited:,} deposit to '{group_name}' was recorded successfully.",
+                data={"type": "DEPOSIT_RECEIPT", "group_id": group_id}
+            )
+
+        # 4. Push: broadcast to all other group members (social accountability nudge)
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(
+                    notify_all_group_members(
+                        group_id=group_id,
+                        sender_id=str(user_id),
+                        title=f"💰 {member_name} just deposited",
+                        body=f"{member_name} deposited {currency} {amount_deposited:,} in '{group_name}'.",
+                        data={"type": "DEPOSIT_BROADCAST", "group_id": group_id}
+                    )
+                )
+            else:
+                loop.run_until_complete(
+                    notify_all_group_members(
+                        group_id=group_id,
+                        sender_id=str(user_id),
+                        title=f"💰 {member_name} just deposited",
+                        body=f"{member_name} deposited {currency} {amount_deposited:,} in '{group_name}'.",
+                        data={"type": "DEPOSIT_BROADCAST", "group_id": group_id}
+                    )
+                )
+        except Exception as push_err:
+            import logging
+            logging.getLogger(__name__).warning(f"[DEPOSIT_BROADCAST_PUSH] Failed: {push_err}")
 
         # 2. Email receipt (if verified security email exists)
         security_email_row = session.exec(

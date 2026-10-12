@@ -22,9 +22,10 @@ from .membership.list_members import router as list_members_router
 from .membership.payout_destination import router as payout_destination_router
 from .membership.payment_method import router as group_payment_method_router
 from .membership.proxy_contributor import router as proxy_contributor_router
-from .membership.export_data import router as export_data_router
 from .membership.leave_group import router as leave_group_router
+from .membership.export_data import router as export_data_router
 from .membership.add_member import router as add_member_router
+from .membership.administration import router as member_admin_router
 from .report.submit_report import router as report_group_router
 from .rotating.turn_swaps import router as turn_swaps_router
 from .rotating.admin_payout_order import router as admin_payout_order_router
@@ -90,6 +91,7 @@ router.include_router(proxy_contributor_router)
 router.include_router(export_data_router)
 router.include_router(leave_group_router)
 router.include_router(add_member_router)
+router.include_router(member_admin_router)
 router.include_router(report_group_router)
 router.include_router(turn_swaps_router)
 router.include_router(admin_payout_order_router)

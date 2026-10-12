@@ -6,6 +6,7 @@ from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.settings import GroupGovernanceSettings
 from app.models.group.rotating import RotatingGroupDetails
+from app.core.firebase_config import send_push_notification
 from pydantic import BaseModel, Field
 from typing import Optional
 import uuid
@@ -105,7 +106,43 @@ def join_group(
         group.member_count += 1
         
     session.commit()
-    
+
+    # ── Push: notify admins that a join request is waiting for approval ──────
+    if final_status == "PENDING_APPROVAL":
+        admin_memberships = session.exec(
+            select(GroupMembership).where(
+                GroupMembership.group_id == group.group_id,
+                GroupMembership.role == "ADMIN",
+                GroupMembership.status == "ACTIVE"
+            )
+        ).all()
+        admin_users = session.exec(
+            select(User).where(User.id.in_([m.user_id for m in admin_memberships]))
+        ).all()
+        for admin in admin_users:
+            if admin.fcm_token:
+                send_push_notification(
+                    token=admin.fcm_token,
+                    title="New Join Request 🙋",
+                    body=f"{current_user.full_name} wants to join '{group.name}'. Tap to review.",
+                    data={"type": "JOIN_REQUEST_PENDING", "group_id": group.group_id}
+                )
+
+    # ── Push: notify each guarantor that their consent is required ───────────
+    if settings.require_guarantors and request.guarantor_ids:
+        for gid in request.guarantor_ids:
+            try:
+                guarantor = session.get(User, uuid.UUID(gid))
+                if guarantor and guarantor.fcm_token:
+                    send_push_notification(
+                        token=guarantor.fcm_token,
+                        title="Guarantor Request 🤝",
+                        body=f"{current_user.full_name} listed you as a guarantor to join '{group.name}'. Tap to review.",
+                        data={"type": "GUARANTOR_REQUEST", "group_id": group.group_id}
+                    )
+            except Exception:
+                pass
+
     return {
         "status": "success",
         "message": "Joined successfully!" if final_status == "ACTIVE" else "Join request sent for approval.",

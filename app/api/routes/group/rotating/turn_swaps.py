@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlmodel import Session
+from sqlmodel import Session, select
 from uuid import UUID
 
 from app.core.database import get_session
@@ -9,6 +9,7 @@ from app.models.user.user import User
 from app.models.group.finance import TurnSwapRequest, GroupPayout, utc_now
 from app.models.group.settings import GroupGovernanceSettings
 from app.models.group.rotating import RotatingGroupDetails
+from app.core.firebase_config import send_push_notification
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Payout Turn Swapping"])
 
@@ -82,7 +83,17 @@ def request_turn_swap(
     session.add(swap)
     session.commit()
     session.refresh(swap)
-    
+
+    # Push: notify the target that a swap request is waiting for their response
+    target_user = session.get(User, payload.target_user_id)
+    if target_user and target_user.fcm_token:
+        send_push_notification(
+            token=target_user.fcm_token,
+            title="Turn Swap Request 🔄",
+            body=f"{current_user.full_name} wants to swap their payout turn with yours. Tap to review.",
+            data={"type": "SWAP_REQUEST", "group_id": group_id, "swap_id": swap.swap_request_id}
+        )
+
     return swap
 
 @router.post("/{group_id}/swaps/{swap_request_id}/accept", summary="Accept a turn swap request")
@@ -136,7 +147,17 @@ def accept_turn_swap(
     swap.updated_at = utc_now()
     
     session.commit()
-    
+
+    # Push: notify the original requester that their swap was accepted
+    requester_user = session.get(User, swap.requester_user_id)
+    if requester_user and requester_user.fcm_token:
+        send_push_notification(
+            token=requester_user.fcm_token,
+            title="Swap Accepted ✅",
+            body=f"{current_user.full_name} accepted your turn swap. Your payout position has been updated.",
+            data={"type": "SWAP_ACCEPTED", "group_id": group_id}
+        )
+
     return {"status": "success", "message": "Turn swap successfully completed! Your payout position has been updated."}
 
 @router.post("/{group_id}/swaps/{swap_request_id}/reject", summary="Reject a turn swap request")
@@ -164,5 +185,15 @@ def reject_turn_swap(
     swap.updated_at = utc_now()
     
     session.commit()
-    
+
+    # Push: notify the original requester that their swap was declined
+    requester_user = session.get(User, swap.requester_user_id)
+    if requester_user and requester_user.fcm_token:
+        send_push_notification(
+            token=requester_user.fcm_token,
+            title="Swap Declined",
+            body=f"{current_user.full_name} declined your turn swap request.",
+            data={"type": "SWAP_REJECTED", "group_id": group_id}
+        )
+
     return {"status": "success", "message": "Turn swap rejected."}
