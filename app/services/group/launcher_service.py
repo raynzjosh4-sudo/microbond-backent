@@ -6,8 +6,7 @@ import logging
 from app.models.group.group import Group, GroupMembership
 from app.models.group.rotating import RotatingGroupDetails
 from app.models.group.settings import GroupFinancialSettings
-from app.models.group.chat import GroupChatMessage
-from app.services.group.matrix_generators.router import route_matrix_generation
+from app.services.group.matrix_generators.route_matrix_generation import route_matrix_generation
 
 logger = logging.getLogger(__name__)
 

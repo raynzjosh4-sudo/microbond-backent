@@ -8,44 +8,9 @@ from app.models.group.group import GroupMembership
 from app.models.user.user import User
 from app.models.user.userpayoutaccount.payout_destination import UserPayoutDestination
 
-@dataclass
-class ResolvedPayoutAccount:
-    destination_id: Optional[str]
-    provider_name: str
-    account_number: str
-    account_name: Optional[str]
-    account_type: str  # "MOBILE_MONEY" or "BANK_ACCOUNT"
-    source: str        # "GROUP_SPECIFIC", "GLOBAL_DEFAULT", "ANY_VERIFIED", "FALLBACK_PHONE"
-
-def sanitize_and_detect_carrier(phone: str) -> tuple[str, str]:
-    """
-    Cleans phone number and detects Ugandan telecom provider.
-    """
-    clean = re.sub(r'\D', '', phone)
-    if clean.startswith("256"):
-        formatted = clean
-    elif clean.startswith("0"):
-        formatted = "256" + clean[1:]
-    else:
-        formatted = "256" + clean
-
-    prefix = formatted[3:6] if len(formatted) >= 6 else ""
-
-    airtel_prefixes = {
-        "700", "701", "702", "703", "704", "705", "706", "707", "708", "709",
-        "750", "751", "752", "753", "754", "755", "756", "757", "758", "759",
-        "740", "741", "742", "743", "744"
-    }
-
-    if prefix in airtel_prefixes:
-        return formatted, "Airtel Money Uganda"
-    return formatted, "MTN Mobile Money Uganda"
-
-def mask_account_number(number: str) -> str:
-    """Masks all but the last 4 characters."""
-    if not number or len(number) < 4:
-        return "****"
-    return f"**** {number[-4:]}"
+from app.services.group.schemas.resolved_payout_account import ResolvedPayoutAccount
+from app.utils.phone.sanitize_and_detect_carrier import sanitize_and_detect_carrier
+from app.utils.masking.mask_account_number import mask_account_number
 
 def resolve_member_payout_destination(
     session: Session,

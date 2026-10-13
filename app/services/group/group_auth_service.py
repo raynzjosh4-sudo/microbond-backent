@@ -8,18 +8,7 @@ from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.health import GroupHealth
 
-logger = logging.getLogger(__name__)
-
-class SavingsGroupType(str, Enum):
-    MERRY_GO_ROUND = "MERRY_GO_ROUND"
-    GOAL_SAVINGS = "GOAL_SAVINGS"
-    BILL_SPLIT = "BILL_SPLIT"
-    WELFARE_FUND = "WELFARE_FUND"
-    EVENT_COMMITTEE = "EVENT_COMMITTEE"
-    INVESTMENT_CLUB = "INVESTMENT_CLUB"
-    FUNDRAISER = "FUNDRAISER"
-    SHARED_WALLET = "SHARED_WALLET"
-    ASSOCIATION_DUES = "ASSOCIATION_DUES"
+from app.services.group.schemas.savings_group_type import SavingsGroupType
 
 def evaluate_group_creation_permissions(session: Session, user_id: uuid.UUID) -> dict:
     """

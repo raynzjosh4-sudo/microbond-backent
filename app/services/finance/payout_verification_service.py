@@ -8,33 +8,16 @@ from app.services.mobile_money.kyc.telecom_tripwire_service import TelecomKycTri
 
 logger = logging.getLogger(__name__)
 
-# -------------------------------------------------------------------
-# Provider routing tables (exact strings clients must send)
-# -------------------------------------------------------------------
-MTN_PROVIDERS = {"MTN Mobile Money"}
-AIRTEL_PROVIDERS = {"Airtel Money"}
-BANK_PROVIDER_CODES: dict[str, str] = {
-    "Stanbic Bank Uganda": "stanbic_ug",
-    "DFCU Bank":           "dfcu_ug",
-    "Equity Bank Uganda":  "equity_ug",
-    "Centenary Bank":      "centenary_ug",
-    "KCB Bank Uganda":     "kcb_ug",
-    "Absa Bank Uganda":    "absa_ug",
-    "PostBank Uganda":     "postbank_ug",
-}
-
-VERIFICATION_TYPE_MTN        = "MTN"
-VERIFICATION_TYPE_AIRTEL     = "AIRTEL"
-VERIFICATION_TYPE_PREMBLY    = "PREMBLY_BANK"
-VERIFICATION_TYPE_MANUAL     = "MANUAL"
-
-
-@dataclass
-class VerificationResult:
-    is_verified: bool
-    verified_name: Optional[str]
-    verification_type: str          # "MTN" | "AIRTEL" | "PREMBLY_BANK" | "MANUAL"
-    raw_response: Optional[dict]    # Full provider payload, for audit/debugging
+from app.services.finance.schemas.verification_result import (
+    VerificationResult,
+    MTN_PROVIDERS,
+    AIRTEL_PROVIDERS,
+    BANK_PROVIDER_CODES,
+    VERIFICATION_TYPE_MTN,
+    VERIFICATION_TYPE_AIRTEL,
+    VERIFICATION_TYPE_PREMBLY,
+    VERIFICATION_TYPE_MANUAL,
+)
 
 
 class PayoutAccountVerificationService:
