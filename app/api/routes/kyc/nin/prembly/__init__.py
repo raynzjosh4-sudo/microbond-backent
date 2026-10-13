@@ -6,3 +6,5 @@ router = APIRouter(prefix="/prembly", tags=["KYC Verification (Prembly)"])
 
 router.include_router(verify_typed_nin_router)
 router.include_router(verify_scanned_id_router)
+
+__all__ = ["router", "verify_typed_nin_router", "verify_scanned_id_router"]

@@ -6,7 +6,7 @@ from sqlmodel import Session
 from app.core.database import get_session
 from app.models.user.user import User
 from app.api.dependencies import get_current_user
-from .schemas.models import NINSubmissionRequest, NINVerificationResponse
+from .schemas import NINSubmissionRequest, NINVerificationResponse
 from .utils import get_prembly_headers, PREMBLY_SECRET_KEY, PREMBLY_BASE_URL
 
 logger = logging.getLogger(__name__)

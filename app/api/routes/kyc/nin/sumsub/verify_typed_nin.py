@@ -7,7 +7,7 @@ from sqlmodel import Session
 from app.core.database import get_session
 from app.models.user.user import User
 from app.api.dependencies import get_current_user
-from .schemas.models import NINSubmissionRequest, NINVerificationResponse
+from .schemas import NINSubmissionRequest, NINVerificationResponse
 from .utils import generate_sumsub_signature, SUMSUB_APP_TOKEN, SUMSUB_SECRET_KEY, SUMSUB_BASE_URL, SUMSUB_LEVEL_NAME
 from app.core.rate_limit import RateLimiter
 

@@ -3,7 +3,7 @@ from sqlmodel import Session, select
 from app.models.user.user import User
 from app.core.database import get_session
 from app.communications.sms_service import sanitize_uganda_phone
-from .schemas.models import ForceKYCRequest
+from .schemas import ForceKYCRequest
 
 router = APIRouter()
 
