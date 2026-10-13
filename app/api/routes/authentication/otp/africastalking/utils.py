@@ -1,4 +1,3 @@
-import random
+from app.utils.codes import generate_6digit_code
 
-def generate_6digit_code() -> str:
-    return str(random.randint(100000, 999999))
+__all__ = ["generate_6digit_code"]

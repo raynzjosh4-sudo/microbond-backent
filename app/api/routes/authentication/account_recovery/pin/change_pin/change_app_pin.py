@@ -1,23 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
-from pydantic import BaseModel
 from app.core.database import get_session
 from app.models.user.user import User
 from app.core.security import hash_pin, verify_pin
 from app.api.dependencies import get_current_user
+from app.core.rate_limit import RateLimiter
+from .schemas import ChangeAppPinRequest, ChangeAppPinResponse
 
 router = APIRouter()
-
-class ChangeAppPinRequest(BaseModel):
-    old_pin: str
-    new_pin: str
-
-class ChangeAppPinResponse(BaseModel):
-    status: str
-    message: str
-
-from app.core.rate_limit import RateLimiter
 
 @router.put(
     "/pin/change", 

@@ -2,22 +2,14 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
-from pydantic import BaseModel
 from app.core.database import get_session
 from app.models.user.user import User
 from app.models.auth.otp import OTPRecord
 from app.communications.sms_service import send_real_otp_sms, sanitize_uganda_phone
-from app.api.routes.authentication.otp.africastalking.utils import generate_6digit_code
+from app.utils.codes import generate_6digit_code
+from .schemas import RequestForgotPinOTPRequest, RequestForgotPinOTPResponse
 
 router = APIRouter()
-
-class RequestForgotPinOTPRequest(BaseModel):
-    phone_number: str
-
-class RequestForgotPinOTPResponse(BaseModel):
-    status: str
-    message: str
-    expires_in_seconds: int
 
 @router.post("/pin/forgot/request-otp", response_model=RequestForgotPinOTPResponse, summary="Request OTP to reset forgotten PIN", status_code=status.HTTP_200_OK)
 def request_forgot_pin_otp(payload: RequestForgotPinOTPRequest, session: Session = Depends(get_session)):

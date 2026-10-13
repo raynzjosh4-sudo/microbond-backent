@@ -1,25 +1,15 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
-from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 from app.core.database import get_session
 from app.models.user.user import User
 from app.models.auth.otp import OTPRecord
 from app.communications.sms_service import sanitize_uganda_phone
 from app.core.security import create_access_token
-from datetime import timedelta
+from .schemas import VerifyRecoveryOTPRequest, VerifyRecoveryOTPResponse
 
 router = APIRouter()
-
-class VerifyRecoveryOTPRequest(BaseModel):
-    phone_number: str
-    code: str
-
-class VerifyRecoveryOTPResponse(BaseModel):
-    status: str
-    message: str
-    temp_recovery_token: str
 
 @router.post("/recovery/verify-otp", response_model=VerifyRecoveryOTPResponse, summary="Verify OTP for account recovery", status_code=status.HTTP_200_OK)
 def verify_recovery_otp(payload: VerifyRecoveryOTPRequest, session: Session = Depends(get_session)):

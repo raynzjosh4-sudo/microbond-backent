@@ -3,26 +3,15 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session, select
-from pydantic import BaseModel
 from app.core.config import settings
 from app.core.database import get_session
 from app.models.user.user import User
 from app.models.auth.otp import OTPRecord
 from app.communications.sms_service import sanitize_uganda_phone
+from app.core.rate_limit import RateLimiter
+from .schemas import VerifyForgotPinOTPRequest, VerifyForgotPinOTPResponse
 
 router = APIRouter()
-
-class VerifyForgotPinOTPRequest(BaseModel):
-    phone_number: str
-    code: str
-
-class VerifyForgotPinOTPResponse(BaseModel):
-    status: str
-    message: str
-    recovery_token: str
-    token_type: str = "bearer"
-
-from app.core.rate_limit import RateLimiter
 
 @router.post(
     "/pin/forgot/verify-otp", 

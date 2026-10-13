@@ -1,19 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
 from app.models.user.user import User
 from app.core.security import verify_pin
 from app.api.dependencies import get_current_user
 from app.core.rate_limit import RateLimiter
+from .schemas import VerifyAppPinRequest, VerifyAppPinResponse
 
 router = APIRouter()
-
-class VerifyAppPinRequest(BaseModel):
-    pin: str = Field(..., min_length=4, max_length=8, description="User's App PIN")
-
-class VerifyAppPinResponse(BaseModel):
-    status: str
-    message: str
-    valid: bool
 
 @router.post(
     "/pin/verify",

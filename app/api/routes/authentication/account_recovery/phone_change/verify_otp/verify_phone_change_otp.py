@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlmodel import Session, select
-from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 from app.core.database import get_session
 from app.models.user.user import User
@@ -9,17 +8,9 @@ from app.models.auth.otp import OTPRecord
 from app.communications.sms_service import sanitize_uganda_phone
 from app.api.dependencies import get_current_user
 from app.api.routes.kyc.phone.fetch_and_save_kyc import fetch_and_save_kyc
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from .schemas import VerifyChangePhoneOTPRequest, VerifyChangePhoneOTPResponse
 
 router = APIRouter()
-
-class VerifyChangePhoneOTPRequest(BaseModel):
-    new_phone_number: str
-    code: str
-
-class VerifyChangePhoneOTPResponse(BaseModel):
-    status: str
-    message: str
 
 @router.post("/change-phone/confirm-and-update", response_model=VerifyChangePhoneOTPResponse, summary="Confirm OTP & Update Phone Number", status_code=status.HTTP_200_OK)
 def verify_phone_change_otp(

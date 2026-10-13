@@ -1,10 +1,6 @@
-from pydantic import BaseModel
 import uuid
+from pydantic import BaseModel
 
-class OTPRequestResponse(BaseModel):
-    status: str
-    message: str
-    expires_in_seconds: int
 
 class OTPVerifyResponse(BaseModel):
     status: str

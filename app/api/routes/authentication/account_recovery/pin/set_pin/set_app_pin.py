@@ -1,25 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
-from sqlmodel import Session, select
-from pydantic import BaseModel
+from sqlmodel import Session
 from app.core.database import get_session
 from app.models.user.user import User
 from app.core.security import hash_pin, create_access_token
-from app.communications.sms_service import sanitize_uganda_phone
 from app.api.dependencies import get_pin_setup_user
+from app.core.rate_limit import RateLimiter
+from .schemas import SetAppPinRequest, SetAppPinResponse
 
 router = APIRouter()
-
-class SetAppPinRequest(BaseModel):
-    pin: str
-
-class SetAppPinResponse(BaseModel):
-    status: str
-    message: str
-    access_token: str
-    token_type: str = "bearer"
-
-from app.core.rate_limit import RateLimiter
 
 @router.post(
     "/pin/set", 

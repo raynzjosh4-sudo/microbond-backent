@@ -2,13 +2,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlmodel import Session, select
 from sqlalchemy.exc import SQLAlchemyError
-from app.models.auth.otp import OTPRecord, OTPVerify
+from app.models.auth.otp import OTPRecord
 from app.models.user.user import User
 from app.communications.sms_service import sanitize_uganda_phone
 from app.core.database import get_session
 from app.core.security import create_access_token
 from app.api.routes.kyc.phone.fetch_and_save_kyc import fetch_and_save_kyc
-from .schemas.models import OTPVerifyResponse
+from .schemas import OTPVerify, OTPVerifyResponse
 
 router = APIRouter()
 

@@ -12,3 +12,5 @@ router = APIRouter(
 router.include_router(request_otp_router)
 router.include_router(verify_otp_router)
 router.include_router(delivery_router)
+
+__all__ = ["router"]

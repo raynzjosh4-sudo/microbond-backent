@@ -1,0 +1,4 @@
+from .request_change_phone_otp_request import RequestChangePhoneOTPRequest
+from .request_change_phone_otp_response import RequestChangePhoneOTPResponse
+
+__all__ = ["RequestChangePhoneOTPRequest", "RequestChangePhoneOTPResponse"]

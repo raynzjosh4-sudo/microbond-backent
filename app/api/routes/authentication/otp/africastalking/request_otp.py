@@ -2,11 +2,11 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 from sqlalchemy.exc import SQLAlchemyError
-from app.models.auth.otp import OTPRecord, OTPRequest
+from app.models.auth.otp import OTPRecord
 from app.communications.sms_service import send_real_otp_sms, sanitize_uganda_phone
 from app.core.database import get_session
-from .utils import generate_6digit_code
-from .schemas.models import OTPRequestResponse
+from app.utils.codes import generate_6digit_code
+from .schemas import OTPRequest, OTPRequestResponse
 
 router = APIRouter()
 
