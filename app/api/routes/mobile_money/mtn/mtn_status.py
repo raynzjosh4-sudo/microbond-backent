@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
-router = APIRouter(prefix="/mtn", tags=["Mobile Money (MTN)"])
+router = APIRouter()
+
 
 @router.get("/status")
 def mtn_status():

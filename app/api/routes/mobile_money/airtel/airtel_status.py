@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
-router = APIRouter(prefix="/airtel", tags=["Mobile Money (Airtel)"])
+router = APIRouter()
+
 
 @router.get("/status")
 def airtel_status():
