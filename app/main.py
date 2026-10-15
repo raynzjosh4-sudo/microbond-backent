@@ -65,6 +65,9 @@ app.include_router(verify_phone_change_otp.router, tags=["Account Recovery"])
 # Profile and KYC
 from app.api.routes.user import main_router as user_router
 app.include_router(user_router.router)
+from app.api.routes.user.general.contacts import router as contacts_router
+app.include_router(contacts_router, prefix="/api")
+app.include_router(contacts_router, prefix="/api/v1")
 from app.api.routes.kyc.nin import main_router as nin_router
 app.include_router(nin_router.router)
 from app.api.routes.kyc.phone import router as phone_kyc_router
