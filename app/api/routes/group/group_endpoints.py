@@ -1,14 +1,14 @@
-
+﻿
 from fastapi import APIRouter
 from .rotating.rotating_endpoints import router as rotating_router
-from .target_savings.router import router as target_savings_router
-from .fundraiser.router import router as fundraiser_router
-from .shared_wallet.router import router as shared_wallet_router
-from .welfare_fund.router import router as welfare_fund_router
-from .event_committee.router import router as event_committee_router
-from .investment_club.router import router as investment_club_router
-from .association_dues.router import router as association_dues_router
-from .bill_split.router import router as bill_split_router
+from .target_savings import router as target_savings_router
+from .fundraiser import router as fundraiser_router
+from .shared_wallet import router as shared_wallet_router
+from .welfare_fund import router as welfare_fund_router
+from .event_committee import router as event_committee_router
+from .investment_club import router as investment_club_router
+from .association_dues import router as association_dues_router
+from .bill_split import router as bill_split_router
 from .settings.update_general import router as settings_router
 from .settings.update_group_profile import router as update_group_profile_router
 from .settings.update_privacy import router as privacy_router

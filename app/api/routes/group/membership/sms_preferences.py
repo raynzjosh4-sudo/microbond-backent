@@ -127,7 +127,7 @@ def update_my_sms_preferences(
     ).first()
 
     # Check opt-in request
-    if request.sms_reminders_opted_in is True:
+    if request.sms_reminders_opted_in:
         if not fin or not fin.enable_sms_call_reminders:
             raise HTTPException(
                 status_code=400,

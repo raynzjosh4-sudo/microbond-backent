@@ -43,9 +43,13 @@ def process_incoming_payment(
             )
             session.add(ledger_entry)
             session.flush()
-    except IntegrityError:
-        logger.warning(f"Idempotency triggered: Duplicate webhook payload received for TXN {external_ref}. Ignoring gracefully.")
-        return None
+    except IntegrityError as e:
+        err_msg = str(e).lower()
+        if "unique" in err_msg or "duplicate" in err_msg:
+            logger.warning(f"Idempotency triggered: Duplicate webhook payload received for TXN {external_ref}. Ignoring gracefully.")
+            return None
+        logger.error(f"IntegrityError in process_incoming_payment for TXN {external_ref}: {e}")
+        raise
 
     wallet = session.exec(
         select(GroupWallet)

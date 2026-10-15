@@ -7,7 +7,7 @@ ENV_FILE = BASE_DIR / ".env"
 
 class Settings(BaseSettings):
     # Your Postgres connection string
-    DATABASE_URL: str = "postgresql+psycopg2://postgres.gibejqmneuccurybpdfv:Joshraynz4%40gmail.com@aws-1-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=require"
+    DATABASE_URL: str = ""
     
     FIREBASE_CREDENTIALS_PATH: str = "firebase_credentials.json"
     
@@ -38,16 +38,22 @@ class Settings(BaseSettings):
     @field_validator("SECRET_KEY", mode="after")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:
-        if not v or not v.strip():
-            return "a_very_secret_and_long_string_for_production_jwt"
-        return v
+        return v or ""
     
     # Sentry Error Logging
     SENTRY_DSN: str = ""
     SENTRY_ENVIRONMENT: str = "development"
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
     
     # Redis for Rate Limiting
     REDIS_URL: str = "redis://localhost:6379"
+    
+    # Internal Task & Scheduler Settings
+    INTERNAL_TASKS_KEY: str = ""
+    ENABLE_IN_PROCESS_SCHEDULER: bool = False
+    
+    # External Dedicated Payment Gateway Webhook / Inbound Secret
+    PAYMENT_GATEWAY_WEBHOOK_SECRET: str = ""
     
     # Security / CORS
     ALLOWED_ORIGINS: list[str] = [

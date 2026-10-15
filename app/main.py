@@ -11,8 +11,8 @@ if settings.SENTRY_DSN:
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         environment=settings.SENTRY_ENVIRONMENT,
-        traces_sample_rate=1.0,
-        profiles_sample_rate=1.0,
+        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+        profiles_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
     )
 
 app = FastAPI(title="Microbond Backend API")
@@ -35,7 +35,11 @@ async def on_startup():
     init_db()
     
     # 2. Start Cron Jobs
-    start_scheduler()
+    if settings.ENABLE_IN_PROCESS_SCHEDULER:
+        start_scheduler()
+        print("[Scheduler] In-process APScheduler started.")
+    else:
+        print("[Scheduler] In-process APScheduler disabled. Scheduled tasks are triggered via Cloud Scheduler HTTP endpoints.")
     
     # 3. Initialize Redis Rate Limiting
     try:
@@ -74,14 +78,55 @@ app.include_router(mobile_money_router.router)
 from app.api.routes.group import group_endpoints
 app.include_router(group_endpoints.router)
 
-@app.get("/")
+# Internal Tasks (Cloud Scheduler & Cloud Tasks)
+from app.api.routes.internal import router as internal_tasks_router
+app.include_router(internal_tasks_router)
+
+# External Payment Gateway Integration
+from app.api.routes.payments import router as payments_router
+app.include_router(payments_router)
+
+@app.get("/", tags=["System"])
 def read_root():
     return {"message": "Microbond Backend API is running"}
 
-@app.get("/sentry-debug")
+@app.get("/healthz", tags=["System"], summary="Liveness probe")
+def healthz():
+    return {"status": "ok"}
+
+@app.get("/readyz", tags=["System"], summary="Readiness probe")
+def readyz():
+    """
+    Readiness probe for Cloud Run. Ensures database connectivity is functional.
+    """
+    from sqlmodel import text
+    from app.core.database import engine
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "ready", "database": "connected"}
+    except Exception as e:
+        import logging
+        logging.getLogger("uvicorn.error").error(f"Readiness probe failed: {e}")
+        from fastapi import Response, status
+        return Response(
+            content='{"status": "unhealthy", "database": "disconnected"}',
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            media_type="application/json"
+        )
+
+@app.get("/sentry-debug", tags=["System"])
 async def trigger_error():
     """
     Test endpoint to verify Sentry is capturing errors.
     """
     division_by_zero = 1 / 0
     return {"message": "This will never be reached"}
+
+
+if __name__ == "__main__":
+    import os
+    import uvicorn
+
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)

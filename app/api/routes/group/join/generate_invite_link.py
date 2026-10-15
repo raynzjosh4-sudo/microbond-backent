@@ -108,3 +108,4 @@ def accept_guarantor_pledge(
         "status": "success",
         "message": "You have successfully vouched for this user. They are now an active member of the group."
     }
+
