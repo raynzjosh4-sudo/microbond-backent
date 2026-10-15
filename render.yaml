@@ -53,3 +53,7 @@ services:
         sync: false
       - key: R2_BUCKET_NAME
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
