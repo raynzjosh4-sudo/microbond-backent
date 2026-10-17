@@ -8,6 +8,7 @@ from .phone_change.request_otp import request_phone_change_otp
 from .phone_change.verify_otp import verify_phone_change_otp
 from .recovery.request_otp import request_recovery_otp
 from .recovery.verify_otp import verify_recovery_otp
+from .backup_email import router as backup_email_router
 
 router = APIRouter(tags=["Account Recovery"])
 router.include_router(request_recovery_otp.router)
@@ -19,6 +20,7 @@ router.include_router(request_forgot_pin_otp.router)
 router.include_router(verify_forgot_pin_otp.router)
 router.include_router(request_phone_change_otp.router)
 router.include_router(verify_phone_change_otp.router)
+router.include_router(backup_email_router)
 
 __all__ = [
     "router",
@@ -31,4 +33,5 @@ __all__ = [
     "verify_forgot_pin_otp",
     "request_phone_change_otp",
     "verify_phone_change_otp",
+    "backup_email_router",
 ]

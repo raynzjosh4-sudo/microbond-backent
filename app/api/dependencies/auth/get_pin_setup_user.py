@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.database import get_session
 from app.models.user.user import User
 from app.api.dependencies.auth.bearer_scheme import security
+from app.core.security import is_token_revoked
 
 def get_pin_setup_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -31,8 +32,21 @@ def get_pin_setup_user(
             detail="Invalid or expired token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    if is_token_revoked(token, user_id=user_id, token_iat=payload.get("iat")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session has been terminated. Please log in again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
         
-    user = session.get(User, user_id)
+    import uuid
+    try:
+        user_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+    except (ValueError, AttributeError):
+        user_uuid = user_id
+        
+    user = session.get(User, user_uuid)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
         

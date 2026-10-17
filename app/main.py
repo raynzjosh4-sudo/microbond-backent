@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api.routes.authentication.account_recovery import request_recovery_otp, verify_recovery_otp, set_app_pin, request_phone_change_otp, verify_phone_change_otp, change_app_pin, request_forgot_pin_otp, verify_forgot_pin_otp, verify_app_pin
+from app.api.routes.authentication.account_recovery import request_recovery_otp, verify_recovery_otp, set_app_pin, request_phone_change_otp, verify_phone_change_otp, change_app_pin, request_forgot_pin_otp, verify_forgot_pin_otp, verify_app_pin, backup_email_router
 
 from app.core.database import init_db
 from fastapi.middleware.cors import CORSMiddleware
@@ -51,7 +51,9 @@ async def on_startup():
 
 # Auth and Recovery
 from app.api.routes.authentication.otp import main_router as otp_router
+from app.api.routes.authentication.logout import router as logout_router
 app.include_router(otp_router.router)
+app.include_router(logout_router)
 app.include_router(request_recovery_otp.router, tags=["Account Recovery"])
 app.include_router(verify_recovery_otp.router, tags=["Account Recovery"])
 app.include_router(set_app_pin.router, tags=["Account Recovery"])
@@ -61,6 +63,7 @@ app.include_router(request_forgot_pin_otp.router, tags=["Account Recovery"])
 app.include_router(verify_forgot_pin_otp.router, tags=["Account Recovery"])
 app.include_router(request_phone_change_otp.router, tags=["Account Recovery"])
 app.include_router(verify_phone_change_otp.router, tags=["Account Recovery"])
+app.include_router(backup_email_router)
 
 # Profile and KYC
 from app.api.routes.user import main_router as user_router
