@@ -194,11 +194,16 @@ def list_group_members(
         ).all()
         outstanding_balance = sum((ob.amount_due - ob.amount_paid) for ob in obligations)
         
+        from app.services.privacy import can_view_profile_photo
+        allow_photo = can_view_profile_photo(
+            usr, viewer_user_id=current_user.id, shares_group=True
+        )
+
         response_list.append(MemberListResponse(
             user_id=str(usr.id),
             full_name=usr.full_name or "Unknown User",
             phone_number=usr.phone_number,
-            profile_picture_url=usr.profile_picture_url,
+            profile_picture_url=usr.profile_picture_url if allow_photo else None,
             role=mem.role,
             is_signer=mem.is_signer,
             payout_position=mem.payout_position,

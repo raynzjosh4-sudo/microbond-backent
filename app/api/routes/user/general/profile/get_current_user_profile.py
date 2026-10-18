@@ -82,5 +82,10 @@ def get_current_user_profile(
                 if hasattr(current_user, "security_cooldown_until")
                 else False
             ),
+            "privacy_settings": {
+                "profile_photo_visibility": getattr(current_user, "profile_photo_visibility", "EVERYONE"),
+                "about_visibility": getattr(current_user, "about_visibility", "EVERYONE"),
+                "group_add_permission": getattr(current_user, "group_add_permission", "EVERYONE"),
+            },
         },
     }

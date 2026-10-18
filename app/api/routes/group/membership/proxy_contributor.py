@@ -58,12 +58,17 @@ def assign_proxy_contributor(
     my_membership.proxy_contributor_id = request.proxy_user_id
     session.commit()
     
+    from app.services.privacy import can_view_profile_photo
+    allow_photo = can_view_profile_photo(
+        proxy_user, viewer_user_id=current_user.id, shares_group=True
+    )
+
     return ProxyUserResponse(
         user_id=proxy_user.id,
         full_name=proxy_user.full_name,
         phone_number=proxy_user.phone_number,
         avatar_color=proxy_user.avatar_color,
-        profile_picture_url=proxy_user.profile_picture_url
+        profile_picture_url=proxy_user.profile_picture_url if allow_photo else None
     )
 
 @router.delete("/{group_id}/membership/me/proxy", summary="Remove your proxy contributor")

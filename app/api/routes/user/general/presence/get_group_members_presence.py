@@ -53,11 +53,16 @@ def get_group_members_presence(
         if is_active:
             online_count += 1
 
+        from app.services.privacy import can_view_profile_photo
+        allow_photo = can_view_profile_photo(
+            u, viewer_user_id=current_user.id, shares_group=True
+        )
+
         presence_list.append(
             {
                 "user_id": str(u.id),
                 "full_name": u.full_name,
-                "profile_picture_url": u.profile_picture_url,
+                "profile_picture_url": u.profile_picture_url if allow_photo else None,
                 "avatar_color": u.avatar_color,
                 "is_online": is_active,
                 "last_seen_at": u.last_seen_at,

@@ -19,6 +19,11 @@ class User(SQLModel, table=True):
     profile_picture_url: Optional[str] = Field(default=None)
     about_status: str = Field(default="Hey there! I am using Microbond.")
     default_currency: str = Field(default="UGX")
+
+    # Personal Privacy Settings ("EVERYONE", "MY_CONTACTS", "NOBODY")
+    profile_photo_visibility: str = Field(default="EVERYONE", description="Who can see my profile photo: EVERYONE, MY_CONTACTS, NOBODY")
+    about_visibility: str = Field(default="EVERYONE", description="Who can see my about bio: EVERYONE, MY_CONTACTS, NOBODY")
+    group_add_permission: str = Field(default="EVERYONE", description="Who can add me to groups: EVERYONE, MY_CONTACTS, NOBODY")
     
     # Statuses
     kyc_status: str = Field(default="UNVERIFIED")

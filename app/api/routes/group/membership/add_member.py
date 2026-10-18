@@ -68,6 +68,15 @@ def admin_add_member(
     if not target_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User to add not found in the system.")
 
+    # 3b. Privacy Enforcement: Check who can add this user to groups
+    from app.services.privacy import can_add_to_group
+    allowed, rejection_reason = can_add_to_group(target_user, current_user, session)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=rejection_reason or "This user's privacy settings prevent them from being added to groups.",
+        )
+
     # 4. Process: Check if user is already a member
     existing_membership = session.exec(
         select(GroupMembership).where(

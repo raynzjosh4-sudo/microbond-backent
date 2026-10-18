@@ -95,6 +95,11 @@ def export_user_data(
             "profile_picture_url": current_user.profile_picture_url,
             "avatar_color": current_user.avatar_color,
             "about_status": current_user.about_status,
+            "privacy_settings": {
+                "profile_photo_visibility": getattr(current_user, "profile_photo_visibility", "EVERYONE"),
+                "about_visibility": getattr(current_user, "about_visibility", "EVERYONE"),
+                "group_add_permission": getattr(current_user, "group_add_permission", "EVERYONE"),
+            },
             "kyc_tier": current_user.kyc_tier,
             "trust_score": current_user.trust_score,
             "created_at": (

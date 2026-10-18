@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from app.models.user.user import User
 from app.core.database import get_session
+from app.services.privacy import can_view_profile_photo, can_view_about_status
 
 router = APIRouter()
 
@@ -28,6 +29,14 @@ def get_user_status(phone_number: str, session: Session = Depends(get_session)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
 
+    # Privacy guards for unauthenticated public status lookup
+    photo_allowed = can_view_profile_photo(
+        user, viewer_user_id=None, is_contact=False, shares_group=False
+    )
+    about_allowed = can_view_about_status(
+        user, viewer_user_id=None, is_contact=False, shares_group=False
+    )
+
     return {
         "status": "success",
         "user_id": user.id,
@@ -36,7 +45,7 @@ def get_user_status(phone_number: str, session: Session = Depends(get_session)):
         "is_profile_complete": user.is_profile_complete,
         "kyc_tier": user.kyc_tier,
         "full_name": user.full_name,
-        "profile_picture_url": user.profile_picture_url,
+        "profile_picture_url": user.profile_picture_url if photo_allowed else None,
         "avatar_color": user.avatar_color,
-        "about_status": user.about_status,
+        "about_status": user.about_status if about_allowed else None,
     }

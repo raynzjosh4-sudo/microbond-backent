@@ -91,15 +91,33 @@ def sync_contacts(
         results = session.exec(statement).all()
         matched_users.extend(results)
 
-    # 3. Return sanitized public profile info
-    return [
-        MatchedContact(
-            user_id=str(user.id),
-            phone_number=user.phone_number,
-            profile_name=user.full_name or "Microbond Member",
-            profile_picture_url=user.profile_picture_url,
-            avatar_color=user.avatar_color or "Gray",
-            about_status=user.about_status or "Hey there! I am using Microbond.",
+    from app.services.privacy import can_view_profile_photo, can_view_about_status
+
+    viewer_id = current_user.id if current_user else None
+
+    # 3. Return sanitized public profile info adhering to user privacy settings
+    output: List[MatchedContact] = []
+    for user in matched_users:
+        allow_photo = can_view_profile_photo(
+            user, viewer_user_id=viewer_id, is_contact=True
         )
-        for user in matched_users
-    ]
+        allow_about = can_view_about_status(
+            user, viewer_user_id=viewer_id, is_contact=True
+        )
+
+        output.append(
+            MatchedContact(
+                user_id=str(user.id),
+                phone_number=user.phone_number,
+                profile_name=user.full_name or "Microbond Member",
+                profile_picture_url=user.profile_picture_url if allow_photo else None,
+                avatar_color=user.avatar_color or "Gray",
+                about_status=(
+                    (user.about_status or "Hey there! I am using Microbond.")
+                    if allow_about
+                    else None
+                ),
+            )
+        )
+
+    return output
