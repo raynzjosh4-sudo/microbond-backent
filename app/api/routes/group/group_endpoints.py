@@ -1,4 +1,4 @@
-﻿
+
 from fastapi import APIRouter
 from .rotating.rotating_endpoints import router as rotating_router
 from .target_savings import router as target_savings_router
@@ -61,7 +61,10 @@ from .settings.audit_report_delivery import router as audit_report_delivery_rout
 from .dashboard_summary import router as dashboard_summary_router
 from .deposit_pipeline import router as deposit_pipeline_router
 
+from .create_group import router as create_group_router
+
 router = APIRouter()
+router.include_router(create_group_router)
 router.include_router(audit_report_delivery_router)
 router.include_router(dashboard_summary_router)
 router.include_router(deposit_pipeline_router)
