@@ -86,22 +86,20 @@ async def chat_websocket(
                     if message_id:
                         def _save_receipt():
                             from app.core.database import engine
-                            # Instantiate a brand new session bound safely to this background thread
                             with Session(engine) as local_session:
                                 try:
-                                    # Ensure we don't duplicate receipts
+                                    msg_uuid = uuid.UUID(str(message_id))
                                     existing = local_session.exec(
                                         select(GroupChatReadReceipt).where(
-                                            GroupChatReadReceipt.message_id == message_id,
-                                            GroupChatReadReceipt.user_id == user.id
+                                            GroupChatReadReceipt.message_id == msg_uuid,
+                                            GroupChatReadReceipt.user_id == user_id_str
                                         )
                                     ).first()
                                     
                                     if not existing:
                                         receipt = GroupChatReadReceipt(
-                                            message_id=message_id,
-                                            user_id=user.id,
-                                            group_id=group_id
+                                            message_id=msg_uuid,
+                                            user_id=user_id_str
                                         )
                                         local_session.add(receipt)
                                         local_session.commit()

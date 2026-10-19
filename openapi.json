@@ -9940,7 +9940,7 @@
           "Group Chat"
         ],
         "summary": "Get chat messages for a group",
-        "description": "Retrieves the chat history for a group, supporting extremely fast pagination.",
+        "description": "Retrieves the chat history with full sender profiles, quoted reply previews, and read receipt tick statuses.",
         "operationId": "get_chat_messages_api_v1_groups__group_id__chat_messages_get",
         "security": [
           {
@@ -9992,7 +9992,74 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ChatMessagesListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{group_id}/chat/messages/read": {
+      "post": {
+        "tags": [
+          "Group Chat"
+        ],
+        "summary": "Mark group chat messages as read",
+        "description": "Marks specified messages (or all unread incoming messages) as read by the current user, recording read receipts and broadcasting live blue ticks.",
+        "operationId": "mark_messages_read_api_v1_groups__group_id__chat_messages_read_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/MarkMessagesReadRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarkMessagesReadResponse"
+                }
               }
             }
           },
@@ -11664,6 +11731,254 @@
           "role"
         ],
         "title": "ChangeRoleRequest"
+      },
+      "ChatMessageItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "client_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Message Id"
+          },
+          "group_id": {
+            "type": "string",
+            "title": "Group Id"
+          },
+          "sender_id": {
+            "type": "string",
+            "title": "Sender Id"
+          },
+          "sender_name": {
+            "type": "string",
+            "title": "Sender Name"
+          },
+          "sender_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Phone"
+          },
+          "sender_avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Avatar Url"
+          },
+          "sender_avatar_color": {
+            "type": "string",
+            "title": "Sender Avatar Color",
+            "default": "Teal"
+          },
+          "is_outgoing": {
+            "type": "boolean",
+            "title": "Is Outgoing",
+            "default": false
+          },
+          "message_type": {
+            "type": "string",
+            "title": "Message Type",
+            "default": "TEXT"
+          },
+          "message_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Text"
+          },
+          "media_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Url"
+          },
+          "media_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Type"
+          },
+          "media_mime_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Mime Type"
+          },
+          "media_size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Size Bytes"
+          },
+          "media_duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Duration Seconds"
+          },
+          "media_width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Width"
+          },
+          "media_height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Height"
+          },
+          "aspect_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aspect Ratio"
+          },
+          "attachments": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachments"
+          },
+          "reply_to": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReplyToSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reply_to_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reply To Message Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "SENT"
+          },
+          "read_count": {
+            "type": "integer",
+            "title": "Read Count",
+            "default": 0
+          },
+          "is_read": {
+            "type": "boolean",
+            "title": "Is Read",
+            "default": false
+          },
+          "is_read_by_me": {
+            "type": "boolean",
+            "title": "Is Read By Me",
+            "default": false
+          },
+          "created_at": {
+            "type": "integer",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "integer",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "group_id",
+          "sender_id",
+          "sender_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ChatMessageItem"
+      },
+      "ChatMessagesListResponse": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageItem"
+            },
+            "type": "array",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "title": "ChatMessagesListResponse"
       },
       "ConfirmRecoveryPhoneOTPRequest": {
         "properties": {
@@ -13420,6 +13735,55 @@
         ],
         "title": "LogoutResponse"
       },
+      "MarkMessagesReadRequest": {
+        "properties": {
+          "message_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Ids",
+            "description": "Optional list of message UUID strings to mark as read. If omitted or empty, marks all unread incoming messages in the group as read."
+          }
+        },
+        "type": "object",
+        "title": "MarkMessagesReadRequest"
+      },
+      "MarkMessagesReadResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "success"
+          },
+          "group_id": {
+            "type": "string",
+            "title": "Group Id"
+          },
+          "marked_count": {
+            "type": "integer",
+            "title": "Marked Count"
+          },
+          "read_at": {
+            "type": "integer",
+            "title": "Read At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group_id",
+          "marked_count",
+          "read_at"
+        ],
+        "title": "MarkMessagesReadResponse"
+      },
       "MatchedContact": {
         "properties": {
           "user_id": {
@@ -14135,6 +14499,63 @@
           "amount"
         ],
         "title": "RepayLoanRequest"
+      },
+      "ReplyToSummary": {
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
+          "sender_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Id"
+          },
+          "sender_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Name"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "media_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id"
+        ],
+        "title": "ReplyToSummary"
       },
       "RequestChangePhoneOTPRequest": {
         "properties": {
