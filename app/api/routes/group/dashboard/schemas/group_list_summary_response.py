@@ -2,6 +2,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from .ring_status import RingStatus
 from .action_message import ActionMessage
+from .last_message_summary import LastMessageSummary
 
 class GroupListSummaryResponse(BaseModel):
     """
@@ -21,3 +22,7 @@ class GroupListSummaryResponse(BaseModel):
     # Badges & Timestamps
     unread_count: int = Field(default=0, ge=0)
     last_activity_timestamp: int  # Epoch ms
+    
+    # Latest Chat Message Preview
+    last_message: Optional[LastMessageSummary] = None
+

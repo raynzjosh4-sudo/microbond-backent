@@ -133,6 +133,168 @@
         ]
       }
     },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "User Logout",
+        "description": "Terminates the user's active session, revokes the JWT token, disables FCM push notifications for this device, and updates presence status.",
+        "operationId": "logout_user_api_v1_auth_logout_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/LogoutRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "User Logout",
+        "description": "Terminates the user's active session, revokes the JWT token, disables FCM push notifications for this device, and updates presence status.",
+        "operationId": "logout_user_auth_logout_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/LogoutRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/logout": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "User Logout",
+        "description": "Terminates the user's active session, revokes the JWT token, disables FCM push notifications for this device, and updates presence status.",
+        "operationId": "logout_user_logout_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/LogoutRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/recovery/request-otp": {
       "post": {
         "tags": [
@@ -506,6 +668,184 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VerifyChangePhoneOTPResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/recovery/email/request-code": {
+      "post": {
+        "tags": [
+          "Account Recovery"
+        ],
+        "summary": "Request Account Recovery Code via Backup Email",
+        "description": "Sends a 6-digit one-time code to the user's verified backup email address to initiate account recovery.",
+        "operationId": "request_email_recovery_code_recovery_email_request_code_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestEmailRecoveryCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestEmailRecoveryCodeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recovery/email/verify-code": {
+      "post": {
+        "tags": [
+          "Account Recovery"
+        ],
+        "summary": "Verify Backup Email Recovery Code",
+        "description": "Validates the 6-digit code received via backup email. On success, issues a recovery token to update phone or reset PIN.",
+        "operationId": "verify_email_recovery_code_recovery_email_verify_code_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailRecoveryCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyEmailRecoveryCodeResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recovery/email/request-phone-otp": {
+      "post": {
+        "tags": [
+          "Account Recovery"
+        ],
+        "summary": "Request SMS OTP for New Phone during Email Recovery",
+        "description": "Dispatches an SMS OTP to verify ownership of the new phone number before updating the account.",
+        "operationId": "request_recovery_phone_otp_recovery_email_request_phone_otp_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestRecoveryPhoneOTPRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequestRecoveryPhoneOTPResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/recovery/email/confirm-phone": {
+      "post": {
+        "tags": [
+          "Account Recovery"
+        ],
+        "summary": "Confirm SMS OTP & Update Account Phone Number",
+        "description": "Validates the SMS OTP sent to the new phone number, updates user.phone_number, and issues a final recovery token for setting a new PIN.",
+        "operationId": "confirm_recovery_phone_recovery_email_confirm_phone_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmRecoveryPhoneOTPRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmRecoveryPhoneOTPResponse"
                 }
               }
             }
@@ -1315,6 +1655,33 @@
         }
       }
     },
+    "/email/backup": {
+      "get": {
+        "tags": [
+          "User Email Management"
+        ],
+        "summary": "Get Authenticated User Backup/Recovery Email",
+        "description": "Returns the secondary backup email address, verification status, and timestamps for the logged-in user.",
+        "operationId": "get_backup_email_email_backup_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetBackupEmailResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/email/link": {
       "post": {
         "tags": [
@@ -1505,6 +1872,384 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/contacts/sync": {
+      "post": {
+        "tags": [
+          "Contacts Discovery"
+        ],
+        "summary": "Batch Synchronize and Discover Contacts",
+        "description": "Cross-references a batch of normalized phone numbers against registered Microbond users.",
+        "operationId": "sync_contacts_contacts_sync_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MatchedContact"
+                  },
+                  "type": "array",
+                  "title": "Response Sync Contacts Contacts Sync Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/contacts/discover-groups": {
+      "post": {
+        "tags": [
+          "Contacts Discovery"
+        ],
+        "summary": "Discover Groups where Phone Contacts are Members",
+        "description": "Cross-references phone contacts against active group memberships to discover trusted groups with mutual contacts.",
+        "operationId": "discover_groups_by_contacts_contacts_discover_groups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DiscoverableContactGroup"
+                  },
+                  "type": "array",
+                  "title": "Response Discover Groups By Contacts Contacts Discover Groups Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/me/privacy": {
+      "get": {
+        "tags": [
+          "User Privacy & Personal Data"
+        ],
+        "summary": "Get Current User Privacy Settings",
+        "description": "Returns the personal privacy settings of the currently authenticated user.",
+        "operationId": "get_user_privacy_settings_api_v1_users_me_privacy_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPrivacySettingsResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "User Privacy & Personal Data"
+        ],
+        "summary": "Update Current User Privacy Settings",
+        "description": "Updates one or more privacy settings for the current user.\nAccepted values: 'EVERYONE' / 'Everyone', 'MY_CONTACTS' / 'My contacts', 'NOBODY' / 'Nobody'.",
+        "operationId": "update_user_privacy_settings_api_v1_users_me_privacy_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserPrivacySettingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPrivacySettingsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/contacts/sync": {
+      "post": {
+        "tags": [
+          "Contacts Discovery"
+        ],
+        "summary": "Batch Synchronize and Discover Contacts",
+        "description": "Cross-references a batch of normalized phone numbers against registered Microbond users.",
+        "operationId": "sync_contacts_api_contacts_sync_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MatchedContact"
+                  },
+                  "type": "array",
+                  "title": "Response Sync Contacts Api Contacts Sync Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/contacts/discover-groups": {
+      "post": {
+        "tags": [
+          "Contacts Discovery"
+        ],
+        "summary": "Discover Groups where Phone Contacts are Members",
+        "description": "Cross-references phone contacts against active group memberships to discover trusted groups with mutual contacts.",
+        "operationId": "discover_groups_by_contacts_api_contacts_discover_groups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DiscoverableContactGroup"
+                  },
+                  "type": "array",
+                  "title": "Response Discover Groups By Contacts Api Contacts Discover Groups Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/contacts/sync": {
+      "post": {
+        "tags": [
+          "Contacts Discovery"
+        ],
+        "summary": "Batch Synchronize and Discover Contacts",
+        "description": "Cross-references a batch of normalized phone numbers against registered Microbond users.",
+        "operationId": "sync_contacts_api_v1_contacts_sync_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MatchedContact"
+                  },
+                  "type": "array",
+                  "title": "Response Sync Contacts Api V1 Contacts Sync Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/contacts/discover-groups": {
+      "post": {
+        "tags": [
+          "Contacts Discovery"
+        ],
+        "summary": "Discover Groups where Phone Contacts are Members",
+        "description": "Cross-references phone contacts against active group memberships to discover trusted groups with mutual contacts.",
+        "operationId": "discover_groups_by_contacts_api_v1_contacts_discover_groups_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactSyncRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DiscoverableContactGroup"
+                  },
+                  "type": "array",
+                  "title": "Response Discover Groups By Contacts Api V1 Contacts Discover Groups Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -1882,6 +2627,51 @@
         }
       }
     },
+    "/api/v1/groups/create": {
+      "post": {
+        "tags": [
+          "Group Core"
+        ],
+        "summary": "Unified Group Creation Wizard API",
+        "description": "Handles the 10-step frontend wizard to create a group in a single atomic database transaction.\nSets up the Group, Wallet, Settings, Membership, and injects the initialization chat message.",
+        "operationId": "create_unified_group_api_v1_groups_create_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnifiedGroupCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/groups/{group_id}/settings/audit-report-delivery": {
       "put": {
         "tags": [
@@ -2013,6 +2803,33 @@
                   },
                   "type": "array",
                   "title": "Response Get User Group Dashboard Summaries Api V1 Groups Dashboard Summaries Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/groups/dashboard/unread-count": {
+      "get": {
+        "tags": [
+          "Group Dashboard"
+        ],
+        "summary": "Get Total Unread Message Count",
+        "description": "Lightweight endpoint for rendering the bottom navigation tab badge count without loading all group summaries.",
+        "operationId": "get_user_total_unread_count_api_v1_groups_dashboard_unread_count_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotalUnreadCountResponse"
                 }
               }
             }
@@ -10197,6 +11014,46 @@
         ],
         "title": "AvatarColorRequest"
       },
+      "BackupEmailData": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "is_verified": {
+            "type": "boolean",
+            "title": "Is Verified"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "verified_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "is_verified"
+        ],
+        "title": "BackupEmailData"
+      },
       "BillSplitCreateRequest": {
         "properties": {
           "name": {
@@ -10808,6 +11665,114 @@
         ],
         "title": "ChangeRoleRequest"
       },
+      "ConfirmRecoveryPhoneOTPRequest": {
+        "properties": {
+          "new_phone_number": {
+            "type": "string",
+            "title": "New Phone Number"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "new_phone_number",
+          "code"
+        ],
+        "title": "ConfirmRecoveryPhoneOTPRequest"
+      },
+      "ConfirmRecoveryPhoneOTPResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "recovery_token": {
+            "type": "string",
+            "title": "Recovery Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "message",
+          "recovery_token"
+        ],
+        "title": "ConfirmRecoveryPhoneOTPResponse"
+      },
+      "ContactMemberSummary": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "Unique UUID identifier of the contact member"
+          },
+          "phone_number": {
+            "type": "string",
+            "title": "Phone Number",
+            "description": "Verified phone number in E.164 format"
+          },
+          "profile_name": {
+            "type": "string",
+            "title": "Profile Name",
+            "description": "Public display name / full name"
+          },
+          "profile_picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Picture Url",
+            "description": "Profile avatar picture URL if set"
+          },
+          "avatar_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Color",
+            "description": "Fallback avatar color theme",
+            "default": "Gray"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "phone_number",
+          "profile_name"
+        ],
+        "title": "ContactMemberSummary",
+        "description": "Summary of a phone contact who belongs to a discoverable savings group."
+      },
+      "ContactSyncRequest": {
+        "properties": {
+          "phone_numbers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Phone Numbers",
+            "description": "Array of normalized E.164 phone numbers extracted from the Android address book"
+          }
+        },
+        "type": "object",
+        "title": "ContactSyncRequest",
+        "description": "Request model containing a batch of normalized phone numbers to cross-reference."
+      },
       "CreateDuesExemptionRequest": {
         "properties": {
           "user_id": {
@@ -11245,6 +12210,102 @@
         ],
         "title": "DepositQuoteResponse"
       },
+      "DiscoverableContactGroup": {
+        "properties": {
+          "group_id": {
+            "type": "string",
+            "title": "Group Id",
+            "description": "Unique UUID identifier of the savings group"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Name of the savings group"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Group description",
+            "default": ""
+          },
+          "group_image_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Image Url",
+            "description": "Group avatar/banner image URL",
+            "default": ""
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Group type, e.g. MERRY_GO_ROUND, GOAL_SAVINGS"
+          },
+          "payment_mode": {
+            "type": "string",
+            "title": "Payment Mode",
+            "description": "OBLIGATION, VOLUNTARY, MIXED",
+            "default": "OBLIGATION"
+          },
+          "visibility": {
+            "type": "string",
+            "title": "Visibility",
+            "description": "PUBLIC or PRIVATE",
+            "default": "PRIVATE"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "description": "Currency symbol/code",
+            "default": "UGX"
+          },
+          "member_count": {
+            "type": "integer",
+            "title": "Member Count",
+            "description": "Total active member count",
+            "default": 0
+          },
+          "max_members": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Members",
+            "description": "Maximum member limit"
+          },
+          "mutual_contacts_count": {
+            "type": "integer",
+            "title": "Mutual Contacts Count",
+            "description": "Total phone contacts who are active members",
+            "default": 0
+          },
+          "contact_members": {
+            "items": {
+              "$ref": "#/components/schemas/ContactMemberSummary"
+            },
+            "type": "array",
+            "title": "Contact Members",
+            "description": "Phone contacts who are active members of this group"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group_id",
+          "name",
+          "type"
+        ],
+        "title": "DiscoverableContactGroup",
+        "description": "Savings group discovered through mutual phone contacts with social proof."
+      },
       "DistributeDividendsRequest": {
         "properties": {
           "total_profit_amount": {
@@ -11645,6 +12706,34 @@
         ],
         "title": "FundraiserGroupCreateRequest"
       },
+      "GetBackupEmailResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "success"
+          },
+          "has_backup_email": {
+            "type": "boolean",
+            "title": "Has Backup Email"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BackupEmailData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "has_backup_email"
+        ],
+        "title": "GetBackupEmailResponse"
+      },
       "GroupJoinRequest": {
         "properties": {
           "group_id": {
@@ -11734,6 +12823,16 @@
           "last_activity_timestamp": {
             "type": "integer",
             "title": "Last Activity Timestamp"
+          },
+          "last_message": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LastMessageSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -12174,6 +13273,101 @@
         "type": "object",
         "title": "KickMemberRequest"
       },
+      "LastMessageSummary": {
+        "properties": {
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Id"
+          },
+          "sender_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Id"
+          },
+          "sender_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Name"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "raw_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Text"
+          },
+          "message_type": {
+            "type": "string",
+            "title": "Message Type",
+            "default": "TEXT"
+          },
+          "media_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Media Type"
+          },
+          "timestamp": {
+            "type": "integer",
+            "title": "Timestamp"
+          },
+          "is_outgoing": {
+            "type": "boolean",
+            "title": "Is Outgoing",
+            "default": false
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "SENT"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp"
+        ],
+        "title": "LastMessageSummary",
+        "description": "Summary of the most recent message in the group chat,\nused to render chat previews on the main group list."
+      },
       "LinkEmailRequest": {
         "properties": {
           "email": {
@@ -12187,6 +13381,108 @@
           "email"
         ],
         "title": "LinkEmailRequest"
+      },
+      "LogoutRequest": {
+        "properties": {
+          "all_devices": {
+            "type": "boolean",
+            "title": "All Devices",
+            "description": "If True, revokes all active sessions for this user across all devices.",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "LogoutRequest"
+      },
+      "LogoutResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Status code string",
+            "default": "success"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Informative message regarding the logout action"
+          },
+          "all_devices": {
+            "type": "boolean",
+            "title": "All Devices",
+            "description": "Whether all devices were invalidated",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "LogoutResponse"
+      },
+      "MatchedContact": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "Unique UUID identifier of the Microbond user"
+          },
+          "phone_number": {
+            "type": "string",
+            "title": "Phone Number",
+            "description": "Verified phone number in E.164 format"
+          },
+          "profile_name": {
+            "type": "string",
+            "title": "Profile Name",
+            "description": "Public display name / full name"
+          },
+          "profile_picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Picture Url",
+            "description": "Profile avatar picture URL if set"
+          },
+          "avatar_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Color",
+            "description": "Fallback avatar color theme",
+            "default": "Gray"
+          },
+          "about_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "About Status",
+            "description": "About bio / status message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "phone_number",
+          "profile_name"
+        ],
+        "title": "MatchedContact",
+        "description": "Safe public user profile returned when a phone number matches a registered Microbond user."
       },
       "MemberListResponse": {
         "properties": {
@@ -12925,6 +14221,43 @@
         ],
         "title": "RequestDisbursementRequest"
       },
+      "RequestEmailRecoveryCodeRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "RequestEmailRecoveryCodeRequest"
+      },
+      "RequestEmailRecoveryCodeResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "title": "Expires In Seconds",
+            "default": 900
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "RequestEmailRecoveryCodeResponse"
+      },
       "RequestForgotPinOTPRequest": {
         "properties": {
           "phone_number": {
@@ -13006,6 +14339,42 @@
           "expires_in_seconds"
         ],
         "title": "RequestRecoveryOTPResponse"
+      },
+      "RequestRecoveryPhoneOTPRequest": {
+        "properties": {
+          "new_phone_number": {
+            "type": "string",
+            "title": "New Phone Number"
+          }
+        },
+        "type": "object",
+        "required": [
+          "new_phone_number"
+        ],
+        "title": "RequestRecoveryPhoneOTPRequest"
+      },
+      "RequestRecoveryPhoneOTPResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "title": "Expires In Seconds",
+            "default": 300
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "message"
+        ],
+        "title": "RequestRecoveryPhoneOTPResponse"
       },
       "RequestSignoffBody": {
         "properties": {
@@ -14078,6 +15447,18 @@
         ],
         "title": "TargetSavingsGroupCreateRequest"
       },
+      "TotalUnreadCountResponse": {
+        "properties": {
+          "total_unread_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Unread Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "TotalUnreadCountResponse"
+      },
       "TransferOwnershipRequest": {
         "properties": {
           "new_owner_user_id": {
@@ -14144,6 +15525,73 @@
         },
         "type": "object",
         "title": "TriggerTreasurySweepRequest"
+      },
+      "UnifiedGroupCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "group_image_url": {
+            "type": "string",
+            "title": "Group Image Url",
+            "default": ""
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "STANDARD, MERRY_GO_ROUND, TARGET_SAVINGS, INVESTMENT",
+            "default": "STANDARD"
+          },
+          "payment_mode": {
+            "type": "string",
+            "title": "Payment Mode",
+            "description": "OBLIGATION, VOLUNTARY, MIXED",
+            "default": "OBLIGATION"
+          },
+          "visibility": {
+            "type": "string",
+            "title": "Visibility",
+            "default": "PRIVATE"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "default": "UGX"
+          },
+          "max_members": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Members"
+          },
+          "enable_late_fees": {
+            "type": "boolean",
+            "title": "Enable Late Fees",
+            "default": false
+          },
+          "requires_admin_approval": {
+            "type": "boolean",
+            "title": "Requires Admin Approval",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "UnifiedGroupCreateRequest"
       },
       "UpdateAssociationDuesSettingsRequest": {
         "properties": {
@@ -17067,6 +18515,48 @@
         ],
         "title": "UpdateUserNameRequest"
       },
+      "UpdateUserPrivacySettingsRequest": {
+        "properties": {
+          "profile_photo_visibility": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Photo Visibility",
+            "description": "Who can see profile photo: 'Everyone', 'My contacts', or 'Nobody'"
+          },
+          "about_visibility": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "About Visibility",
+            "description": "Who can see about status: 'Everyone', 'My contacts', or 'Nobody'"
+          },
+          "group_add_permission": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Add Permission",
+            "description": "Who can add to groups: 'Everyone', 'My contacts', or 'Nobody'"
+          }
+        },
+        "type": "object",
+        "title": "UpdateUserPrivacySettingsRequest"
+      },
       "UpdateUserProfileRequest": {
         "properties": {
           "full_name": {
@@ -17188,6 +18678,37 @@
         "type": "object",
         "title": "UpdateWelfareFundSettingsRequest"
       },
+      "UserPrivacySettingsResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "success"
+          },
+          "profile_photo_visibility": {
+            "type": "string",
+            "title": "Profile Photo Visibility",
+            "description": "Who can see profile photo: EVERYONE, MY_CONTACTS, or NOBODY"
+          },
+          "about_visibility": {
+            "type": "string",
+            "title": "About Visibility",
+            "description": "Who can see about status: EVERYONE, MY_CONTACTS, or NOBODY"
+          },
+          "group_add_permission": {
+            "type": "string",
+            "title": "Group Add Permission",
+            "description": "Who can add to groups: EVERYONE, MY_CONTACTS, or NOBODY"
+          }
+        },
+        "type": "object",
+        "required": [
+          "profile_photo_visibility",
+          "about_visibility",
+          "group_add_permission"
+        ],
+        "title": "UserPrivacySettingsResponse"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -17302,6 +18823,48 @@
           "message"
         ],
         "title": "VerifyChangePhoneOTPResponse"
+      },
+      "VerifyEmailRecoveryCodeRequest": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "code"
+        ],
+        "title": "VerifyEmailRecoveryCodeRequest"
+      },
+      "VerifyEmailRecoveryCodeResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "temp_recovery_token": {
+            "type": "string",
+            "title": "Temp Recovery Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "message",
+          "temp_recovery_token"
+        ],
+        "title": "VerifyEmailRecoveryCodeResponse"
       },
       "VerifyEmailRequest": {
         "properties": {
