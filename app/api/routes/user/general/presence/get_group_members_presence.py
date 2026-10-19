@@ -58,12 +58,13 @@ def get_group_members_presence(
             u, viewer_user_id=current_user.id, shares_group=True
         )
 
+        from app.utils.avatar_colors import resolve_vibrant_avatar_color
         presence_list.append(
             {
                 "user_id": str(u.id),
                 "full_name": u.full_name,
                 "profile_picture_url": u.profile_picture_url if allow_photo else None,
-                "avatar_color": u.avatar_color,
+                "avatar_color": resolve_vibrant_avatar_color(u.avatar_color, seed=str(u.id)),
                 "is_online": is_active,
                 "last_seen_at": u.last_seen_at,
                 "last_seen_formatted": format_last_seen(

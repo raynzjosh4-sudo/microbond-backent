@@ -13,6 +13,7 @@ from .schemas import (
     ContactMemberSummary,
 )
 from .sync_contacts import get_optional_current_user
+from app.utils.avatar_colors import resolve_vibrant_avatar_color
 
 router = APIRouter()
 
@@ -144,7 +145,7 @@ def discover_groups_by_contacts(
                         phone_number=u.phone_number,
                         profile_name=u.full_name or "Microbond Member",
                         profile_picture_url=u.profile_picture_url,
-                        avatar_color=u.avatar_color or "Gray",
+                        avatar_color=resolve_vibrant_avatar_color(u.avatar_color, seed=u.phone_number or str(u.id)),
                     )
                     for u in contacts_in_group
                 ],

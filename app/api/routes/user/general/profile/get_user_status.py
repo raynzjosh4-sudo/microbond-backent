@@ -37,6 +37,7 @@ def get_user_status(phone_number: str, session: Session = Depends(get_session)):
         user, viewer_user_id=None, is_contact=False, shares_group=False
     )
 
+    from app.utils.avatar_colors import resolve_vibrant_avatar_color
     return {
         "status": "success",
         "user_id": user.id,
@@ -46,6 +47,6 @@ def get_user_status(phone_number: str, session: Session = Depends(get_session)):
         "kyc_tier": user.kyc_tier,
         "full_name": user.full_name,
         "profile_picture_url": user.profile_picture_url if photo_allowed else None,
-        "avatar_color": user.avatar_color,
+        "avatar_color": resolve_vibrant_avatar_color(user.avatar_color, seed=user.phone_number or str(user.id)),
         "about_status": user.about_status if about_allowed else None,
     }

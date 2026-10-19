@@ -56,11 +56,13 @@ def verify_otp(
         now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
 
         if not user:
+            from app.utils.avatar_colors import pick_random_avatar_color
             user = User(
                 phone_number=phone, 
                 is_phone_verified=True, 
                 is_profile_complete=False,
-                primary_device_id=payload.device_id
+                primary_device_id=payload.device_id,
+                avatar_color=pick_random_avatar_color()
             )
             session.add(user)
             is_new = True

@@ -105,13 +105,14 @@ def sync_contacts(
             user, viewer_user_id=viewer_id, is_contact=True
         )
 
+        from app.utils.avatar_colors import resolve_vibrant_avatar_color
         output.append(
             MatchedContact(
                 user_id=str(user.id),
                 phone_number=user.phone_number,
                 profile_name=user.full_name or "Microbond Member",
                 profile_picture_url=user.profile_picture_url if allow_photo else None,
-                avatar_color=user.avatar_color or "Gray",
+                avatar_color=resolve_vibrant_avatar_color(user.avatar_color, seed=user.phone_number or str(user.id)),
                 about_status=(
                     (user.about_status or "Hey there! I am using Microbond.")
                     if allow_about

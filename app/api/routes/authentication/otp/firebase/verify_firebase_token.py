@@ -31,12 +31,14 @@ def verify_otp_login(
     is_new_user = False
 
     if not user:
+        from app.utils.avatar_colors import pick_random_avatar_color
         # Create a new user record on first login
         user = User(
             firebase_uid=firebase_uid,
             phone_number=phone_number,
             is_phone_verified=True,
-            is_profile_complete=False
+            is_profile_complete=False,
+            avatar_color=pick_random_avatar_color()
         )
         session.add(user)
         session.commit()

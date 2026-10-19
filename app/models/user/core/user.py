@@ -3,6 +3,7 @@ from sqlmodel import SQLModel, Field
 from datetime import datetime
 import uuid
 from app.utils.time.now_utc_datetime import now_utc_datetime
+from app.utils.avatar_colors import pick_random_avatar_color
 
 def utc_now():
     return now_utc_datetime()
@@ -15,7 +16,7 @@ class User(SQLModel, table=True):
     full_name: Optional[str] = Field(default=None)
     
     # Profile Customization
-    avatar_color: Optional[str] = Field(default="Gray")
+    avatar_color: Optional[str] = Field(default_factory=pick_random_avatar_color)
     profile_picture_url: Optional[str] = Field(default=None)
     about_status: str = Field(default="Hey there! I am using Microbond.")
     default_currency: str = Field(default="UGX")

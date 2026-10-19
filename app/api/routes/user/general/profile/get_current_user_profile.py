@@ -42,6 +42,14 @@ def get_current_user_profile(
     elif current_user.trust_score >= 20:
         reputation_badge = "Active Member"
 
+    # 4. Migrate any legacy user stuck with 'Gray' to a vibrant color
+    if not current_user.avatar_color or current_user.avatar_color in ["Gray", "Slate", "Zinc", "Stone"]:
+        from app.utils.avatar_colors import resolve_vibrant_avatar_color
+        current_user.avatar_color = resolve_vibrant_avatar_color(current_user.avatar_color, seed=str(current_user.id))
+        session.add(current_user)
+        session.commit()
+        session.refresh(current_user)
+
     return {
         "status": "success",
         "data": {
