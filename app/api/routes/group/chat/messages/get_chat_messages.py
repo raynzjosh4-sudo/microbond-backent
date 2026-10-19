@@ -8,7 +8,9 @@ from app.core.database import get_session
 from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import GroupMembership
+from app.models.group.settings import GroupVisibilitySettings
 from app.models.group.chat import GroupChatMessage, GroupChatReadReceipt
+from app.services.privacy import can_view_profile_photo
 from app.utils.avatar_colors import resolve_vibrant_avatar_color
 from .schemas import ChatMessageItem, ReplyToSummary, ChatMessagesListResponse
 
@@ -30,6 +32,7 @@ async def get_chat_messages(
     """
     Retrieves the chat history for a group, supporting fast pagination,
     rich sender profile cards, quoted reply previews, and WhatsApp-style read ticks.
+    Enforces Group Visibility Rules and User Privacy Settings.
     """
     # 1. Verify User is a member
     membership = session.exec(
@@ -41,6 +44,13 @@ async def get_chat_messages(
     
     if not membership:
         raise HTTPException(status_code=403, detail="You must be a member to view messages.")
+
+    # 2. Query Group Visibility Settings (to check contact info hiding)
+    vis_settings = session.exec(
+        select(GroupVisibilitySettings).where(GroupVisibilitySettings.group_id == group_id)
+    ).first()
+    hide_member_contacts = vis_settings.hide_member_contact_info if vis_settings else True
+    is_viewer_admin = (membership.role == "ADMIN")
 
     stmt = select(GroupChatMessage).where(
         GroupChatMessage.group_id == group_id,
@@ -117,8 +127,25 @@ async def get_chat_messages(
         else:
             s_name = sender_u.full_name if sender_u and sender_u.full_name else "Member"
 
-        s_phone = sender_u.phone_number if sender_u else None
-        s_avatar = sender_u.profile_picture_url if sender_u else None
+        # Privacy Checks:
+        # 1. Phone number visibility (gated by GroupVisibilitySettings.hide_member_contact_info)
+        # Always visible to the sender themselves and Group Admins; hidden from other members if group policy hides contacts.
+        if is_outgoing:
+            s_phone = sender_u.phone_number if sender_u else None
+        elif is_viewer_admin or not hide_member_contacts:
+            s_phone = sender_u.phone_number if sender_u else None
+        else:
+            s_phone = None  # Protected by privacy setting
+
+        # 2. Profile picture visibility (gated by User's personal privacy setting)
+        if sender_u:
+            allow_photo = can_view_profile_photo(
+                sender_u, viewer_user_id=current_user.id, shares_group=True
+            )
+            s_avatar = sender_u.profile_picture_url if allow_photo else None
+        else:
+            s_avatar = None
+
         s_color = resolve_vibrant_avatar_color(sender_u.avatar_color if sender_u else None, seed=m.sender_id)
 
         # Read Receipts & Blue Ticks
