@@ -15261,6 +15261,15 @@
               }
             ],
             "title": "Reply To Message Id"
+          },
+          "attachments": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attachments"
           }
         },
         "type": "object",

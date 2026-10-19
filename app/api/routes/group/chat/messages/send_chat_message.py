@@ -94,6 +94,7 @@ async def send_chat_message(
         media_mime_type=request.media_mime_type,
         media_size_bytes=request.media_size_bytes,
         media_duration_seconds=request.media_duration_seconds,
+        attachments=request.attachments,
         reply_to_message_id=reply_id,
         status="SENT"
     )
