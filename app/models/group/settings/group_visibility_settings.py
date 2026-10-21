@@ -14,6 +14,7 @@ class GroupVisibilitySettings(SQLModel, table=True):
     hide_total_group_balance: bool = Field(default=False)
     hide_member_contact_info: bool = Field(default=True)
     invite_only_discoverability: bool = Field(default=True)
+    deposit_widget_visibility: str = Field(default="ALL_MEMBERS", description="Who can view deposit widget: ALL_MEMBERS, ADMIN_ONLY, ADMIN_AND_TREASURER")
     
     # Financial Report Visibility
     vis_report_expected_revenue: bool = Field(default=False)

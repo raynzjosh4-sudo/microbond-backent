@@ -2948,6 +2948,258 @@
         }
       }
     },
+    "/api/v1/groups/{group_id}/deposits/daily-widget": {
+      "get": {
+        "tags": [
+          "Group Daily Deposit Widget"
+        ],
+        "summary": "Get Daily Deposit Widget Summary",
+        "description": "Returns aggregate counts and amounts for Full, Partial/Half, and Not Deposited members for the day.",
+        "operationId": "get_daily_widget_summary_api_v1_groups__group_id__deposits_daily_widget_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "date_ms",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional epoch ms for a specific day. Defaults to current day in Kampala (UTC+3).",
+              "title": "Date Ms"
+            },
+            "description": "Optional epoch ms for a specific day. Defaults to current day in Kampala (UTC+3)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{group_id}/deposits/daily-widget/members": {
+      "get": {
+        "tags": [
+          "Group Daily Deposit Widget"
+        ],
+        "summary": "Get Members by Deposit Status",
+        "description": "Drill-down API returning member profile picture, name, online status, last seen, amount paid, and settled timestamp.",
+        "operationId": "get_daily_widget_members_api_v1_groups__group_id__deposits_daily_widget_members_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Filter status: FULL, PARTIAL, NOT_DEPOSITED, or ALL",
+              "default": "FULL",
+              "title": "Status"
+            },
+            "description": "Filter status: FULL, PARTIAL, NOT_DEPOSITED, or ALL"
+          },
+          {
+            "name": "date_ms",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional epoch ms for a specific day.",
+              "title": "Date Ms"
+            },
+            "description": "Optional epoch ms for a specific day."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{group_id}/settings/deposit-widget-visibility": {
+      "patch": {
+        "tags": [
+          "Group Daily Deposit Widget"
+        ],
+        "summary": "Admin: Set Deposit Widget Visibility Permission",
+        "description": "Configures who can view and request the deposit widget in the group: ALL_MEMBERS, ADMIN_ONLY, or ADMIN_AND_TREASURER.",
+        "operationId": "update_deposit_widget_visibility_api_v1_groups__group_id__settings_deposit_widget_visibility_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDepositWidgetVisibilityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{group_id}/deposits/daily-widget/nudge": {
+      "post": {
+        "tags": [
+          "Group Daily Deposit Widget"
+        ],
+        "summary": "Send Deposit Reminder Nudge",
+        "description": "Sends a friendly reminder or nudge to a member who has not yet completed their daily deposit.",
+        "operationId": "nudge_member_for_deposit_api_v1_groups__group_id__deposits_daily_widget_nudge_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NudgeMemberRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/groups/rotating/{group_id}/settings/rotating": {
       "patch": {
         "tags": [
@@ -9824,6 +10076,216 @@
         }
       }
     },
+    "/api/v1/groups/{group_id}/analytics/catalog": {
+      "get": {
+        "tags": [
+          "Chart Builder Analytics"
+        ],
+        "summary": "List every metric available to the Chart Builder",
+        "operationId": "get_analytics_catalog_api_v1_groups__group_id__analytics_catalog_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{group_id}/analytics/series": {
+      "get": {
+        "tags": [
+          "Chart Builder Analytics"
+        ],
+        "summary": "Chart Builder data (any range, any bucket size)",
+        "operationId": "get_analytics_series_api_v1_groups__group_id__analytics_series_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "y",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Y-axis metric id (see /analytics/catalog)",
+              "title": "Y"
+            },
+            "description": "Y-axis metric id (see /analytics/catalog)"
+          },
+          {
+            "name": "x",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "'time' or another metric id",
+              "default": "time",
+              "title": "X"
+            },
+            "description": "'time' or another metric id"
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 730,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Look back this many days (default 30)",
+              "title": "Days"
+            },
+            "description": "Look back this many days (default 30)"
+          },
+          {
+            "name": "start_ms",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Explicit range start (epoch ms); use with end_ms",
+              "title": "Start Ms"
+            },
+            "description": "Explicit range start (epoch ms); use with end_ms"
+          },
+          {
+            "name": "end_ms",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Explicit range end (epoch ms); use with start_ms",
+              "title": "End Ms"
+            },
+            "description": "Explicit range end (epoch ms); use with start_ms"
+          },
+          {
+            "name": "bucket_days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bucket width in days. Omit to auto-pick (~30 points).",
+              "title": "Bucket Days"
+            },
+            "description": "Bucket width in days. Omit to auto-pick (~30 points)."
+          },
+          {
+            "name": "calendar_bucket",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "month",
+                    "year"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Calendar-aligned buckets",
+              "title": "Calendar Bucket"
+            },
+            "description": "Calendar-aligned buckets"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/groups/{group_id}/chat/media": {
       "post": {
         "tags": [
@@ -14062,6 +14524,31 @@
         ],
         "title": "NINSubmissionRequest"
       },
+      "NudgeMemberRequest": {
+        "properties": {
+          "target_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Target User Id"
+          },
+          "custom_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Custom Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_user_id"
+        ],
+        "title": "NudgeMemberRequest"
+      },
       "OTPRequest": {
         "properties": {
           "phone_number": {
@@ -16254,6 +16741,20 @@
         "type": "object",
         "title": "UpdateCommunicationSettingsRequest"
       },
+      "UpdateDepositWidgetVisibilityRequest": {
+        "properties": {
+          "visibility": {
+            "type": "string",
+            "title": "Visibility",
+            "description": "Allowed options: ALL_MEMBERS, ADMIN_ONLY, ADMIN_AND_TREASURER"
+          }
+        },
+        "type": "object",
+        "required": [
+          "visibility"
+        ],
+        "title": "UpdateDepositWidgetVisibilityRequest"
+      },
       "UpdateDuesExemptionRequest": {
         "properties": {
           "exemption_type": {
@@ -17373,6 +17874,17 @@
       },
       "UpdateMemberVisibilityScreenRequest": {
         "properties": {
+          "deposit_widget_visibility": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Widget Visibility"
+          },
           "vis_download_official_statement": {
             "anyOf": [
               {

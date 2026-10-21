@@ -13,6 +13,9 @@ router = APIRouter(prefix="/api/v1/groups", tags=["Group Settings"])
 
 
 class UpdateMemberVisibilityScreenRequest(BaseModel):
+    # Deposit Widget Permission
+    deposit_widget_visibility: Optional[str] = None  # "ALL_MEMBERS", "ADMIN_ONLY", "ADMIN_AND_TREASURER"
+
     # Privacy & records
     vis_download_official_statement: Optional[bool] = None
     vis_chat_history_cleanup: Optional[bool] = None
@@ -65,6 +68,7 @@ def get_member_visibility_screen(
     return {
         "status": "success",
         "data": {
+            "deposit_widget_visibility": getattr(vis, "deposit_widget_visibility", "ALL_MEMBERS"),
             "privacy_and_records": {
                 "vis_download_official_statement": vis.vis_download_official_statement,
                 "vis_chat_history_cleanup": vis.vis_chat_history_cleanup
@@ -117,6 +121,9 @@ def update_member_visibility_screen(
 
     if not settings:
         raise HTTPException(status_code=404, detail="Visibility settings not found.")
+
+    if request.deposit_widget_visibility is not None:
+        settings.deposit_widget_visibility = request.deposit_widget_visibility
 
     # Privacy & records
     if request.vis_download_official_statement is not None:

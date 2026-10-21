@@ -53,6 +53,7 @@ from .membership.statement import router as statement_router
 from .report.weekly_report import router as weekly_report_router
 from .report.dashboard_analytics import router as dashboard_analytics_router
 from .report.universal_analytics import router as universal_analytics_router
+from .report.analytics_series import router as analytics_series_router
 from .chat.media import router as chat_media_router
 from .chat.messages import router as chat_messages_router
 from .chat.websocket import router as chat_websocket_router
@@ -60,6 +61,7 @@ from .chat.polls import router as chat_polls_router
 from .settings.audit_report_delivery import router as audit_report_delivery_router
 from .dashboard_summary import router as dashboard_summary_router
 from .deposit_pipeline import router as deposit_pipeline_router
+from .deposits.daily_deposit_widget import router as daily_deposit_widget_router
 
 from .create_group import router as create_group_router
 
@@ -68,6 +70,7 @@ router.include_router(create_group_router)
 router.include_router(audit_report_delivery_router)
 router.include_router(dashboard_summary_router)
 router.include_router(deposit_pipeline_router)
+router.include_router(daily_deposit_widget_router)
 
 router.include_router(rotating_router)
 router.include_router(target_savings_router)
@@ -122,6 +125,7 @@ router.include_router(statement_router)
 router.include_router(weekly_report_router)
 router.include_router(dashboard_analytics_router)
 router.include_router(universal_analytics_router)
+router.include_router(analytics_series_router)
 router.include_router(chat_media_router)
 router.include_router(chat_messages_router)
 router.include_router(chat_websocket_router)

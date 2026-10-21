@@ -9,6 +9,8 @@ from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.finance import MemberObligation, GroupPayout
 from app.models.group.settings import GroupVisibilitySettings, GroupFinancialSettings
+from app.services.analytics.buckets import BucketError
+from app.services.analytics.period_summary import build_period_summary
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Reports"])
 
@@ -168,40 +170,27 @@ def get_custom_saving_report(
     reserve_fund_pct = fin_settings.reserve_fund_percentage if fin_settings else 0.0
     reserve_fund_growth = actual_collection * (reserve_fund_pct / 100.0)
     
-    # 6. Build the final report payload matching UI exactly
+    # 6. Real values for what used to be hardcoded stubs (joined/left, balances, activity, payout names)
+    try:
+        summary = build_period_summary(
+            session, group_id, start_ms, end_ms + 1000, int(datetime.now(timezone.utc).timestamp() * 1000)
+        )
+    except BucketError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # 7. Build the final report payload matching UI exactly
     report_data = {
         "report_period": f"{start_of_period.strftime('%d %b')} - {end_of_period.strftime('%d %b %Y')}",
         "days_analyzed": days,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "deposit_status": deposit_status,
         "member_stats": member_stats,
-        "members": {
-            "start": total_members,
-            "joined": 0,
-            "left": 0,
-            "now": total_members,
-            "eligible_save_days": total_members * 7
-        },
+        "members": summary["members"],
         "daily_saving": daily_saving,
         "week_totals": week_totals,
-        "balance_counts": {
-            "started_with_balance": 4, # Stubs for complex historical metrics 
-            "cleared_balance": 2,
-            "new_balances": 9,
-            "end_with_balance": 11
-        },
-        "activity": {
-            "busiest_days": "Thu-Sun",
-            "busiest_count": 49,
-            "quietest_days": "Mon",
-            "quietest_count": 46
-        },
-        "payout_rotation": {
-            "this_week_completed_count": len(payouts_completed),
-            "this_week_completed_names": ["Grace N.", "John B."] if not payouts_completed else ["User A"],
-            "next_week_names": ["Mariam K.", "Denis O."],
-            "remain_after_next_payout": total_members - 4
-        }
+        "balance_counts": summary["balance_counts"],
+        "activity": summary["activity"],
+        "payout_rotation": summary["payout_rotation"]
     }
     
     # Apply Payout Rules Visibility
