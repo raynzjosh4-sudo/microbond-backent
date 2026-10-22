@@ -24,15 +24,29 @@ class ConnectionManager:
         self.pubsub = None
         self.is_redis_connected = False
         self._listener_task = None
+        self._redis_last_failure_time: float = 0.0
+        self._redis_retry_cooldown: float = 30.0
 
     async def connect_redis(self):
         """Initialize Redis connection for cross-worker broadcasting"""
         if self.is_redis_connected or redis is None:
             return
             
+        import time
+        now = time.time()
+        if now - self._redis_last_failure_time < self._redis_retry_cooldown:
+            return
+            
         try:
-            redis_url = getattr(settings, "REDIS_URL", "redis://localhost:6379")
-            self.redis_client = redis.from_url(redis_url, decode_responses=True)
+            redis_url = getattr(settings, "REDIS_URL", None)
+            if not redis_url:
+                return
+            self.redis_client = redis.from_url(
+                redis_url,
+                decode_responses=True,
+                socket_connect_timeout=1.5,
+                socket_timeout=1.5
+            )
             # Ping to test connection
             await self.redis_client.ping()
             self.pubsub = self.redis_client.pubsub()
@@ -44,8 +58,14 @@ class ConnectionManager:
                 self._listener_task = asyncio.create_task(self._listen_to_redis())
             
         except Exception as e:
+            self._redis_last_failure_time = now
             logger.warning(f"Could not connect to Redis for WebSockets. Falling back to in-memory mode. Error: {e}")
             self.is_redis_connected = False
+            if self.redis_client:
+                try:
+                    await self.redis_client.close()
+                except Exception:
+                    pass
             self.redis_client = None
 
     async def _listen_to_redis(self):

@@ -43,9 +43,19 @@ async def on_startup():
     
     # 3. Initialize Redis Rate Limiting
     try:
-        redis_conn = redis.from_url(settings.REDIS_URL, encoding="utf-8", decode_responses=True)
-        await FastAPILimiter.init(redis_conn)
-        print("[Redis] Rate Limiter initialized successfully")
+        if settings.REDIS_URL:
+            redis_conn = redis.from_url(
+                settings.REDIS_URL,
+                encoding="utf-8",
+                decode_responses=True,
+                socket_connect_timeout=1.5,
+                socket_timeout=1.5
+            )
+            await redis_conn.ping()
+            await FastAPILimiter.init(redis_conn)
+            print("[Redis] Rate Limiter initialized successfully")
+        else:
+            print("[Redis] REDIS_URL not configured. Rate Limiter operates in fallback mode.")
     except Exception as e:
         print(f"[Redis warning] Could not connect to Redis for Rate Limiting: {e}")
 

@@ -26,7 +26,9 @@ def get_redis_client() -> Optional[Redis]:
             settings.REDIS_URL,
             encoding="utf-8",
             decode_responses=True,
-            max_connections=20
+            max_connections=20,
+            socket_connect_timeout=1.5,
+            socket_timeout=1.5,
         )
         _client = Redis(connection_pool=_pool)
         return _client

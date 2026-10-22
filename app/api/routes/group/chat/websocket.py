@@ -28,7 +28,11 @@ def get_ws_user(token: str, session: Session) -> User:
         user_id: str = payload.get("sub")
         if not user_id:
             return None
-        return session.get(User, user_id)
+        try:
+            user_uuid = uuid.UUID(str(user_id))
+        except (ValueError, AttributeError):
+            user_uuid = user_id
+        return session.get(User, user_uuid)
     except Exception:
         return None
 
