@@ -116,9 +116,26 @@ def join_group(
     )
     session.add(new_membership)
 
-    # 6. Bind Guarantor Pledges if applicable
+    # 6. Bind Guarantor Pledges if applicable (with anti-collusion DAG verification)
     if requires_guarantor and request.guarantor_ids:
         from app.models.group.finance import GuarantorPledge
+        from app.core.microbond_core import detect_guarantor_cycle
+
+        # Fetch active pledges across groups to construct the directed vouching graph
+        existing_pledges = session.exec(
+            select(GuarantorPledge.guarantor_user_id, GuarantorPledge.borrower_user_id).where(
+                GuarantorPledge.status.in_(["ACTIVE", "PENDING_CONSENT"])
+            )
+        ).all()
+        edges = [(str(p[0]), str(p[1])) for p in existing_pledges]
+
+        for gid in request.guarantor_ids:
+            cycle_check = json.loads(detect_guarantor_cycle(edges, str(current_user.id), str(gid)))
+            if cycle_check.get("has_cycle"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=cycle_check.get("explanation") or "Circular guarantor collusion detected."
+                )
 
         pledge_liability = 0
         if group.type == "MERRY_GO_ROUND":

@@ -35,22 +35,21 @@ def process_time_locked_quorum_decay(session: Session, background_tasks: Backgro
         
         if not gov_settings or not gov_settings.enable_quorum_decay:
             continue
-            
-        hours_elapsed = (now_ms - req.created_at) / (1000 * 60 * 60)
-        
-        # Calculate how many decay intervals have passed
-        # e.g. If decay triggers every 48 hours, and 96 hours elapsed -> 2 decays
-        decay_intervals = int(hours_elapsed // gov_settings.quorum_decay_hours)
-        
-        if decay_intervals > 0:
-            original_quorum = gov_settings.multi_sig_required_approvals
-            current_quorum = max(
-                gov_settings.quorum_decay_minimum_approvals,
-                original_quorum - decay_intervals
-            )
-            
-            # If the decayed quorum is now less than or equal to the actual approvals we already have
-            if req.current_approval_count >= current_quorum and req.status == "PENDING":
+
+        import json
+        from app.core.microbond_core import calculate_decayed_quorum
+
+        params = {
+            "initial_required_approvals": gov_settings.multi_sig_required_approvals,
+            "minimum_decay_floor_approvals": gov_settings.quorum_decay_minimum_approvals,
+            "decay_interval_hours": gov_settings.quorum_decay_hours,
+            "enable_decay": gov_settings.enable_quorum_decay,
+        }
+        eval_res = json.loads(calculate_decayed_quorum(params, req.created_at, now_ms, req.current_approval_count))
+
+        if eval_res.get("is_approved") and req.status == "PENDING":
+            current_quorum = eval_res.get("current_required_approvals")
+            original_quorum = eval_res.get("initial_approvals")
                 
                 # 1. Clear the transaction (Release the Escrow)
                 req.status = "APPROVED_BY_DECAY"
