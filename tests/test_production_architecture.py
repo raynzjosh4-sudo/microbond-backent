@@ -226,3 +226,71 @@ class TestMicrobondCoreDomainEngine:
             assert cached is not None
             assert cached["membership_status"] == "ACTIVE"
 
+    def test_generate_cycle_matrix(self):
+        from app.core.microbond_core import generate_cycle_matrix
+        members = [f"user_{i}" for i in range(1, 11)]
+        res = json.loads(generate_cycle_matrix(
+            member_user_ids=members,
+            group_type="STANDARD",
+            contribution_minor=50_000,
+            payouts_per_cycle=1,
+            reserve_fund_bps=500, # 5%
+            collection_frequency_days=7,
+            start_epoch_seconds=1_700_000_000,
+            created_at_epoch_seconds=1_700_000_000,
+        ))
+        assert res["num_cycles"] == 10
+        assert res["member_count"] == 10
+        assert res["gross_pool_minor"] == 500_000
+        assert res["reserve_held_minor"] == 25_000 # 5% of 500k
+        assert res["net_payout_minor"] == 475_000
+        assert len(res["obligations"]) == 100
+        assert len(res["payouts"]) == 10
+        assert res["payouts"][0]["user_id"] == "user_1"
+        assert res["payouts"][9]["user_id"] == "user_10"
+
+    def test_allocate_surplus_waterfall(self):
+        from app.core.microbond_core import allocate_surplus_waterfall
+        # 100,000 covers 2 full cycles (cycle 2 and 3)
+        res = json.loads(allocate_surplus_waterfall(
+            surplus_amount=100_000,
+            current_cycle_number=1,
+            standard_contribution=50_000,
+            max_cycles=10,
+        ))
+        assert res["cycles_fully_covered_count"] == 2
+        assert res["fully_covered_cycles"] == [2, 3]
+        assert res["partially_covered_cycle"] is None
+        assert res["unallocated_residual"] == 0
+
+        # 70,000 covers cycle 2 fully and cycle 3 partially (20k allocated, 30k shortfall)
+        partial_res = json.loads(allocate_surplus_waterfall(
+            surplus_amount=70_000,
+            current_cycle_number=1,
+            standard_contribution=50_000,
+            max_cycles=10,
+        ))
+        assert partial_res["cycles_fully_covered_count"] == 1
+        assert partial_res["fully_covered_cycles"] == [2]
+        assert partial_res["partially_covered_cycle"] == 3
+        assert partial_res["coverage_details"][1]["amount_allocated"] == 20_000
+        assert partial_res["coverage_details"][1]["shortfall"] == 30_000
+
+    def test_calculate_flexible_rotate_deposit(self):
+        from app.core.microbond_core import calculate_flexible_rotate_deposit
+        res = json.loads(calculate_flexible_rotate_deposit(
+            deposit_amount=25_000,
+            current_saved_amount=30_000,
+            assigned_value_milestone=50_000,
+            fee_already_collected=False,
+            target_payout_fee=1500,
+            mtn_flat_fee=500,
+            platform_fee_bps=100, # 1% = 250
+        ))
+        assert res["milestone_triggered_now"] is True
+        assert res["microbond_base_fee"] == 250
+        assert res["hidden_payout_fee"] == 1500
+        assert res["final_charge_amount"] == 25_000 + 500 + 250 + 1500
+        assert res["new_cumulative_total"] == 55_000
+
+
