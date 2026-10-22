@@ -130,6 +130,23 @@ def process_single_payout(session: Session, payout: GroupPayout, now_ms: int):
     payout.amount_received = payout.amount_expected
     session.add(payout)
 
+    from app.services.audit_service import AuditService
+    AuditService.record_event(
+        session=session,
+        action="PAYOUT_COMPLETED",
+        entity_type="PAYOUT",
+        entity_id=str(payout.id),
+        payload={
+            "group_id": payout.group_id,
+            "user_id": str(payout.user_id),
+            "amount": payout.amount_expected,
+            "cycle_number": payout.cycle_number,
+            "transaction_id": disbursement_result.transaction_id,
+            "provider": chosen_account.provider_name
+        },
+        actor_user_id=payout.user_id
+    )
+
     session.commit()
 
     logger.info(

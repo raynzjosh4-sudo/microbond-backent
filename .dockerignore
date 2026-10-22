@@ -17,3 +17,4 @@ TODO_ROADMAP.txt
 render.yaml
 *.sql
 *.txt
+microbond_core/target/

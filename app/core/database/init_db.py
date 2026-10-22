@@ -21,6 +21,7 @@ def _run_create_all():
         import app.models.group.investment_association
         import app.models.group.bill_split
         import app.models.group.report
+        import app.models.infrastructure
 
         SQLModel.metadata.create_all(engine)
     except Exception as e:
