@@ -50,6 +50,7 @@ from .settings.manifest import router as settings_manifest_router
 from .settings.get_settings import router as get_settings_router
 from .settings.get_financial_settings import router as get_financial_settings_router
 from .membership.statement import router as statement_router
+from .membership.savings_growth import router as savings_growth_router
 from .report.weekly_report import router as weekly_report_router
 from .report.dashboard_analytics import router as dashboard_analytics_router
 from .report.universal_analytics import router as universal_analytics_router
@@ -93,6 +94,7 @@ router.include_router(governance_settings_router)
 router.include_router(join_router)
 router.include_router(guarantor_router)
 router.include_router(membership_router)
+router.include_router(savings_growth_router)
 router.include_router(list_members_router)
 router.include_router(payout_destination_router)
 router.include_router(group_payment_method_router)
