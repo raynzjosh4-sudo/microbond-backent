@@ -38,6 +38,7 @@ from app.models.group.bill_split import (
     BillSplitConfig,
     BillSplitOperationalSettings
 )
+from app.models.group.finance import GroupPayout
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Settings"])
 
@@ -78,15 +79,53 @@ def get_governance_settings(
 
     response_data = gov_settings.dict(exclude={"id", "group_id", "updated_at"})
 
+    # Compute live governance metrics for the UI hub screen
+    signers = session.exec(
+        select(GroupMembership).where(
+            GroupMembership.group_id == group_id,
+            GroupMembership.is_signer == True
+        )
+    ).all()
+    signers_count = len(signers) if signers else 1
+
+    pending_payouts = session.exec(
+        select(GroupPayout).where(
+            GroupPayout.group_id == group_id,
+            GroupPayout.status.in_(["PENDING", "PROCESSING", "ON_HOLD"])
+        )
+    ).all()
+    pending_count = len(pending_payouts) if pending_payouts else 0
+
+    response_data["total_signers_count"] = signers_count
+    response_data["signers_display"] = f"{gov_settings.multi_sig_required_approvals} of {max(signers_count, gov_settings.multi_sig_required_approvals)} Signers"
+    response_data["quorum_display"] = f"{gov_settings.multi_sig_required_approvals} of {max(signers_count, gov_settings.multi_sig_required_approvals)}"
+    response_data["pending_disbursals_count"] = pending_count
+    response_data["my_approval_authorization"] = "Authorized" if (is_admin or getattr(membership, "is_signer", False)) else "Unauthorized"
+    response_data["audit_status"] = "In Review" if gov_settings.is_audit_active else "Healthy"
+    response_data["audit_status_title"] = "Active Audit In Progress" if gov_settings.is_audit_active else "No Active Audit"
+    response_data["audit_status_description"] = (
+        "The group is undergoing a deep-dive review of financial transactions."
+        if gov_settings.is_audit_active
+        else "The group's financial records are currently verified and clear."
+    )
+
     if not is_admin:
         if not vis_settings.vis_require_multi_signature:
             response_data.pop("require_multi_signature", None)
             response_data.pop("multi_sig_required_approvals", None)
+            response_data.pop("signers_display", None)
+            response_data.pop("total_signers_count", None)
         if not vis_settings.vis_approval_quorum:
             response_data.pop("approval_strategy", None)
             response_data.pop("quorum_percentage", None)
+            response_data.pop("quorum_display", None)
         if not vis_settings.vis_active_audit_status:
             response_data.pop("is_audit_active", None)
+            response_data.pop("audit_status", None)
+            response_data.pop("audit_status_title", None)
+            response_data.pop("audit_status_description", None)
+        if not vis_settings.vis_pending_payout_queue:
+            response_data.pop("pending_disbursals_count", None)
         if not vis_settings.vis_guarantor_required:
             response_data.pop("require_guarantors", None)
             response_data.pop("guarantor_count", None)

@@ -8,6 +8,7 @@ from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import GroupMembership
 from app.models.group.settings import GroupGovernanceSettings
+from app.services.audit_service import AuditService
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Settings"])
 
@@ -19,6 +20,7 @@ class UpdateGovernanceSettingsRequest(BaseModel):
     require_guarantors: Optional[bool] = None
     guarantor_count: Optional[int] = None
     group_charter_url: Optional[str] = None
+    is_audit_active: Optional[bool] = None
 
 @router.patch("/{group_id}/settings/governance", summary="Admin: Update Governance & Multi-Sig Settings")
 def update_governance_settings(
@@ -113,6 +115,114 @@ def update_governance_settings(
                 )
             settings.multi_sig_required_approvals = request.multi_sig_required_approvals
 
+    if request.is_audit_active is not None:
+        settings.is_audit_active = request.is_audit_active
+
     session.add(settings)
     session.commit()
-    return {"status": "success", "message": "Governance & multi-sig settings updated."}
+    session.refresh(settings)
+    return {"status": "success", "message": "Governance & multi-sig settings updated.", "data": settings.dict(exclude={"id", "group_id"})}
+
+
+@router.post("/{group_id}/settings/governance/audit/start", summary="Start New Financial Audit")
+def start_financial_audit(
+    group_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Initiates a new deep-dive financial audit review for the group.
+    Sets is_audit_active to True and records an immutable audit event.
+    """
+    membership = session.exec(
+        select(GroupMembership).where(
+            GroupMembership.group_id == group_id,
+            GroupMembership.user_id == current_user.id,
+            GroupMembership.role == "ADMIN"
+        )
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Only the Group Admin can initiate a financial audit.")
+
+    settings = session.exec(
+        select(GroupGovernanceSettings).where(GroupGovernanceSettings.group_id == group_id)
+    ).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail="Governance settings not found.")
+
+    settings.is_audit_active = True
+    session.add(settings)
+
+    # Record tamper-evident audit event
+    AuditService.record_event(
+        session=session,
+        action="AUDIT_INITIATED",
+        entity_type="GROUP",
+        entity_id=group_id,
+        payload={"initiated_by": str(current_user.id), "group_id": group_id},
+        actor_user_id=current_user.id
+    )
+    session.commit()
+
+    return {
+        "status": "success",
+        "message": "Deep-dive financial audit initiated. Ledger records are under active review.",
+        "data": {
+            "group_id": group_id,
+            "is_audit_active": True,
+            "audit_status": "Healthy",
+            "audit_status_title": "Active Audit In Progress",
+            "audit_status_description": "Deep-dive review of group transactions is underway. Records verified."
+        }
+    }
+
+
+@router.post("/{group_id}/settings/governance/audit/complete", summary="Complete Active Financial Audit")
+def complete_financial_audit(
+    group_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Marks the active financial audit as complete and clear.
+    """
+    membership = session.exec(
+        select(GroupMembership).where(
+            GroupMembership.group_id == group_id,
+            GroupMembership.user_id == current_user.id,
+            GroupMembership.role == "ADMIN"
+        )
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Only the Group Admin can close an audit.")
+
+    settings = session.exec(
+        select(GroupGovernanceSettings).where(GroupGovernanceSettings.group_id == group_id)
+    ).first()
+    if not settings:
+        raise HTTPException(status_code=404, detail="Governance settings not found.")
+
+    settings.is_audit_active = False
+    session.add(settings)
+
+    AuditService.record_event(
+        session=session,
+        action="AUDIT_COMPLETED",
+        entity_type="GROUP",
+        entity_id=group_id,
+        payload={"completed_by": str(current_user.id), "status": "VERIFIED_AND_CLEAR"},
+        actor_user_id=current_user.id
+    )
+    session.commit()
+
+    return {
+        "status": "success",
+        "message": "Financial audit completed and verified clear.",
+        "data": {
+            "group_id": group_id,
+            "is_audit_active": False,
+            "audit_status": "Healthy",
+            "audit_status_title": "No Active Audit",
+            "audit_status_description": "The group's financial records are currently verified and clear."
+        }
+    }
