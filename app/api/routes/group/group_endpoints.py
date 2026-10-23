@@ -59,6 +59,7 @@ from .chat.messages import router as chat_messages_router
 from .chat.websocket import router as chat_websocket_router
 from .chat.polls import router as chat_polls_router
 from .settings.audit_report_delivery import router as audit_report_delivery_router
+from .settings.upload_group_image import router as upload_group_image_router
 from .dashboard_summary import router as dashboard_summary_router
 from .deposit_pipeline import router as deposit_pipeline_router
 from .deposits.daily_deposit_widget import router as daily_deposit_widget_router
@@ -83,6 +84,7 @@ router.include_router(association_dues_router)
 router.include_router(bill_split_router)
 router.include_router(settings_router)
 router.include_router(update_group_profile_router)
+router.include_router(upload_group_image_router)
 router.include_router(privacy_router)
 router.include_router(permissions_router)
 router.include_router(financial_settings_router)
