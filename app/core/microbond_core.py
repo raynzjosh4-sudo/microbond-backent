@@ -433,21 +433,18 @@ def calculate_flexible_rotate_deposit(
 
 def detect_guarantor_cycle(
     existing_edges: list[tuple[str, str]],
-    new_borrower: str,
     new_guarantor: str,
-) -> str:
+    new_borrower: str,
+) -> bool:
     """
-    Evaluates vouching graph for circular guarantor collusion using DAG BFS traversal.
+    Detects if adding a directed vouching edge (new_guarantor -> new_borrower)
+    creates a cyclic dependency in the vouching graph.
     """
     if _NATIVE_LOADED and _rust_core is not None:
-        return _rust_core.detect_guarantor_cycle(existing_edges, new_borrower, new_guarantor)
+        return bool(_rust_core.detect_guarantor_cycle(existing_edges, new_guarantor, new_borrower))
 
     if new_guarantor == new_borrower:
-        return json.dumps({
-            "has_cycle": True,
-            "cycle_path": [new_guarantor, new_borrower],
-            "explanation": "Self-guarantee is strictly prohibited: a member cannot vouch for themselves.",
-        })
+        return True
 
     adj: dict[str, list[str]] = {}
     for g, b in existing_edges:
@@ -456,219 +453,261 @@ def detect_guarantor_cycle(
     from collections import deque
     queue = deque([new_borrower])
     visited = {new_borrower}
-    parent = {}
-    found = False
 
     while queue:
         curr = queue.popleft()
         if curr == new_guarantor:
-            found = True
-            break
+            return True
         for nxt in adj.get(curr, []):
             if nxt not in visited:
                 visited.add(nxt)
-                parent[nxt] = curr
                 queue.append(nxt)
 
-    if found:
-        path = [new_guarantor]
-        curr = new_guarantor
-        while curr in parent:
-            p = parent[curr]
-            path.append(p)
-            curr = p
-            if curr == new_borrower:
-                break
-        path.reverse()
-        path.insert(0, new_guarantor)
-        return json.dumps({
-            "has_cycle": True,
-            "cycle_path": path,
-            "explanation": f"Circular guarantor collusion detected: {new_borrower} already depends on {new_guarantor} via chain: {' -> '.join(path)}. Adding this pledge would create a closed risk loop.",
-        })
-
-    return json.dumps({
-        "has_cycle": False,
-        "cycle_path": [],
-        "explanation": "No circular vouching dependency detected. Graph remains an acyclic DAG.",
-    })
+    return False
 
 
 def evaluate_cross_group_exposure(
-    snapshot: dict | str,
-    rules: dict | str,
+    user_active_rotating_groups: int,
+    max_allowed_rotating: int = 10,
+    has_unpaid_hit_and_run: bool = False,
+    late_obligations_count: int = 0,
+    historical_penalties: int = 0,
+    max_historical_penalties: int = 3,
+    user_trust_score: int = 50,
+    min_trust_score: int | None = None,
+    user_kyc_tier: int = 1,
+    min_kyc_tier: int = 1,
+    is_payout_order_locked: bool = False,
 ) -> str:
     """
-    Evaluates cross-group financial risk, hit-and-run fraud, arrears, and dynamic guarantor leverage.
+    Evaluates multi-group cross exposure and anti-fraud rules.
     """
-    snap_json = snapshot if isinstance(snapshot, str) else json.dumps(snapshot)
-    rules_json = rules if isinstance(rules, str) else json.dumps(rules)
-
     if _NATIVE_LOADED and _rust_core is not None:
-        return _rust_core.evaluate_cross_group_exposure(snap_json, rules_json)
+        return _rust_core.evaluate_cross_group_exposure(
+            user_active_rotating_groups,
+            max_allowed_rotating,
+            has_unpaid_hit_and_run,
+            late_obligations_count,
+            historical_penalties,
+            max_historical_penalties,
+            user_trust_score,
+            min_trust_score,
+            user_kyc_tier,
+            min_kyc_tier,
+            is_payout_order_locked,
+        )
 
-    snap = json.loads(snap_json)
-    rls = json.loads(rules_json)
-
-    trust_score = max(0, min(100, snap.get("trust_score", 50)))
-    total_contrib = snap.get("total_historical_contributed_minor", 0)
-    multiplier = rls.get("guarantor_leverage_multiplier", 5)
-    base_allowance = rls.get("base_guarantor_allowance_minor", 50_000_000)
-
-    historical_allowance = (total_contrib * multiplier * trust_score) // 100
-    dynamic_capacity = max(base_allowance, historical_allowance)
-    active_liability = snap.get("total_active_guarantor_liability_minor", 0)
-    remaining_capacity = max(0, dynamic_capacity - active_liability)
-
-    # Rejection checks
-    if snap.get("has_unpaid_hit_and_run_payout", False):
+    if is_payout_order_locked:
         return json.dumps({
             "is_eligible": False,
-            "risk_score": 5,
-            "rejection_code": "HIT_AND_RUN_DEBT",
-            "rejection_reason": "Account flagged for hit-and-run debt: you have received a payout in another group but owe uncleared cycle contributions.",
-            "dynamic_guarantor_capacity_minor": dynamic_capacity,
-            "remaining_guarantor_capacity_minor": remaining_capacity,
+            "risk_tier": "REJECTED_CYCLE_LOCKED",
+            "rejection_reason": "The payout cycle has already started. You cannot join mid-way.",
         })
 
-    if snap.get("late_or_defaulted_obligations_count", 0) > 0:
+    if user_active_rotating_groups >= max_allowed_rotating:
         return json.dumps({
             "is_eligible": False,
-            "risk_score": 15,
-            "rejection_code": "ACTIVE_ARREARS",
-            "rejection_reason": f"You currently have {snap.get('late_or_defaulted_obligations_count')} unpaid late or defaulted obligations across your groups. Please settle all arrears before joining.",
-            "dynamic_guarantor_capacity_minor": dynamic_capacity,
-            "remaining_guarantor_capacity_minor": remaining_capacity,
+            "risk_tier": "REJECTED_OVER_CAPACITY",
+            "rejection_reason": f"You are already in {user_active_rotating_groups} active rotating groups. Maximum allowed is {max_allowed_rotating}.",
         })
 
-    is_rotating = rls.get("group_type", "").upper() in ("MERRY_GO_ROUND", "STANDARD", "ROTATING")
-    if is_rotating and snap.get("active_rotating_groups", 0) >= rls.get("max_active_rotating_groups", 10):
+    if has_unpaid_hit_and_run:
         return json.dumps({
             "is_eligible": False,
-            "risk_score": 40,
-            "rejection_code": "MAX_GROUPS_EXCEEDED",
-            "rejection_reason": f"Maximum limit reached: you are active in {snap.get('active_rotating_groups')} rotating groups (limit: {rls.get('max_active_rotating_groups', 10)}).",
-            "dynamic_guarantor_capacity_minor": dynamic_capacity,
-            "remaining_guarantor_capacity_minor": remaining_capacity,
+            "risk_tier": "REJECTED_HIT_AND_RUN",
+            "rejection_reason": "You have received a payout in another group but still owe contributions to that cycle.",
         })
 
-    if is_rotating and snap.get("historical_penalties_count", 0) >= rls.get("max_historical_penalties", 3):
+    if late_obligations_count > 0:
         return json.dumps({
             "is_eligible": False,
-            "risk_score": 25,
-            "rejection_code": "EXCESSIVE_PENALTIES",
-            "rejection_reason": f"Account restricted due to chronic late payments ({snap.get('historical_penalties_count')} historical penalties, maximum allowed: {rls.get('max_historical_penalties', 3)}).",
-            "dynamic_guarantor_capacity_minor": dynamic_capacity,
-            "remaining_guarantor_capacity_minor": remaining_capacity,
+            "risk_tier": "REJECTED_ARREARS",
+            "rejection_reason": "You currently have an unpaid missed payment or arrears in another group.",
         })
 
-    min_trust = rls.get("minimum_trust_score")
-    if min_trust is not None and trust_score < min_trust:
+    if historical_penalties >= max_historical_penalties:
         return json.dumps({
             "is_eligible": False,
-            "risk_score": trust_score,
-            "rejection_code": "INSUFFICIENT_TRUST_SCORE",
-            "rejection_reason": f"Your Trust Score ({trust_score}) is below the minimum required for this group ({min_trust}).",
-            "dynamic_guarantor_capacity_minor": dynamic_capacity,
-            "remaining_guarantor_capacity_minor": remaining_capacity,
+            "risk_tier": "REJECTED_PENALTIES",
+            "rejection_reason": f"Your account has a history of slow payments ({historical_penalties} penalties). You are restricted from joining new groups.",
         })
 
-    if snap.get("kyc_tier", 0) < rls.get("minimum_kyc_tier", 1):
+    if min_trust_score is not None and user_trust_score < min_trust_score:
         return json.dumps({
             "is_eligible": False,
-            "risk_score": 35,
-            "rejection_code": "INSUFFICIENT_KYC",
-            "rejection_reason": f"KYC Tier {rls.get('minimum_kyc_tier', 1)} required to join this group. Current user level: Tier {snap.get('kyc_tier', 0)}.",
-            "dynamic_guarantor_capacity_minor": dynamic_capacity,
-            "remaining_guarantor_capacity_minor": remaining_capacity,
+            "risk_tier": "REJECTED_TRUST_SCORE",
+            "rejection_reason": f"Your Trust Score ({user_trust_score}) is below the required {min_trust_score}.",
         })
 
-    if rls.get("payout_order_locked", False):
+    if user_kyc_tier < min_kyc_tier:
         return json.dumps({
             "is_eligible": False,
-            "risk_score": 50,
-            "rejection_code": "ROTATION_LOCKED",
-            "rejection_reason": "The payout cycle order is locked. Mid-round joins are not permitted.",
-            "dynamic_guarantor_capacity_minor": dynamic_capacity,
-            "remaining_guarantor_capacity_minor": remaining_capacity,
+            "risk_tier": "REJECTED_KYC",
+            "rejection_reason": f"You need KYC Tier {min_kyc_tier} to join this group. Current tier: {user_kyc_tier}.",
         })
-
-    penalty_deduction = min(30, snap.get("historical_penalties_count", 0) * 10)
-    leverage_ratio = min(100, (active_liability * 100) // dynamic_capacity) if dynamic_capacity > 0 else 0
-    leverage_deduction = min(20, leverage_ratio // 5)
-    final_score = max(10, min(100, trust_score - penalty_deduction - leverage_deduction))
 
     return json.dumps({
         "is_eligible": True,
-        "risk_score": final_score,
-        "rejection_code": None,
+        "risk_tier": "APPROVED",
         "rejection_reason": None,
-        "dynamic_guarantor_capacity_minor": dynamic_capacity,
-        "remaining_guarantor_capacity_minor": remaining_capacity,
+    })
+
+
+def evaluate_guarantor_capacity(
+    guarantor_trust_score: int,
+    total_contributed_minor: int,
+    current_active_liability_minor: int,
+    new_pledge_minor: int,
+    bad_obligations_count: int = 0,
+    min_guarantor_trust_score: int = 70,
+    base_allowance_minor: int = 500_000,
+) -> str:
+    """
+    Evaluates dynamic guarantor risk capacity based on trust score and contribution history.
+    """
+    if _NATIVE_LOADED and _rust_core is not None:
+        return _rust_core.evaluate_guarantor_capacity(
+            guarantor_trust_score,
+            total_contributed_minor,
+            current_active_liability_minor,
+            new_pledge_minor,
+            bad_obligations_count,
+            min_guarantor_trust_score,
+            base_allowance_minor,
+        )
+
+    if bad_obligations_count > 0:
+        return json.dumps({
+            "is_approved": False,
+            "dynamic_max_liability_minor": 0,
+            "total_projected_liability_minor": current_active_liability_minor + new_pledge_minor,
+            "remaining_capacity_minor": 0,
+            "rejection_reason": "Guarantor currently has overdue or defaulted payments and cannot take on risk.",
+        })
+
+    if guarantor_trust_score < min_guarantor_trust_score:
+        return json.dumps({
+            "is_approved": False,
+            "dynamic_max_liability_minor": 0,
+            "total_projected_liability_minor": current_active_liability_minor + new_pledge_minor,
+            "remaining_capacity_minor": 0,
+            "rejection_reason": f"Guarantor has a Trust Score of {guarantor_trust_score}. A minimum of {min_guarantor_trust_score} is required to vouch for others.",
+        })
+
+    historical_weight = (total_contributed_minor * 5 * guarantor_trust_score) // 100
+    dynamic_max_liability = max(base_allowance_minor, historical_weight)
+    total_projected = current_active_liability_minor + new_pledge_minor
+
+    if total_projected > dynamic_max_liability:
+        return json.dumps({
+            "is_approved": False,
+            "dynamic_max_liability_minor": dynamic_max_liability,
+            "total_projected_liability_minor": total_projected,
+            "remaining_capacity_minor": 0,
+            "rejection_reason": f"Guarantor is over-leveraged. Dynamic risk capacity is {dynamic_max_liability} UGX, projected liability is {total_projected} UGX.",
+        })
+
+    remaining = max(0, dynamic_max_liability - total_projected)
+    return json.dumps({
+        "is_approved": True,
+        "dynamic_max_liability_minor": dynamic_max_liability,
+        "total_projected_liability_minor": total_projected,
+        "remaining_capacity_minor": remaining,
+        "rejection_reason": None,
     })
 
 
 def evaluate_escrow_release(
-    requirements: dict | str,
-    facts: dict | str,
+    timelock_expired: bool,
+    milestones_total: int = 0,
+    milestones_completed: int = 0,
+    signers_required: int = 0,
+    signatures_collected: int = 0,
+    dispute_active: bool = False,
+    rule_mode: str = "ALL_CONDITIONS",
 ) -> str:
     """
-    Formal predicate verification for escrow disbursements (timelocks, multi-sig, milestones, solvency).
+    Formally evaluates release predicates for funds held in escrow.
     """
-    req_json = requirements if isinstance(requirements, str) else json.dumps(requirements)
-    facts_json = facts if isinstance(facts, str) else json.dumps(facts)
-
     if _NATIVE_LOADED and _rust_core is not None:
-        return _rust_core.evaluate_escrow_release(req_json, facts_json)
+        return _rust_core.evaluate_escrow_release(
+            timelock_expired,
+            milestones_total,
+            milestones_completed,
+            signers_required,
+            signatures_collected,
+            dispute_active,
+            rule_mode,
+        )
 
-    req = json.loads(req_json)
-    f = json.loads(facts_json)
+    if dispute_active:
+        return json.dumps({
+            "release_permitted": False,
+            "status": "DISPUTED",
+            "rejection_reason": "Escrow payout is locked due to an active dispute or arbitration filing.",
+        })
 
-    satisfied = []
-    blockers = []
+    milestones_met = milestones_total <= 0 or milestones_completed >= milestones_total
+    consensus_met = signers_required <= 0 or signatures_collected >= signers_required
+    mode = rule_mode.upper()
 
-    time_remaining = max(0, req.get("timelock_until_epoch_seconds", 0) - f.get("current_epoch_seconds", 0))
-    if time_remaining == 0:
-        satisfied.append("TIMELOCK_EXPIRED")
-    else:
-        blockers.append(f"Timelock active: cannot release funds until epoch {req.get('timelock_until_epoch_seconds')} ({time_remaining}s remaining).")
+    if mode == "TIMELOCK_ONLY":
+        if timelock_expired:
+            return json.dumps({"release_permitted": True, "status": "PERMITTED", "rejection_reason": None})
+        else:
+            return json.dumps({"release_permitted": False, "status": "LOCKED_TIMELOCK", "rejection_reason": "Timelock has not expired yet."})
 
-    if f.get("is_dispute_active", False):
-        blockers.append("Escrow is locked due to an active member dispute. Administrative or court resolution required.")
-    else:
-        satisfied.append("DISPUTE_FREE")
+    elif mode == "CONSENSUS_ONLY":
+        if consensus_met:
+            return json.dumps({"release_permitted": True, "status": "PERMITTED", "rejection_reason": None})
+        else:
+            return json.dumps({
+                "release_permitted": False,
+                "status": "LOCKED_SIGNATURES",
+                "rejection_reason": f"Insufficient signatures. Required: {signers_required}, Collected: {signatures_collected}.",
+            })
 
-    needed_approvals = max(0, req.get("required_approvals_count", 1) - f.get("approved_signatures_count", 0))
-    if needed_approvals == 0:
-        satisfied.append("QUORUM_REACHED")
-    else:
-        blockers.append(f"Insufficient signers: {f.get('approved_signatures_count', 0)} approvals collected, but {req.get('required_approvals_count', 1)} are strictly required (short by {needed_approvals}).")
+    elif mode == "MILESTONE_AND_CONSENSUS":
+        if not milestones_met:
+            return json.dumps({
+                "release_permitted": False,
+                "status": "LOCKED_MILESTONES",
+                "rejection_reason": f"Milestones incomplete. Required: {milestones_total}, Completed: {milestones_completed}.",
+            })
+        if not consensus_met:
+            return json.dumps({
+                "release_permitted": False,
+                "status": "LOCKED_SIGNATURES",
+                "rejection_reason": f"Quorum not reached. Required signers: {signers_required}, Collected: {signatures_collected}.",
+            })
+        return json.dumps({"release_permitted": True, "status": "PERMITTED", "rejection_reason": None})
 
-    needed_milestones = max(0, req.get("required_milestones_count", 0) - f.get("completed_milestones_count", 0))
-    if needed_milestones == 0:
-        satisfied.append("MILESTONES_COMPLETED")
-    else:
-        blockers.append(f"Milestone deliverables incomplete: {f.get('completed_milestones_count', 0)}/{req.get('required_milestones_count', 0)} milestones verified (need {needed_milestones} more).")
+    elif mode == "TIMELOCK_OR_CONSENSUS":
+        if timelock_expired or consensus_met:
+            return json.dumps({"release_permitted": True, "status": "PERMITTED", "rejection_reason": None})
+        else:
+            return json.dumps({
+                "release_permitted": False,
+                "status": "LOCKED_TIMELOCK_OR_CONSENSUS",
+                "rejection_reason": "Neither the timelock expiration nor the signature threshold has been satisfied.",
+            })
 
-    post_balance = f.get("current_pool_balance_minor", 0) - f.get("proposed_release_amount_minor", 0)
-    if f.get("proposed_release_amount_minor", 0) <= 0:
-        blockers.append("Proposed release amount must be strictly positive.")
-    elif post_balance < req.get("minimum_reserve_balance_minor", 0):
-        blockers.append(f"Reserve breach: releasing {f.get('proposed_release_amount_minor')} UGX minor would reduce pool balance to {post_balance} UGX minor, below the required reserve floor of {req.get('minimum_reserve_balance_minor')} UGX minor.")
-    else:
-        satisfied.append("RESERVE_FLOOR_MAINTAINED")
-
-    permitted = len(blockers) == 0
-    return json.dumps({
-        "release_permitted": permitted,
-        "disposition": "RELEASE_PERMITTED" if permitted else "RELEASE_BLOCKED",
-        "satisfied_predicates": satisfied,
-        "blocking_reasons": blockers,
-        "lock_time_remaining_seconds": time_remaining,
-        "approvals_needed": needed_approvals,
-        "milestones_needed": needed_milestones,
-        "remaining_pool_balance_minor": post_balance,
-    })
+    else:  # "ALL_CONDITIONS" default
+        if not timelock_expired:
+            return json.dumps({"release_permitted": False, "status": "LOCKED_TIMELOCK", "rejection_reason": "Timelock period is still active."})
+        if not milestones_met:
+            return json.dumps({
+                "release_permitted": False,
+                "status": "LOCKED_MILESTONES",
+                "rejection_reason": f"All milestones must be verified prior to release. {milestones_completed}/{milestones_total} verified.",
+            })
+        if not consensus_met:
+            return json.dumps({
+                "release_permitted": False,
+                "status": "LOCKED_SIGNATURES",
+                "rejection_reason": f"Multi-sig approval quorum required. {signatures_collected}/{signers_required} signed.",
+            })
+        return json.dumps({"release_permitted": True, "status": "PERMITTED", "rejection_reason": None})
 
 
 def calculate_decayed_quorum(

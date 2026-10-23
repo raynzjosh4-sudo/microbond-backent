@@ -130,11 +130,10 @@ def join_group(
         edges = [(str(p[0]), str(p[1])) for p in existing_pledges]
 
         for gid in request.guarantor_ids:
-            cycle_check = json.loads(detect_guarantor_cycle(edges, str(current_user.id), str(gid)))
-            if cycle_check.get("has_cycle"):
+            if detect_guarantor_cycle(edges, str(gid), str(current_user.id)):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=cycle_check.get("explanation") or "Circular guarantor collusion detected."
+                    detail=f"Circular guarantor collusion detected: member {gid} cannot guarantee your account without creating a circular risk loop."
                 )
 
         pledge_liability = 0

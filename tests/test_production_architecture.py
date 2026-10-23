@@ -298,101 +298,125 @@ class TestMicrobondCoreDomainEngine:
         # Graph: A -> B, B -> C
         existing = [("user_A", "user_B"), ("user_B", "user_C")]
 
-        # Case 1: C vouches for D -> valid acyclic extension
-        res_acyclic = json.loads(detect_guarantor_cycle(existing, new_borrower="user_D", new_guarantor="user_C"))
-        assert res_acyclic["has_cycle"] is False
-        assert len(res_acyclic["cycle_path"]) == 0
+        # Case 1: D vouches for A -> acyclic
+        assert detect_guarantor_cycle(existing, "user_D", "user_A") is False
 
         # Case 2: C attempts to vouch for A -> creates cycle C -> A -> B -> C!
-        res_cyclic = json.loads(detect_guarantor_cycle(existing, new_borrower="user_A", new_guarantor="user_C"))
-        assert res_cyclic["has_cycle"] is True
-        assert "user_C" in res_cyclic["cycle_path"]
-        assert "user_A" in res_cyclic["cycle_path"]
-        assert "Circular guarantor collusion detected" in res_cyclic["explanation"]
+        assert detect_guarantor_cycle(existing, "user_C", "user_A") is True
 
         # Case 3: Self-guarantee
-        res_self = json.loads(detect_guarantor_cycle(existing, new_borrower="user_A", new_guarantor="user_A"))
-        assert res_self["has_cycle"] is True
-        assert "Self-guarantee" in res_self["explanation"]
+        assert detect_guarantor_cycle(existing, "user_X", "user_X") is True
 
     def test_evaluate_cross_group_exposure(self):
         from app.core.microbond_core import evaluate_cross_group_exposure
-        rules = {
-            "group_type": "MERRY_GO_ROUND",
-            "max_active_rotating_groups": 10,
-            "minimum_trust_score": 60,
-            "minimum_kyc_tier": 2,
-            "max_historical_penalties": 3,
-            "payout_order_locked": False,
-            "base_guarantor_allowance_minor": 500_000_00,
-            "guarantor_leverage_multiplier": 5,
-        }
 
         # Case 1: Clean eligible user
-        good_user = {
-            "user_id": "usr_good",
-            "trust_score": 85,
-            "kyc_tier": 2,
-            "active_rotating_groups": 2,
-            "has_unpaid_hit_and_run_payout": False,
-            "late_or_defaulted_obligations_count": 0,
-            "historical_penalties_count": 0,
-            "total_active_guarantor_liability_minor": 100_000_00,
-            "total_historical_contributed_minor": 200_000_00,
-        }
-        res_good = json.loads(evaluate_cross_group_exposure(good_user, rules))
+        res_good = json.loads(evaluate_cross_group_exposure(
+            user_active_rotating_groups=2,
+            max_allowed_rotating=10,
+            has_unpaid_hit_and_run=False,
+            late_obligations_count=0,
+            historical_penalties=0,
+            max_historical_penalties=3,
+            user_trust_score=80,
+            min_trust_score=70,
+            user_kyc_tier=2,
+            min_kyc_tier=1,
+            is_payout_order_locked=False,
+        ))
         assert res_good["is_eligible"] is True
-        assert res_good["risk_score"] >= 80
-        assert res_good["dynamic_guarantor_capacity_minor"] >= 500_000_00
+        assert res_good["risk_tier"] == "APPROVED"
 
         # Case 2: Hit-and-run defaulter
-        hnr_user = dict(good_user, has_unpaid_hit_and_run_payout=True)
-        res_hnr = json.loads(evaluate_cross_group_exposure(hnr_user, rules))
+        res_hnr = json.loads(evaluate_cross_group_exposure(
+            user_active_rotating_groups=2,
+            has_unpaid_hit_and_run=True,
+        ))
         assert res_hnr["is_eligible"] is False
-        assert res_hnr["rejection_code"] == "HIT_AND_RUN_DEBT"
+        assert res_hnr["risk_tier"] == "REJECTED_HIT_AND_RUN"
 
-        # Case 3: User with active arrears
-        arrears_user = dict(good_user, late_or_defaulted_obligations_count=2)
-        res_arr = json.loads(evaluate_cross_group_exposure(arrears_user, rules))
-        assert res_arr["is_eligible"] is False
-        assert res_arr["rejection_code"] == "ACTIVE_ARREARS"
-
-        # Case 4: Group cap exceeded
-        capped_user = dict(good_user, active_rotating_groups=10)
-        res_cap = json.loads(evaluate_cross_group_exposure(capped_user, rules))
+        # Case 3: Over capacity
+        res_cap = json.loads(evaluate_cross_group_exposure(
+            user_active_rotating_groups=10,
+            max_allowed_rotating=10,
+        ))
         assert res_cap["is_eligible"] is False
-        assert res_cap["rejection_code"] == "MAX_GROUPS_EXCEEDED"
+        assert res_cap["risk_tier"] == "REJECTED_OVER_CAPACITY"
+
+        # Case 4: Active arrears
+        res_arr = json.loads(evaluate_cross_group_exposure(
+            user_active_rotating_groups=1,
+            late_obligations_count=2,
+        ))
+        assert res_arr["is_eligible"] is False
+        assert res_arr["risk_tier"] == "REJECTED_ARREARS"
+
+    def test_evaluate_guarantor_capacity(self):
+        from app.core.microbond_core import evaluate_guarantor_capacity
+
+        # Case 1: Approved capacity
+        res_ok = json.loads(evaluate_guarantor_capacity(
+            guarantor_trust_score=80,
+            total_contributed_minor=100_000,
+            current_active_liability_minor=200_000,
+            new_pledge_minor=250_000,
+            bad_obligations_count=0,
+            min_guarantor_trust_score=70,
+            base_allowance_minor=500_000,
+        ))
+        assert res_ok["is_approved"] is True
+        assert res_ok["dynamic_max_liability_minor"] == 500_000
+        assert res_ok["remaining_capacity_minor"] == 50_000
+
+        # Case 2: Over-leveraged
+        res_over = json.loads(evaluate_guarantor_capacity(
+            guarantor_trust_score=80,
+            total_contributed_minor=100_000,
+            current_active_liability_minor=300_000,
+            new_pledge_minor=250_000,
+            base_allowance_minor=500_000,
+        ))
+        assert res_over["is_approved"] is False
 
     def test_evaluate_escrow_release(self):
         from app.core.microbond_core import evaluate_escrow_release
-        reqs = {
-            "timelock_until_epoch_seconds": 1_700_000_000,
-            "required_approvals_count": 3,
-            "required_milestones_count": 2,
-            "minimum_reserve_balance_minor": 50_000_00,
-            "require_unanimous_if_disputed": False,
-        }
 
-        # Case 1: Satisfied release
-        facts_ok = {
-            "current_epoch_seconds": 1_700_000_100, # Passed timelock
-            "approved_signatures_count": 3, # Quorum reached
-            "completed_milestones_count": 2, # Milestones met
-            "is_dispute_active": False, # Dispute free
-            "current_pool_balance_minor": 200_000_00,
-            "proposed_release_amount_minor": 100_000_00, # Leaves 100k >= 50k reserve
-        }
-        res_ok = json.loads(evaluate_escrow_release(reqs, facts_ok))
-        assert res_ok["release_permitted"] is True
-        assert res_ok["disposition"] == "RELEASE_PERMITTED"
-        assert len(res_ok["blocking_reasons"]) == 0
+        # Case 1: Active dispute blocks release
+        res_disp = json.loads(evaluate_escrow_release(
+            timelock_expired=True,
+            milestones_total=3,
+            milestones_completed=3,
+            signers_required=2,
+            signatures_collected=2,
+            dispute_active=True,
+            rule_mode="ALL_CONDITIONS",
+        ))
+        assert res_disp["release_permitted"] is False
+        assert res_disp["status"] == "DISPUTED"
 
-        # Case 2: Blocked by active dispute and insufficient signers
-        facts_blocked = dict(facts_ok, is_dispute_active=True, approved_signatures_count=2)
-        res_blocked = json.loads(evaluate_escrow_release(reqs, facts_blocked))
-        assert res_blocked["release_permitted"] is False
-        assert res_blocked["disposition"] == "RELEASE_BLOCKED"
-        assert len(res_blocked["blocking_reasons"]) >= 2
+        # Case 2: All conditions met
+        res_all = json.loads(evaluate_escrow_release(
+            timelock_expired=True,
+            milestones_total=3,
+            milestones_completed=3,
+            signers_required=2,
+            signatures_collected=2,
+            dispute_active=False,
+            rule_mode="ALL_CONDITIONS",
+        ))
+        assert res_all["release_permitted"] is True
+        assert res_all["status"] == "PERMITTED"
+
+        # Case 3: Timelock or consensus mode
+        res_or = json.loads(evaluate_escrow_release(
+            timelock_expired=False,
+            signers_required=3,
+            signatures_collected=3,
+            dispute_active=False,
+            rule_mode="TIMELOCK_OR_CONSENSUS",
+        ))
+        assert res_or["release_permitted"] is True
+        assert res_or["status"] == "PERMITTED"
 
     def test_calculate_decayed_quorum(self):
         from app.core.microbond_core import calculate_decayed_quorum
