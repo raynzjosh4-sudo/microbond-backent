@@ -55,6 +55,7 @@ from .report.dashboard_analytics import router as dashboard_analytics_router
 from .report.universal_analytics import router as universal_analytics_router
 from .report.analytics_series import router as analytics_series_router
 from .chat.media import router as chat_media_router
+from .chat.get_group_media import router as group_media_gallery_router
 from .chat.messages import router as chat_messages_router
 from .chat.websocket import router as chat_websocket_router
 from .chat.polls import router as chat_polls_router
@@ -129,6 +130,7 @@ router.include_router(dashboard_analytics_router)
 router.include_router(universal_analytics_router)
 router.include_router(analytics_series_router)
 router.include_router(chat_media_router)
+router.include_router(group_media_gallery_router)
 router.include_router(chat_messages_router)
 router.include_router(chat_websocket_router)
 router.include_router(chat_polls_router)
