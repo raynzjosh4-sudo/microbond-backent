@@ -945,3 +945,377 @@ def validate_turn_swap_eligibility(
     })
 
 
+def calculate_base_deposit_fee(group_target_amount: int) -> str:
+    """
+    Computes tiered psychological fee breakdown for deposit amount.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "calculate_base_deposit_fee"):
+        return _rust_core.calculate_base_deposit_fee(group_target_amount)
+
+    if group_target_amount <= 0:
+        raise ValueError("group_target_amount must be a positive integer")
+
+    if group_target_amount < 5_001:
+        offset = 15
+    elif group_target_amount < 10_001:
+        offset = 16
+    elif group_target_amount < 20_001:
+        offset = 17
+    elif group_target_amount < 50_001:
+        offset = 18
+    elif group_target_amount < 100_001:
+        offset = 19
+    elif group_target_amount < 500_001:
+        offset = 21
+    else:
+        offset = 22
+
+    mtn_fee = round(group_target_amount * 0.015)
+    platform_fee = max(0, mtn_fee - offset)
+    total_fee = mtn_fee + platform_fee
+    charge_amount = group_target_amount + total_fee
+
+    return json.dumps({
+        "group_target_amount": group_target_amount,
+        "mtn_fee": mtn_fee,
+        "platform_fee": platform_fee,
+        "total_fee": total_fee,
+        "charge_amount": charge_amount,
+        "psychological_offset": offset,
+        "microbond_net_revenue": platform_fee,
+    })
+
+
+def calculate_target_deposit_fee(
+    deposit_amount: int,
+    current_saved_amount: int,
+    target_goal_amount: int,
+    assigned_milestone_threshold: float,
+    fee_already_collected: bool = False,
+    target_payout_fee: int = 979,
+) -> str:
+    """
+    Computes MTN RequestToPay charge for Target Savings with milestone payout fee.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "calculate_target_deposit_fee"):
+        return _rust_core.calculate_target_deposit_fee(
+            deposit_amount,
+            current_saved_amount,
+            target_goal_amount,
+            assigned_milestone_threshold,
+            fee_already_collected,
+            target_payout_fee,
+        )
+
+    base = json.loads(calculate_base_deposit_fee(deposit_amount))
+    new_cumulative = current_saved_amount + deposit_amount
+    threshold_amount = round(target_goal_amount * assigned_milestone_threshold)
+
+    should_charge = not fee_already_collected and (new_cumulative >= threshold_amount or new_cumulative >= target_goal_amount)
+    payout_fee = target_payout_fee if should_charge else 0
+    final_charge = base["charge_amount"] + payout_fee
+
+    return json.dumps({
+        "deposit_amount": deposit_amount,
+        "base_charge_amount": base["charge_amount"],
+        "mtn_deposit_fee": base["mtn_fee"],
+        "microbond_deposit_fee": base["platform_fee"],
+        "hidden_payout_fee": payout_fee,
+        "final_charge_amount": final_charge,
+        "is_fee_milestone": should_charge,
+        "milestone_triggered_now": should_charge,
+    })
+
+
+def calculate_investment_deposit_fee(
+    deposit_amount: int,
+    current_annual_deposit_count: int,
+    assigned_milestone_count: int,
+    fee_collected_this_year: bool = False,
+    target_payout_fee: int = 979,
+) -> str:
+    """
+    Computes MTN RequestToPay charge for Investment Club share purchase with milestone payout fee.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "calculate_investment_deposit_fee"):
+        return _rust_core.calculate_investment_deposit_fee(
+            deposit_amount,
+            current_annual_deposit_count,
+            assigned_milestone_count,
+            fee_collected_this_year,
+            target_payout_fee,
+        )
+
+    base = json.loads(calculate_base_deposit_fee(deposit_amount))
+    this_deposit_number = current_annual_deposit_count + 1
+
+    should_charge = not fee_collected_this_year and (this_deposit_number >= assigned_milestone_count)
+    payout_fee = target_payout_fee if should_charge else 0
+    final_charge = base["charge_amount"] + payout_fee
+
+    return json.dumps({
+        "deposit_amount": deposit_amount,
+        "base_charge_amount": base["charge_amount"],
+        "mtn_deposit_fee": base["mtn_fee"],
+        "microbond_deposit_fee": base["platform_fee"],
+        "hidden_payout_fee": payout_fee,
+        "final_charge_amount": final_charge,
+        "is_fee_milestone": should_charge,
+        "this_deposit_number": this_deposit_number,
+    })
+
+
+def calculate_emergency_deposit_fee(
+    deposit_amount: int,
+    group_pending_payout_fees_count: int,
+    target_payout_fee: int = 979,
+) -> str:
+    """
+    Computes MTN RequestToPay charge for Welfare Fund clearing pending emergency payout fees.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "calculate_emergency_deposit_fee"):
+        return _rust_core.calculate_emergency_deposit_fee(
+            deposit_amount,
+            group_pending_payout_fees_count,
+            target_payout_fee,
+        )
+
+    base = json.loads(calculate_base_deposit_fee(deposit_amount))
+    fees_to_clear = group_pending_payout_fees_count
+    total_payout_fee = fees_to_clear * target_payout_fee
+    final_charge = base["charge_amount"] + total_payout_fee
+
+    return json.dumps({
+        "deposit_amount": deposit_amount,
+        "base_charge_amount": base["charge_amount"],
+        "mtn_deposit_fee": base["mtn_fee"],
+        "microbond_deposit_fee": base["platform_fee"],
+        "hidden_payout_fee": total_payout_fee,
+        "final_charge_amount": final_charge,
+        "cleared_pending_fee": fees_to_clear > 0,
+        "fees_cleared": fees_to_clear,
+    })
+
+
+def validate_auction_bid(
+    auction_status: str,
+    current_time_ms: int,
+    auction_end_time_ms: int,
+    new_bid_amount: int,
+    current_highest_bid_amount: int | None = None,
+    anti_sniping_threshold_ms: int = 60000,
+    clock_extension_ms: int = 60000,
+) -> str:
+    """
+    Validates an incoming auction bid and evaluates anti-sniping popcorn timer extensions.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "validate_auction_bid"):
+        return _rust_core.validate_auction_bid(
+            auction_status,
+            current_time_ms,
+            auction_end_time_ms,
+            new_bid_amount,
+            current_highest_bid_amount,
+            anti_sniping_threshold_ms,
+            clock_extension_ms,
+        )
+
+    if auction_status != "ACTIVE":
+        return json.dumps({
+            "is_valid": False,
+            "rejection_reason": f"Auction is currently {auction_status}.",
+            "clock_extended": False,
+            "new_end_time": auction_end_time_ms,
+        })
+
+    if current_time_ms >= auction_end_time_ms:
+        return json.dumps({
+            "is_valid": False,
+            "rejection_reason": "The bidding window has closed.",
+            "clock_extended": False,
+            "new_end_time": auction_end_time_ms,
+        })
+
+    if new_bid_amount <= 0:
+        return json.dumps({
+            "is_valid": False,
+            "rejection_reason": "Bid amount must be positive.",
+            "clock_extended": False,
+            "new_end_time": auction_end_time_ms,
+        })
+
+    if current_highest_bid_amount is not None and new_bid_amount <= current_highest_bid_amount:
+        return json.dumps({
+            "is_valid": False,
+            "rejection_reason": f"A bid of {current_highest_bid_amount} or higher already exists. Please submit a higher bid.",
+            "clock_extended": False,
+            "new_end_time": auction_end_time_ms,
+        })
+
+    time_remaining = auction_end_time_ms - current_time_ms
+    if time_remaining < anti_sniping_threshold_ms:
+        clock_extended = True
+        new_end = current_time_ms + clock_extension_ms
+    else:
+        clock_extended = False
+        new_end = auction_end_time_ms
+
+    return json.dumps({
+        "is_valid": True,
+        "rejection_reason": None,
+        "clock_extended": clock_extended,
+        "new_end_time": new_end,
+    })
+
+
+def settle_auction_payout(
+    gross_pool: int,
+    winning_bid: int,
+    member_count: int,
+    reserve_fund_bps: int = 0,
+) -> str:
+    """
+    Settles an auction payout, calculating net winner amount and distributing dividend surplus.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "settle_auction_payout"):
+        return _rust_core.settle_auction_payout(
+            gross_pool,
+            winning_bid,
+            member_count,
+            reserve_fund_bps,
+        )
+
+    if gross_pool <= 0:
+        raise ValueError("gross_pool must be positive")
+    if winning_bid < 0 or winning_bid > gross_pool:
+        raise ValueError("winning_bid cannot be negative or exceed gross_pool")
+    if member_count < 2:
+        raise ValueError("member_count must be at least 2")
+
+    reserve_holdback = (gross_pool * reserve_fund_bps) // 10_000
+    net_winner_payout = gross_pool - reserve_holdback - winning_bid
+    dividend_pool = winning_bid
+
+    non_winning = member_count - 1
+    dividend_per_member = dividend_pool // non_winning
+    dividend_remainder = dividend_pool % non_winning
+
+    reconciled = net_winner_payout + reserve_holdback + (dividend_per_member * non_winning) + dividend_remainder
+
+    return json.dumps({
+        "gross_pool": gross_pool,
+        "reserve_holdback": reserve_holdback,
+        "winning_bid_discount": winning_bid,
+        "net_winner_payout": net_winner_payout,
+        "dividend_pool": dividend_pool,
+        "non_winning_members_count": non_winning,
+        "dividend_per_member": dividend_per_member,
+        "dividend_remainder": dividend_remainder,
+        "invariant_verified": reconciled == gross_pool,
+    })
+
+
+def calculate_equal_split(total_bill: int, member_count: int) -> str:
+    """
+    Computes equal split with deterministic integer remainder distribution.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "calculate_equal_split"):
+        return _rust_core.calculate_equal_split(total_bill, member_count)
+
+    if total_bill <= 0:
+        raise ValueError("total_bill must be positive")
+    if member_count == 0:
+        raise ValueError("member_count cannot be zero")
+
+    base_share = total_bill // member_count
+    remainder = total_bill % member_count
+
+    shares = [base_share + 1 if i < remainder else base_share for i in range(member_count)]
+
+    return json.dumps({
+        "total_bill": total_bill,
+        "member_count": member_count,
+        "base_share": base_share,
+        "remainder_units": remainder,
+        "member_shares": shares,
+        "invariant_verified": sum(shares) == total_bill,
+    })
+
+
+def validate_custom_split(total_bill: int, shares: list[int]) -> str:
+    """
+    Validates whether custom split allocations exactly sum to total_bill.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "validate_custom_split"):
+        return _rust_core.validate_custom_split(total_bill, shares)
+
+    if total_bill <= 0:
+        return json.dumps({
+            "is_valid": False,
+            "total_bill": total_bill,
+            "allocated_sum": 0,
+            "discrepancy": -total_bill,
+            "error_message": "total_bill must be positive",
+        })
+
+    for idx, s in enumerate(shares):
+        if s < 0:
+            return json.dumps({
+                "is_valid": False,
+                "total_bill": total_bill,
+                "allocated_sum": sum(shares),
+                "discrepancy": sum(shares) - total_bill,
+                "error_message": f"Share at index {idx} cannot be negative ({s})",
+            })
+
+    allocated_sum = sum(shares)
+    discrepancy = allocated_sum - total_bill
+    is_valid = discrepancy == 0
+
+    return json.dumps({
+        "is_valid": is_valid,
+        "total_bill": total_bill,
+        "allocated_sum": allocated_sum,
+        "discrepancy": discrepancy,
+        "error_message": f"Total bill is {total_bill} UGX but allocated shares sum to {allocated_sum} UGX" if not is_valid else None,
+    })
+
+
+def is_name_similar(name_a: str, name_b: str, threshold: float = 75.0) -> str:
+    """
+    Token-sorted fuzzy string comparison helper.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "is_name_similar"):
+        return _rust_core.is_name_similar(name_a, name_b, threshold)
+
+    if not name_a or not name_b or not name_a.strip() or not name_b.strip():
+        return json.dumps({
+            "is_similar": False,
+            "similarity_percentage": 0.0,
+            "normalized_a": "",
+            "normalized_b": "",
+        })
+
+    clean_a = " ".join(sorted(name_a.lower().split()))
+    clean_b = " ".join(sorted(name_b.lower().split()))
+
+    if clean_a == clean_b:
+        return json.dumps({
+            "is_similar": True,
+            "similarity_percentage": 100.0,
+            "normalized_a": clean_a,
+            "normalized_b": clean_b,
+        })
+
+    import difflib
+    ratio = difflib.SequenceMatcher(None, clean_a, clean_b).ratio() * 100.0
+
+    return json.dumps({
+        "is_similar": ratio >= threshold,
+        "similarity_percentage": round(ratio, 2),
+        "normalized_a": clean_a,
+        "normalized_b": clean_b,
+    })
+
+
+

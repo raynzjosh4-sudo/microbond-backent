@@ -1,12 +1,14 @@
+import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 from app.core.database import get_session
 from app.api.dependencies import get_current_user
 from app.models.user.user import User
-from app.models.group.finance import TurnSwapRequest, GroupPayout
+from app.models.group.finance import TurnSwapRequest, GroupPayout, MemberObligation
 from app.models.group.settings import GroupGovernanceSettings
 from app.models.group.rotating import RotatingGroupDetails
 from app.core.firebase_config import send_push_notification
+from app.core.microbond_core import validate_turn_swap_eligibility
 from .schemas import RequestSwapPayload, SwapResponse
 
 router = APIRouter()
@@ -56,6 +58,48 @@ def request_turn_swap(
     
     if existing_swap:
         raise HTTPException(status_code=400, detail="A pending swap request already exists for these turns.")
+
+    # 4. Authoritative microbond_core Invariant Verification
+    target_user = session.get(User, payload.target_user_id)
+    rules = {
+        "current_active_cycle": getattr(rotating_details, "current_cycle", 1) or 1,
+        "minimum_trust_score": settings.minimum_trust_score or 0 if settings else 0,
+        "minimum_kyc_tier": 1,
+        "is_rotation_locked": getattr(rotating_details, "is_payout_order_locked", False),
+    }
+    member_a = {
+        "user_id": str(current_user.id),
+        "assigned_cycle": requester_payout.cycle_number,
+        "membership_status": "ACTIVE",
+        "has_received_payout": False,
+        "overdue_obligations_count": session.query(MemberObligation).filter(
+            MemberObligation.group_id == group_id,
+            MemberObligation.user_id == current_user.id,
+            MemberObligation.status == "LATE"
+        ).count(),
+        "unpaid_penalties_count": 0,
+        "trust_score": current_user.trust_score or 50,
+        "kyc_tier": current_user.kyc_tier or 1,
+    }
+    member_b = {
+        "user_id": str(payload.target_user_id),
+        "assigned_cycle": target_payout.cycle_number,
+        "membership_status": "ACTIVE",
+        "has_received_payout": False,
+        "overdue_obligations_count": session.query(MemberObligation).filter(
+            MemberObligation.group_id == group_id,
+            MemberObligation.user_id == payload.target_user_id,
+            MemberObligation.status == "LATE"
+        ).count(),
+        "unpaid_penalties_count": 0,
+        "trust_score": target_user.trust_score if target_user and target_user.trust_score else 50,
+        "kyc_tier": target_user.kyc_tier if target_user and target_user.kyc_tier else 1,
+    }
+
+    val_res = json.loads(validate_turn_swap_eligibility(member_a, member_b, rules))
+    if not val_res["is_permitted"]:
+        raise HTTPException(status_code=400, detail=val_res["rejection_reason"])
+
 
     # 4. Create the Swap Request
     swap = TurnSwapRequest(

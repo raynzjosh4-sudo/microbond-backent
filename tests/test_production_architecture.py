@@ -519,6 +519,237 @@ class TestMicrobondCoreDomainEngine:
         assert res_past["is_permitted"] is False
         assert "past cycle" in res_past["rejection_reason"]
 
+    def test_calculate_base_deposit_fee(self):
+        from app.core.microbond_core import calculate_base_deposit_fee
+        # 5,000 UGX -> Tier 1 (offset = 15, mtn_fee = 75, platform_fee = 60, total_fee = 135, charge_amount = 5135)
+        res_5k = json.loads(calculate_base_deposit_fee(5_000))
+        assert res_5k["group_target_amount"] == 5_000
+        assert res_5k["mtn_fee"] == 75
+        assert res_5k["psychological_offset"] == 15
+        assert res_5k["platform_fee"] == 60
+        assert res_5k["total_fee"] == 135
+        assert res_5k["charge_amount"] == 5_135
+        assert res_5k["microbond_net_revenue"] == 60
+
+        # 50,000 UGX -> Tier 4 (offset = 18, mtn_fee = 750, platform_fee = 732, charge_amount = 51482)
+        res_50k = json.loads(calculate_base_deposit_fee(50_000))
+        assert res_50k["psychological_offset"] == 18
+        assert res_50k["mtn_fee"] == 750
+        assert res_50k["platform_fee"] == 732
+        assert res_50k["charge_amount"] == 51_482
+
+        # Invalid input
+        with pytest.raises(ValueError):
+            calculate_base_deposit_fee(0)
+        with pytest.raises(ValueError):
+            calculate_base_deposit_fee(-1000)
+
+    def test_calculate_target_deposit_fee(self):
+        from app.core.microbond_core import calculate_target_deposit_fee
+        # Target goal 100,000, milestone threshold 0.50 (50,000)
+        # 1. Milestone triggered
+        res_trig = json.loads(calculate_target_deposit_fee(
+            deposit_amount=25_000,
+            current_saved_amount=30_000,  # new total = 55,000 >= 50,000
+            target_goal_amount=100_000,
+            assigned_milestone_threshold=0.50,
+            fee_already_collected=False,
+            target_payout_fee=979,
+        ))
+        assert res_trig["is_fee_milestone"] is True
+        assert res_trig["hidden_payout_fee"] == 979
+        assert res_trig["final_charge_amount"] == res_trig["base_charge_amount"] + 979
+
+        # 2. Milestone not yet reached
+        res_not = json.loads(calculate_target_deposit_fee(
+            deposit_amount=10_000,
+            current_saved_amount=20_000,  # new total = 30,000 < 50,000
+            target_goal_amount=100_000,
+            assigned_milestone_threshold=0.50,
+            fee_already_collected=False,
+        ))
+        assert res_not["is_fee_milestone"] is False
+        assert res_not["hidden_payout_fee"] == 0
+
+        # 3. Already collected
+        res_coll = json.loads(calculate_target_deposit_fee(
+            deposit_amount=25_000,
+            current_saved_amount=60_000,
+            target_goal_amount=100_000,
+            assigned_milestone_threshold=0.50,
+            fee_already_collected=True,
+        ))
+        assert res_coll["is_fee_milestone"] is False
+        assert res_coll["hidden_payout_fee"] == 0
+
+    def test_calculate_investment_deposit_fee(self):
+        from app.core.microbond_core import calculate_investment_deposit_fee
+        # Assigned milestone count 12, current annual deposits 11 -> this deposit is 12 (triggers!)
+        res_trig = json.loads(calculate_investment_deposit_fee(
+            deposit_amount=50_000,
+            current_annual_deposit_count=11,
+            assigned_milestone_count=12,
+            fee_collected_this_year=False,
+            target_payout_fee=979,
+        ))
+        assert res_trig["is_fee_milestone"] is True
+        assert res_trig["this_deposit_number"] == 12
+        assert res_trig["hidden_payout_fee"] == 979
+        assert res_trig["final_charge_amount"] == res_trig["base_charge_amount"] + 979
+
+        # Current annual deposits 5 -> this deposit is 6 (< 12)
+        res_not = json.loads(calculate_investment_deposit_fee(
+            deposit_amount=50_000,
+            current_annual_deposit_count=5,
+            assigned_milestone_count=12,
+            fee_collected_this_year=False,
+        ))
+        assert res_not["is_fee_milestone"] is False
+        assert res_not["hidden_payout_fee"] == 0
+
+    def test_calculate_emergency_deposit_fee(self):
+        from app.core.microbond_core import calculate_emergency_deposit_fee
+        # 2 pending payout fees to clear
+        res_pending = json.loads(calculate_emergency_deposit_fee(
+            deposit_amount=20_000,
+            group_pending_payout_fees_count=2,
+            target_payout_fee=979,
+        ))
+        assert res_pending["cleared_pending_fee"] is True
+        assert res_pending["fees_cleared"] == 2
+        assert res_pending["hidden_payout_fee"] == 1958
+        assert res_pending["final_charge_amount"] == res_pending["base_charge_amount"] + 1958
+
+        # 0 pending payout fees
+        res_none = json.loads(calculate_emergency_deposit_fee(
+            deposit_amount=20_000,
+            group_pending_payout_fees_count=0,
+            target_payout_fee=979,
+        ))
+        assert res_none["cleared_pending_fee"] is False
+        assert res_none["hidden_payout_fee"] == 0
+
+    def test_validate_auction_bid(self):
+        from app.core.microbond_core import validate_auction_bid
+        now_ms = 1_000_000_000
+        end_ms = now_ms + 120_000  # 120 seconds left
+
+        # 1. Valid bid outside anti-sniping window
+        res_valid = json.loads(validate_auction_bid(
+            auction_status="ACTIVE",
+            current_time_ms=now_ms,
+            auction_end_time_ms=end_ms,
+            new_bid_amount=50_000,
+            current_highest_bid_amount=40_000,
+            anti_sniping_threshold_ms=60_000,
+        ))
+        assert res_valid["is_valid"] is True
+        assert res_valid["clock_extended"] is False
+        assert res_valid["new_end_time"] == end_ms
+
+        # 2. Valid bid inside anti-sniping window (e.g. 30s left)
+        sniping_now = end_ms - 30_000
+        res_snip = json.loads(validate_auction_bid(
+            auction_status="ACTIVE",
+            current_time_ms=sniping_now,
+            auction_end_time_ms=end_ms,
+            new_bid_amount=60_000,
+            current_highest_bid_amount=50_000,
+            anti_sniping_threshold_ms=60_000,
+            clock_extension_ms=60_000,
+        ))
+        assert res_snip["is_valid"] is True
+        assert res_snip["clock_extended"] is True
+        assert res_snip["new_end_time"] == sniping_now + 60_000
+
+        # 3. Bid not higher than highest bid
+        res_low = json.loads(validate_auction_bid(
+            auction_status="ACTIVE",
+            current_time_ms=now_ms,
+            auction_end_time_ms=end_ms,
+            new_bid_amount=40_000,
+            current_highest_bid_amount=40_000,
+        ))
+        assert res_low["is_valid"] is False
+        assert "higher bid" in res_low["rejection_reason"]
+
+        # 4. Auction closed / expired
+        res_closed = json.loads(validate_auction_bid(
+            auction_status="COMPLETED",
+            current_time_ms=now_ms,
+            auction_end_time_ms=end_ms,
+            new_bid_amount=50_000,
+        ))
+        assert res_closed["is_valid"] is False
+
+    def test_settle_auction_payout(self):
+        from app.core.microbond_core import settle_auction_payout
+        # 500,000 pool, 50,000 bid, 5 members (4 non-winners)
+        # Winner gets 500k - 50k = 450k
+        # Dividend = 50,000 / 4 = 12,500 each, remainder 0
+        res_even = json.loads(settle_auction_payout(
+            gross_pool=500_000,
+            winning_bid=50_000,
+            member_count=5,
+            reserve_fund_bps=0,
+        ))
+        assert res_even["net_winner_payout"] == 450_000
+        assert res_even["dividend_pool"] == 50_000
+        assert res_even["dividend_per_member"] == 12_500
+        assert res_even["dividend_remainder"] == 0
+        assert res_even["invariant_verified"] is True
+
+        # Remainder distribution check: 100,000 bid across 3 non-winning members
+        res_odd = json.loads(settle_auction_payout(
+            gross_pool=1_000_000,
+            winning_bid=100_000,
+            member_count=4,
+            reserve_fund_bps=0,
+        ))
+        assert res_odd["dividend_per_member"] == 33_333
+        assert res_odd["dividend_remainder"] == 1
+        assert res_odd["invariant_verified"] is True
+
+    def test_bill_splitter_equal_and_custom(self):
+        from app.core.microbond_core import calculate_equal_split, validate_custom_split
+        # 1. Equal split: 100,000 across 3 members -> remainder 1 given to first member
+        res_eq = json.loads(calculate_equal_split(total_bill=100_000, member_count=3))
+        assert res_eq["member_shares"] == [33_334, 33_333, 33_333]
+        assert sum(res_eq["member_shares"]) == 100_000
+        assert res_eq["invariant_verified"] is True
+
+        # 2. Custom split: valid
+        res_cust_ok = json.loads(validate_custom_split(total_bill=100_000, shares=[50_000, 30_000, 20_000]))
+        assert res_cust_ok["is_valid"] is True
+        assert res_cust_ok["discrepancy"] == 0
+
+        # 3. Custom split: invalid discrepancy
+        res_cust_bad = json.loads(validate_custom_split(total_bill=100_000, shares=[50_000, 30_000, 15_000]))
+        assert res_cust_bad["is_valid"] is False
+        assert res_cust_bad["discrepancy"] == -5_000
+
+    def test_is_name_similar(self):
+        from app.core.microbond_core import is_name_similar
+        # Exact match
+        res_exact = json.loads(is_name_similar("MUKASA BRIAN", "Mukasa Brian"))
+        assert res_exact["is_similar"] is True
+        assert res_exact["similarity_percentage"] == 100.0
+
+        # Token-sorted match
+        res_sorted = json.loads(is_name_similar("BRIAN MUKASA", "MUKASA BRIAN"))
+        assert res_sorted["is_similar"] is True
+        assert res_sorted["similarity_percentage"] == 100.0
+
+        # High similarity typo
+        res_typo = json.loads(is_name_similar("Joseph Kato", "Josef Kato"))
+        assert res_typo["is_similar"] is True
+        assert res_typo["similarity_percentage"] >= 75.0
+
+        # Completely different names
+        res_diff = json.loads(is_name_similar("Alice Namubiru", "David Okello"))
+        assert res_diff["is_similar"] is False
+        assert res_diff["similarity_percentage"] < 75.0
+
 
 class TestOption2WiredServices:
     def test_standard_fixed_matrix_generator_service(self):
@@ -697,6 +928,55 @@ class TestOption2WiredServices:
         )
         assert res_already.milestone_triggered_now is False
         assert res_already.hidden_payout_fee == 0
+
+    def test_base_deposit_fee_service(self):
+        from app.services.fee_engines.base_deposit_fee.calculate_deposit_fee import calculate_deposit_fee
+        res = calculate_deposit_fee(50_000)
+        assert res.group_target_amount == 50_000
+        assert res.mtn_fee == 750
+        assert res.psychological_offset == 18
+        assert res.platform_fee == 732
+        assert res.total_fee == 1482
+        assert res.charge_amount == 51_482
+
+    def test_target_savings_deposit_fee_service(self):
+        from app.services.fee_engines.target_savings.calculate_target_group_deposit import calculate_target_group_deposit
+        from app.services.fee_engines.target_savings.schemas.target_deposit_calculation import TARGET_PAYOUT_FEE
+        res = calculate_target_group_deposit(
+            deposit_amount=30_000,
+            current_saved_amount=30_000,
+            target_goal_amount=100_000,
+            assigned_milestone_threshold=0.50,
+            fee_already_collected=False,
+        )
+        assert res.is_fee_milestone is True
+        assert res.hidden_payout_fee == TARGET_PAYOUT_FEE
+        assert res.final_charge_amount == res.base_charge_amount + TARGET_PAYOUT_FEE
+
+    def test_investment_group_deposit_fee_service(self):
+        from app.services.fee_engines.investment_club.calculate_investment_group_deposit import calculate_investment_group_deposit
+        from app.services.fee_engines.investment_club.schemas.investment_deposit_calculation import TARGET_PAYOUT_FEE
+        res = calculate_investment_group_deposit(
+            deposit_amount=50_000,
+            current_annual_deposit_count=3,
+            assigned_milestone_count=4,
+            fee_collected_this_year=False,
+        )
+        assert res.is_fee_milestone is True
+        assert res.this_deposit_number == 4
+        assert res.hidden_payout_fee == TARGET_PAYOUT_FEE
+
+    def test_emergency_group_deposit_fee_service(self):
+        from app.services.fee_engines.welfare_fund.calculate_emergency_group_deposit import calculate_emergency_group_deposit
+        from app.services.fee_engines.welfare_fund.schemas.emergency_deposit_calculation import TARGET_PAYOUT_FEE
+        res = calculate_emergency_group_deposit(
+            deposit_amount=20_000,
+            group_pending_payout_fees_count=1,
+        )
+        assert res.cleared_pending_fee is True
+        assert res.fees_cleared == 1
+        assert res.hidden_payout_fee == TARGET_PAYOUT_FEE
+
 
 
 

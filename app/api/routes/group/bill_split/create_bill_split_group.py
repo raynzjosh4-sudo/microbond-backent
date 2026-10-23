@@ -1,5 +1,6 @@
 import uuid
-from fastapi import APIRouter, Depends, status
+import json
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 from app.core.database import get_session
 from app.api.dependencies import get_current_user
@@ -7,6 +8,7 @@ from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.settings import GroupFinancialSettings, GroupGovernanceSettings, GroupCommunicationSettings, GroupVisibilitySettings
 from app.models.group.bill_split import BillSplitConfig, BillSplitOperationalSettings, BillSplitMemberShare
+from app.core.microbond_core import validate_custom_split
 from .schemas import BillSplitCreateRequest
 
 router = APIRouter()
@@ -98,7 +100,13 @@ def create_bill_split_group(
     db.add(GroupCommunicationSettings(group_id=group_id))
     db.add(GroupVisibilitySettings(group_id=group_id))
 
-    # 6. Initialize Creator's Share
+    # 6. Initialize Creator's Share & Validate Invariant
+    if request.member_allocations:
+        shares = [alloc.assigned_amount for alloc in request.member_allocations]
+        val_res = json.loads(validate_custom_split(request.total_bill_amount, shares))
+        if not val_res["is_valid"]:
+            raise HTTPException(status_code=400, detail=val_res["error_message"])
+
     creator_assigned = request.total_bill_amount
     if request.member_allocations:
         for alloc in request.member_allocations:

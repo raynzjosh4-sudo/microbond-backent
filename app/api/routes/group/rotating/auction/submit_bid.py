@@ -1,4 +1,5 @@
 import time
+import json
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlmodel import Session, select
 from app.core.database import get_session
@@ -7,6 +8,7 @@ from app.models.user.user import User
 from app.models.group.group import GroupMembership
 from app.models.group.auction import GroupAuction, AuctionBid
 from app.services.websocket_manager import ws_manager
+from app.core.microbond_core import validate_auction_bid
 from .schemas import SubmitBidRequest
 
 router = APIRouter()
@@ -47,15 +49,6 @@ def submit_bid(
     
     if not auction or auction.group_id != group_id:
         raise HTTPException(status_code=404, detail="Auction not found.")
-        
-    if auction.status != "ACTIVE":
-        raise HTTPException(status_code=400, detail=f"Auction is currently {auction.status}.")
-        
-    if current_time >= auction.end_time:
-        # Time ran out before they locked the row
-        auction.status = "CLOSED"
-        session.commit()
-        raise HTTPException(status_code=400, detail="The bidding window has closed.")
 
     # 3. Check current highest bid (Inside the lock)
     highest_bid = session.query(AuctionBid).filter(
@@ -63,26 +56,36 @@ def submit_bid(
         AuctionBid.status == "ACTIVE"
     ).order_by(AuctionBid.bid_amount.desc()).first()
 
+    highest_bid_amount = highest_bid.bid_amount if highest_bid else None
+
+    # 4. Authoritative microbond_core Validation & Anti-Sniping Popcorn Engine
+    validation_raw = validate_auction_bid(
+        auction_status=auction.status,
+        current_time_ms=current_time,
+        auction_end_time_ms=auction.end_time,
+        new_bid_amount=request.bid_amount,
+        current_highest_bid_amount=highest_bid_amount,
+        anti_sniping_threshold_ms=60_000,
+        clock_extension_ms=60_000,
+    )
+    val = json.loads(validation_raw)
+
+    if not val["is_valid"]:
+        if current_time >= auction.end_time:
+            auction.status = "CLOSED"
+            session.commit()
+        raise HTTPException(status_code=400, detail=val["rejection_reason"])
+
     if highest_bid:
-        if request.bid_amount <= highest_bid.bid_amount:
-            # Rejects identical tie-bids immediately
-            raise HTTPException(
-                status_code=400, 
-                detail=f"A bid of {highest_bid.bid_amount} or higher already exists. Please submit a higher bid."
-            )
-        
-        # Mark the previous winner as OUTBID
         highest_bid.status = "OUTBID"
         session.add(highest_bid)
-        
-        # Notify the outbid user instantly via WebSocket
         background_tasks.add_task(
             ws_manager.broadcast_to_group,
             group_id,
             {"event_type": "USER_OUTBID", "user_id": highest_bid.user_id, "amount": highest_bid.bid_amount}
         )
 
-    # 4. Save the new winning bid
+    # 5. Save the new winning bid
     new_bid = AuctionBid(
         auction_id=auction_id,
         user_id=str(current_user.id),
@@ -91,14 +94,10 @@ def submit_bid(
     )
     session.add(new_bid)
 
-    # 5. Anti-Sniping (Popcorn Bidding Rule)
-    # If the bid is placed with less than 60 seconds remaining, extend the clock by exactly 60 seconds.
-    time_remaining_ms = auction.end_time - current_time
-    if time_remaining_ms < 60_000:
-        auction.end_time = current_time + 60_000 # Reset clock to exactly 60s from now
+    # 6. Apply Popcorn Clock Extension if triggered
+    if val["clock_extended"]:
+        auction.end_time = val["new_end_time"]
         session.add(auction)
-        
-        # Notify everyone that the clock was extended
         background_tasks.add_task(
             ws_manager.broadcast_to_group,
             group_id,

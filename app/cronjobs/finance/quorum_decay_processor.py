@@ -51,26 +51,26 @@ def process_time_locked_quorum_decay(session: Session, background_tasks: Backgro
             current_quorum = eval_res.get("current_required_approvals")
             original_quorum = eval_res.get("initial_approvals")
                 
-                # 1. Clear the transaction (Release the Escrow)
-                req.status = "APPROVED_BY_DECAY"
-                # session.add(req)
-                # trigger_payout_execution(req.payout_id, session)
-                
-                logger.info(f"TLQD Triggered for Group {group_id}. Payout {req.id} cleared with {req.current_approval_count} approvals.")
-                
-                # 2. Broadcast System Chat Message to the Group
-                broadcast_system_message_sync(
-                    group_id=group_id,
-                    message_text=(
-                        f"🛡️ Time-Locked Quorum Decay Activated. "
-                        f"A pending payout was securely released after 48h of offline signer inactivity. "
-                        f"Threshold dropped from {original_quorum} to {current_quorum}."
-                    ),
-                    message_type="SYSTEM_EVENT",
-                    sender_id="SYSTEM",
-                    session=session,
-                    background_tasks=background_tasks
-                )
+            # 1. Clear the transaction (Release the Escrow)
+            req.status = "APPROVED_BY_DECAY"
+            # session.add(req)
+            # trigger_payout_execution(req.payout_id, session)
+            
+            logger.info(f"TLQD Triggered for Group {group_id}. Payout {req.id} cleared with {req.current_approval_count} approvals.")
+            
+            # 2. Broadcast System Chat Message to the Group
+            broadcast_system_message_sync(
+                group_id=group_id,
+                message_text=(
+                    f"🛡️ Time-Locked Quorum Decay Activated. "
+                    f"A pending payout was securely released after 48h of offline signer inactivity. "
+                    f"Threshold dropped from {original_quorum} to {current_quorum}."
+                ),
+                message_type="SYSTEM_EVENT",
+                sender_id="SYSTEM",
+                session=session,
+                background_tasks=background_tasks
+            )
                 
     # session.commit()
     return {"status": "success", "processed_decays": len(pending_requests)}

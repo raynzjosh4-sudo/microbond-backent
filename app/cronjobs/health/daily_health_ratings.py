@@ -1,11 +1,13 @@
 import logging
 import time
+import json
 from sqlmodel import Session, select
 from sqlalchemy import func
 from app.core.database import engine
 from app.models.group.group import Group, GroupMembership
 from app.models.group.finance import MemberObligation, GroupPayout
 from app.models.group.health import GroupHealth
+from app.core.microbond_core import calculate_batch_health_grades
 
 logger = logging.getLogger(__name__)
 
@@ -77,28 +79,36 @@ def process_daily_health_ratings():
                 else:
                     health.liquidity_ratio = 1.0
 
-                # 4. Average Member Trust Score
+                # 4. Average Member Trust Score & Active Member Count
                 avg_score = session.exec(
                     select(func.avg(GroupMembership.group_trust_score))
                     .where(GroupMembership.group_id == group.group_id, GroupMembership.status == "ACTIVE")
                 ).first()
                 health.average_member_trust_score = float(avg_score) if avg_score else 100.0
 
-                # 5. Determine Master Grade
-                grade = "A+"
-                risk = "LOW"
-                if health.active_default_rate_pct > 15 or health.liquidity_ratio < 0.5:
-                    grade = "D"
-                    risk = "CRITICAL"
-                elif health.active_default_rate_pct > 5 or health.liquidity_ratio < 0.8:
-                    grade = "C"
-                    risk = "HIGH"
-                elif health.on_time_repayment_rate_pct < 90:
-                    grade = "B"
-                    risk = "MODERATE"
-                
-                health.health_grade = grade
-                health.risk_level = risk
+                active_member_count = session.exec(
+                    select(func.count(GroupMembership.id))
+                    .where(GroupMembership.group_id == group.group_id, GroupMembership.status == "ACTIVE")
+                ).first() or 1
+
+                # 5. Determine Master Grade using Authoritative microbond_core Domain Engine
+                batch_input = [
+                    {
+                        "group_id": group.group_id,
+                        "on_time_count": on_time_count,
+                        "late_count": late_count,
+                        "default_count": default_count,
+                        "total_defaulted_amount_minor": int(health.total_defaulted_amount),
+                        "total_expected_amount_minor": int(upcoming_payout_sum or 1),
+                        "members_in_arrears_count": health.members_in_arrears_count,
+                        "total_active_members": active_member_count,
+                    }
+                ]
+                grades_data = json.loads(calculate_batch_health_grades(batch_input))
+                scored = grades_data[0] if grades_data else {"grade": "A+", "risk_tier": "LOW"}
+
+                health.health_grade = scored["grade"]
+                health.risk_level = scored["risk_tier"]
                 health.last_recalculated_at = now_ms
                 
                 session.add(health)

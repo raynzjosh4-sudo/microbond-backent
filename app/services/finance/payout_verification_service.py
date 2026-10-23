@@ -303,16 +303,16 @@ class PayoutAccountVerificationService:
     @staticmethod
     def is_name_similar(name_a: str, name_b: str, threshold: float = 75.0) -> bool:
         """
-        Token-aware fuzzy string comparison helper.
+        Token-aware fuzzy string comparison helper powered by microbond_core.
         Compares two full names taking into account word order variations.
         """
         if not name_a or not name_b:
             return False
 
-        import difflib
-        clean_a = " ".join(sorted(name_a.lower().split()))
-        clean_b = " ".join(sorted(name_b.lower().split()))
+        import json
+        from app.core.microbond_core import is_name_similar as core_is_name_similar
 
-        ratio = difflib.SequenceMatcher(None, clean_a, clean_b).ratio() * 100.0
-        return ratio >= threshold
+        res = json.loads(core_is_name_similar(name_a, name_b, threshold))
+        return bool(res.get("is_similar", False))
+
 
