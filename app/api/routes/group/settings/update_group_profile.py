@@ -44,14 +44,18 @@ def update_group_profile(
             detail="At least one field (name, description, or group_image_url) must be provided."
         )
 
-    # 2. Concurrency Control: Lock the row for update
-    group = session.exec(select(Group).where(Group.group_id == group_id).with_for_update()).first()
+    # 2. Concurrency Control: Lock the row for update (by UUID or name)
+    group = session.exec(
+        select(Group).where(
+            (Group.group_id == group_id) | (Group.name == group_id)
+        ).with_for_update()
+    ).first()
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
         
     membership = session.exec(
         select(GroupMembership).where(
-            GroupMembership.group_id == group_id,
+            GroupMembership.group_id == group.group_id,
             GroupMembership.user_id == current_user.id,
             GroupMembership.status == "ACTIVE"
         )
@@ -61,7 +65,7 @@ def update_group_profile(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not an active member of this group.")
 
     # 3. Authorization: Check governance settings for profile updates
-    governance_settings = session.exec(select(GroupGovernanceSettings).where(GroupGovernanceSettings.group_id == group_id)).first()
+    governance_settings = session.exec(select(GroupGovernanceSettings).where(GroupGovernanceSettings.group_id == group.group_id)).first()
     
     if membership.role != "ADMIN":
         if not governance_settings or not governance_settings.members_can_edit_settings:

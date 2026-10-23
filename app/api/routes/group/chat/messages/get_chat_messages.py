@@ -178,6 +178,10 @@ async def get_chat_messages(
             rm_preview = rm.message_text
             if not rm_preview and rm.media_type:
                 rm_preview = f"📷 {rm.media_type}"
+            if not rm_preview and rm.message_type:
+                rm_preview = rm.message_type.replace("_", " ").title()
+            if not rm_preview:
+                rm_preview = "Message"
 
             reply_summary = ReplyToSummary(
                 message_id=str(rm.id),

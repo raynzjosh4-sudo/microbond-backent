@@ -52,11 +52,37 @@ async def upload_group_image(
     """
     content_type = file.content_type or ""
     extension = ALLOWED_IMAGE_TYPES.get(content_type)
+    if not extension and file.filename:
+        file_ext = file.filename.rsplit(".", 1)[-1].lower()
+        if file_ext in ["jpg", "jpeg"]:
+            extension = "jpg"
+            content_type = "image/jpeg"
+        elif file_ext == "png":
+            extension = "png"
+            content_type = "image/png"
+        elif file_ext == "webp":
+            extension = "webp"
+            content_type = "image/webp"
+
     if not extension:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported file type: '{content_type}'. Allowed: JPEG, PNG, WebP.",
-        )
+        try:
+            with Image.open(io.BytesIO(file_bytes)) as test_img:
+                fmt = (test_img.format or "").lower()
+                if fmt in ["jpeg", "jpg"]:
+                    extension = "jpg"
+                    content_type = "image/jpeg"
+                elif fmt == "png":
+                    extension = "png"
+                    content_type = "image/png"
+                elif fmt == "webp":
+                    extension = "webp"
+                    content_type = "image/webp"
+        except Exception:
+            pass
+
+    if not extension:
+        extension = "jpg"
+        content_type = "image/jpeg" 
 
     file_bytes = await file.read()
     if len(file_bytes) > MAX_IMAGE_SIZE_BYTES:
@@ -74,15 +100,19 @@ async def upload_group_image(
             detail="Invalid or corrupt image file. Please upload a valid JPEG, PNG, or WebP.",
         )
 
-    # 1. Fetch group with row lock
-    group = session.exec(select(Group).where(Group.group_id == group_id).with_for_update()).first()
+    # 1. Fetch group with row lock (by UUID or name)
+    group = session.exec(
+        select(Group).where(
+            (Group.group_id == group_id) | (Group.name == group_id)
+        ).with_for_update()
+    ).first()
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
 
     # 2. Check active membership
     membership = session.exec(
         select(GroupMembership).where(
-            GroupMembership.group_id == group_id,
+            GroupMembership.group_id == group.group_id,
             GroupMembership.user_id == current_user.id,
             GroupMembership.status == "ACTIVE",
         )
@@ -95,7 +125,7 @@ async def upload_group_image(
 
     # 3. Check governance permissions
     governance_settings = session.exec(
-        select(GroupGovernanceSettings).where(GroupGovernanceSettings.group_id == group_id)
+        select(GroupGovernanceSettings).where(GroupGovernanceSettings.group_id == group.group_id)
     ).first()
 
     if membership.role != "ADMIN":
@@ -111,7 +141,7 @@ async def upload_group_image(
     # 4. Upload bytes to Cloudflare R2
     new_image_url = await upload_bytes_to_r2(
         file_bytes=file_bytes,
-        folder=f"groups/{group_id}/avatar",
+        folder=f"groups/{group.group_id}/avatar",
         content_type=content_type,
         extension=extension,
     )
@@ -199,13 +229,17 @@ def remove_group_image(
     Removes the group's current image / avatar and resets it to None.
     Same permission rules as upload.
     """
-    group = session.exec(select(Group).where(Group.group_id == group_id).with_for_update()).first()
+    group = session.exec(
+        select(Group).where(
+            (Group.group_id == group_id) | (Group.name == group_id)
+        ).with_for_update()
+    ).first()
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
 
     membership = session.exec(
         select(GroupMembership).where(
-            GroupMembership.group_id == group_id,
+            GroupMembership.group_id == group.group_id,
             GroupMembership.user_id == current_user.id,
             GroupMembership.status == "ACTIVE",
         )
@@ -217,7 +251,7 @@ def remove_group_image(
         )
 
     governance_settings = session.exec(
-        select(GroupGovernanceSettings).where(GroupGovernanceSettings.group_id == group_id)
+        select(GroupGovernanceSettings).where(GroupGovernanceSettings.group_id == group.group_id)
     ).first()
 
     if membership.role != "ADMIN":

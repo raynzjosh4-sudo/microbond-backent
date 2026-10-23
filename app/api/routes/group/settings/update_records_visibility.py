@@ -12,6 +12,7 @@ from app.models.group.settings import GroupVisibilitySettings
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Settings"])
 
 class UpdateRecordsVisibilityRequest(BaseModel):
+    vis_member_total_savings: Optional[bool] = None
     vis_download_official_statement: Optional[bool] = None
     vis_chat_history_cleanup: Optional[bool] = None
 
@@ -40,6 +41,8 @@ def update_records_visibility_settings(
     if not settings:
         raise HTTPException(status_code=404, detail="Visibility settings not found.")
 
+    if request.vis_member_total_savings is not None:
+        settings.vis_member_total_savings = request.vis_member_total_savings
     if request.vis_download_official_statement is not None:
         settings.vis_download_official_statement = request.vis_download_official_statement
     if request.vis_chat_history_cleanup is not None:

@@ -51,5 +51,6 @@ USER appuser
 
 EXPOSE 8000 8080 10000
 
-# Universal runtime command: binds to $PORT provided by Render (10000), Cloud Run (8080), or Local (8000)
-CMD exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1
+# Universal runtime command: automatically runs pending database migrations,
+# then binds uvicorn to $PORT provided by Render (10000), Cloud Run (8080), or Local (8000)
+CMD sh -c "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"

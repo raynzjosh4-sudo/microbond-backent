@@ -7,6 +7,7 @@ from app.core.database import get_session
 from app.models.user.core.user import User
 from app.models.group.core.group import Group
 from app.models.group.core.group_membership import GroupMembership
+from app.models.group.settings import GroupVisibilitySettings
 from .schemas import (
     ContactSyncRequest,
     DiscoverableContactGroup,
@@ -117,7 +118,14 @@ def discover_groups_by_contacts(
                 Group.status == "ACTIVE",
             )
         ).all()
-        active_groups.extend(groups)
+        for g in groups:
+            vis = session.exec(
+                select(GroupVisibilitySettings).where(GroupVisibilitySettings.group_id == g.group_id)
+            ).first()
+            # Groups with invite-only discoverability do not appear in searches or discovery
+            if vis and vis.invite_only_discoverability:
+                continue
+            active_groups.append(g)
 
     # 6. Build the response list
     results: List[DiscoverableContactGroup] = []

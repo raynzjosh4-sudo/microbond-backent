@@ -8,6 +8,7 @@ from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import GroupMembership
 from app.models.group.finance import MemberObligation
+from app.models.group.settings import GroupVisibilitySettings
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Membership"])
 
@@ -82,6 +83,14 @@ def list_group_members(
     
     if not membership:
         raise HTTPException(status_code=403, detail="You must be a member of the group to view the roster.")
+
+    # Check contact privacy settings
+    vis_settings = session.exec(
+        select(GroupVisibilitySettings).where(GroupVisibilitySettings.group_id == group_id)
+    ).first()
+    hide_member_contacts = vis_settings.hide_member_contact_info if vis_settings else True
+    is_viewer_admin = (membership.role == "ADMIN")
+    show_savings = is_viewer_admin or (getattr(vis_settings, "vis_member_total_savings", True) if vis_settings else True)
 
     # Base query combining Member and User
     stmt = select(GroupMembership, User).join(User, GroupMembership.user_id == User.id).where(
@@ -199,16 +208,22 @@ def list_group_members(
             usr, viewer_user_id=current_user.id, shares_group=True
         )
 
+        if is_viewer_admin or usr.id == current_user.id or not hide_member_contacts:
+            display_phone = usr.phone_number
+        else:
+            p = str(usr.phone_number or "").strip()
+            display_phone = f"{p[:5]} *** {p[-3:]}" if len(p) > 6 else "***"
+
         response_list.append(MemberListResponse(
             user_id=str(usr.id),
             full_name=usr.full_name or "Unknown User",
-            phone_number=usr.phone_number,
+            phone_number=display_phone,
             profile_picture_url=usr.profile_picture_url if allow_photo else None,
             role=mem.role,
             is_signer=mem.is_signer,
             payout_position=mem.payout_position,
             status=mem.status,
-            total_contributed=mem.total_contributed,
+            total_contributed=mem.total_contributed if show_savings else 0,
             trust_score=usr.trust_score,
             joined_at=mem.joined_at,
             outstanding_balance=outstanding_balance

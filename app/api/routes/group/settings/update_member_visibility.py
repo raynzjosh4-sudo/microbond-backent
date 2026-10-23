@@ -17,6 +17,7 @@ class UpdateMemberVisibilityScreenRequest(BaseModel):
     deposit_widget_visibility: Optional[str] = None  # "ALL_MEMBERS", "ADMIN_ONLY", "ADMIN_AND_TREASURER"
 
     # Privacy & records
+    vis_member_total_savings: Optional[bool] = None
     vis_download_official_statement: Optional[bool] = None
     vis_chat_history_cleanup: Optional[bool] = None
 
@@ -70,6 +71,7 @@ def get_member_visibility_screen(
         "data": {
             "deposit_widget_visibility": getattr(vis, "deposit_widget_visibility", "ALL_MEMBERS"),
             "privacy_and_records": {
+                "vis_member_total_savings": getattr(vis, "vis_member_total_savings", True),
                 "vis_download_official_statement": vis.vis_download_official_statement,
                 "vis_chat_history_cleanup": vis.vis_chat_history_cleanup
             },
@@ -126,6 +128,8 @@ def update_member_visibility_screen(
         settings.deposit_widget_visibility = request.deposit_widget_visibility
 
     # Privacy & records
+    if request.vis_member_total_savings is not None:
+        settings.vis_member_total_savings = request.vis_member_total_savings
     if request.vis_download_official_statement is not None:
         settings.vis_download_official_statement = request.vis_download_official_statement
     if request.vis_chat_history_cleanup is not None:

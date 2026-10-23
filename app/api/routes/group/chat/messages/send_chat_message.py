@@ -108,12 +108,48 @@ async def send_chat_message(
         logger.exception(f"Failed to save message in group {group_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to save message: {str(e)}")
 
+    # Build reply_to preview if replying
+    reply_summary = None
+    if new_message.reply_to_message_id:
+        rm = session.exec(
+            select(GroupChatMessage).where(GroupChatMessage.id == new_message.reply_to_message_id)
+        ).first()
+        if rm:
+            rm_user = None
+            if rm.sender_id and rm.sender_id != "SYSTEM":
+                try:
+                    rm_user = session.get(User, uuid.UUID(rm.sender_id))
+                except Exception:
+                    pass
+            if rm.sender_id == str(current_user.id):
+                rm_sender_name = "You"
+            elif rm.sender_id == "SYSTEM":
+                rm_sender_name = "System"
+            else:
+                rm_sender_name = rm_user.full_name if rm_user and rm_user.full_name else "Member"
+            rm_preview = rm.message_text
+            if not rm_preview and rm.media_type:
+                rm_preview = f"📷 {rm.media_type}"
+            if not rm_preview and rm.message_type:
+                rm_preview = rm.message_type.replace("_", " ").title()
+            reply_summary = {
+                "message_id": str(rm.id),
+                "sender_id": rm.sender_id,
+                "sender_name": rm_sender_name,
+                "text": rm_preview or "Message",
+                "media_type": rm.media_type
+            }
+
+    msg_payload = new_message.model_dump(mode="json")
+    if reply_summary:
+        msg_payload["reply_to"] = reply_summary
+
     # 4. Trigger WebSockets to broadcast this to active clients instantly
     await ws_manager.broadcast_to_group(
         group_id,
         {
             "event_type": "NEW_MESSAGE",
-            "message": new_message.model_dump(mode="json")
+            "message": msg_payload
         },
         exclude_user_id=str(current_user.id) # The sender already has the message locally
     )
@@ -133,4 +169,4 @@ async def send_chat_message(
         data={"type": "chat_message", "group_id": group_id, "message_id": str(new_message.id)}
     )
 
-    return {"message": "Message sent successfully", "data": new_message}
+    return {"message": "Message sent successfully", "data": msg_payload}

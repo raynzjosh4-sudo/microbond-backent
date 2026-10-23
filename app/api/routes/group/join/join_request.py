@@ -4,7 +4,7 @@ from app.core.database import get_session
 from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
-from app.models.group.settings import GroupGovernanceSettings
+from app.models.group.settings import GroupGovernanceSettings, GroupVisibilitySettings
 from app.models.group.rotating import RotatingGroupDetails
 from app.models.group.finance import MemberObligation
 from app.core.firebase_config import send_push_notification
@@ -51,6 +51,14 @@ def join_group(
             raise HTTPException(status_code=404, detail="Group not found.")
         if group.visibility == "PRIVATE":
             raise HTTPException(status_code=403, detail="This is a private group. You must use an invite code to join.")
+        vis_settings = session.exec(
+            select(GroupVisibilitySettings).where(GroupVisibilitySettings.group_id == group.group_id)
+        ).first()
+        if vis_settings and vis_settings.invite_only_discoverability:
+            raise HTTPException(
+                status_code=403,
+                detail="This group is invite-only. You must use a direct invite link or invite code to join."
+            )
 
     # 3. Load facts for authoritative domain evaluation
     existing_membership = session.exec(
@@ -80,7 +88,7 @@ def join_group(
             required_kyc_tier = getattr(rotating_details, "minimum_kyc_tier", 0) or 0
 
     requires_guarantor = bool(settings and settings.require_guarantors and request.guarantor_ids)
-    requires_admin_approval = bool(settings and settings.requires_admin_approval)
+    requires_admin_approval = bool(settings and (settings.requires_admin_approval or settings.admins_must_approve_new_members))
     minimum_trust = settings.minimum_trust_score if settings else None
 
     # 4. Invoke the deterministic Rust domain engine
