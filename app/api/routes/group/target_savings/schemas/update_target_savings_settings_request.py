@@ -17,4 +17,10 @@ class UpdateTargetSavingsSettingsRequest(BaseModel):
     grace_period_hours: Optional[int] = Field(default=None, ge=0, description="Hours of grace before late fee applies")
     missed_payment_action: Optional[str] = Field(default=None, description="RECORD_STRIKE or REMOVE_AND_REFUND")
     minimum_kyc_tier: Optional[int] = Field(default=None, ge=0, le=3, description="Minimum verification tier required to join (0-3)")
+    
+    # Goal Controls
+    is_locked: Optional[bool] = Field(default=None, description="Freeze contributions until group goal is met")
+    lock_funds: Optional[bool] = Field(default=None, description="Alias for is_locked")
     hide_leaderboard: Optional[bool] = Field(default=None, description="Hide member contribution rankings")
+    vis_member_total_savings: Optional[bool] = Field(default=None, description="Let members view their total saved")
+    let_members_view_total_saved: Optional[bool] = Field(default=None, description="Alias for vis_member_total_savings")

@@ -6,6 +6,7 @@ from app.api.dependencies import get_current_user
 from app.models.group.group import GroupMembership
 from app.models.user.user import User
 from app.models.group.long_term import TargetSavingsGroupDetails
+from app.models.group.settings import GroupVisibilitySettings
 from .schemas import UpdateTargetSavingsSettingsRequest
 
 router = APIRouter()
@@ -68,12 +69,35 @@ def update_target_savings_settings(
     if request.hide_leaderboard is not None:
         details.hide_leaderboard = request.hide_leaderboard
 
+    # Goal Controls: Lock funds
+    locked_val = request.lock_funds if request.lock_funds is not None else request.is_locked
+    if locked_val is not None:
+        details.is_locked = locked_val
+
+    # Goal Controls: Member total savings visibility
+    vis_val = request.let_members_view_total_saved if request.let_members_view_total_saved is not None else request.vis_member_total_savings
+    vis = session.exec(
+        select(GroupVisibilitySettings).where(GroupVisibilitySettings.group_id == group_id)
+    ).first()
+    if vis_val is not None:
+        if not vis:
+            vis = GroupVisibilitySettings(group_id=group_id)
+        vis.vis_member_total_savings = vis_val
+        session.add(vis)
+
     session.add(details)
     session.commit()
     session.refresh(details)
+    if vis:
+        session.refresh(vis)
+
+    data = details.model_dump(mode="json")
+    data["lock_funds"] = details.is_locked
+    data["vis_member_total_savings"] = getattr(vis, "vis_member_total_savings", True) if vis else True
+    data["let_members_view_total_saved"] = data["vis_member_total_savings"]
 
     return {
         "status": "success",
         "message": "Target savings settings updated successfully",
-        "data": details.model_dump(mode="json")
+        "data": data
     }

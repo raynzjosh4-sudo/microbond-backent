@@ -6,6 +6,7 @@ from app.api.dependencies import get_current_user
 from app.models.group.group import GroupMembership
 from app.models.user.user import User
 from app.models.group.long_term import TargetSavingsGroupDetails
+from app.models.group.settings import GroupVisibilitySettings
 
 router = APIRouter()
 
@@ -34,7 +35,16 @@ def get_target_savings_settings(
     if not details:
         raise HTTPException(status_code=404, detail="Target savings details not found for this group.")
 
+    vis = session.exec(
+        select(GroupVisibilitySettings).where(GroupVisibilitySettings.group_id == group_id)
+    ).first()
+
+    data = details.model_dump(mode="json")
+    data["lock_funds"] = details.is_locked
+    data["vis_member_total_savings"] = getattr(vis, "vis_member_total_savings", True) if vis else True
+    data["let_members_view_total_saved"] = data["vis_member_total_savings"]
+
     return {
         "status": "success",
-        "data": details.model_dump(mode="json")
+        "data": data
     }
