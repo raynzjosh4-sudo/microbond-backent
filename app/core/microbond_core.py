@@ -301,18 +301,33 @@ def allocate_surplus_waterfall(
     surplus_amount: int,
     current_cycle_number: int,
     standard_contribution: int,
-    cycle_overrides_json: str | None = None,
+    cycle_overrides_json: str | dict | None = None,
     max_cycles: int | None = None,
+    cycle_overrides: dict | str | None = None,
 ) -> str:
     """
     Allocates overpaid deposit across upcoming cycles using chronological FIFO waterfall.
     """
+    overrides_val = cycle_overrides if cycle_overrides is not None else cycle_overrides_json
+    if isinstance(overrides_val, dict):
+        cycle_overrides_json_str = json.dumps({str(k): v for k, v in overrides_val.items()})
+        overrides = {int(k): int(v) for k, v in overrides_val.items()}
+    elif isinstance(overrides_val, str) and overrides_val.strip():
+        cycle_overrides_json_str = overrides_val
+        try:
+            overrides = {int(k): int(v) for k, v in json.loads(overrides_val).items()}
+        except Exception:
+            overrides = {}
+    else:
+        cycle_overrides_json_str = None
+        overrides = {}
+
     if _NATIVE_LOADED and _rust_core is not None:
         return _rust_core.allocate_surplus_waterfall(
             surplus_amount,
             current_cycle_number,
             standard_contribution,
-            cycle_overrides_json,
+            cycle_overrides_json_str,
             max_cycles,
         )
 
@@ -327,13 +342,6 @@ def allocate_surplus_waterfall(
             "coverage_details": [],
             "summary_label": "No advance surplus to allocate.",
         })
-
-    overrides = {}
-    if cycle_overrides_json and cycle_overrides_json.strip():
-        try:
-            overrides = {int(k): int(v) for k, v in json.loads(cycle_overrides_json).items()}
-        except Exception:
-            pass
 
     remaining = surplus_amount
     target_cycle = current_cycle_number + 1

@@ -520,4 +520,184 @@ class TestMicrobondCoreDomainEngine:
         assert "past cycle" in res_past["rejection_reason"]
 
 
+class TestOption2WiredServices:
+    def test_standard_fixed_matrix_generator_service(self):
+        from unittest.mock import MagicMock
+        from datetime import datetime, timezone
+        from app.services.group.matrix_generators.standard_fixed import generate_standard_fixed_matrix
+        from app.models.group.finance import MemberObligation, GroupPayout
+
+        class MockMember:
+            def __init__(self, uid):
+                self.user_id = uid
+
+        class MockSettings:
+            reserve_fund_percentage = 0.05
+
+        class MockDetails:
+            payouts_per_cycle = 1
+            collection_frequency_days = 7
+            contribution_amount = 50000
+
+        members = [MockMember(f"user_{i}") for i in range(1, 11)]
+        session = MagicMock()
+
+        num_cycles = generate_standard_fixed_matrix(
+            session=session,
+            group_id="grp_fixed_100",
+            members=members,
+            settings=MockSettings(),
+            details=MockDetails(),
+            start_date=datetime.now(timezone.utc),
+        )
+
+        assert num_cycles == 10
+        assert session.bulk_insert_mappings.call_count == 2
+
+        # First call is MemberObligation
+        call_0 = session.bulk_insert_mappings.call_args_list[0]
+        assert call_0[0][0] == MemberObligation
+        obligations = call_0[0][1]
+        assert len(obligations) == 100
+        assert obligations[0]["group_id"] == "grp_fixed_100"
+        assert obligations[0]["amount_due"] == 50000
+        assert obligations[0]["amount_paid"] == 0
+        assert obligations[0]["status"] == "PENDING"
+
+        # Second call is GroupPayout
+        call_1 = session.bulk_insert_mappings.call_args_list[1]
+        assert call_1[0][0] == GroupPayout
+        payouts = call_1[0][1]
+        assert len(payouts) == 10
+        assert payouts[0]["group_id"] == "grp_fixed_100"
+        assert payouts[0]["amount_expected"] == 475000
+        assert payouts[0]["amount_received"] == 0
+        assert payouts[0]["user_id"] == "user_1"
+
+    def test_auction_bidding_matrix_generator_service(self):
+        from unittest.mock import MagicMock
+        from datetime import datetime, timezone
+        from app.services.group.matrix_generators.auction_bidding import generate_auction_bidding_matrix
+        from app.models.group.finance import MemberObligation, GroupPayout
+
+        class MockMember:
+            def __init__(self, uid):
+                self.user_id = uid
+
+        class MockSettings:
+            reserve_fund_percentage = 0.05
+
+        class MockDetails:
+            payouts_per_cycle = 1
+            collection_frequency_days = 7
+            contribution_amount = 50000
+
+        members = [MockMember(f"user_{i}") for i in range(1, 11)]
+        session = MagicMock()
+
+        num_cycles = generate_auction_bidding_matrix(
+            session=session,
+            group_id="grp_bid_200",
+            members=members,
+            settings=MockSettings(),
+            details=MockDetails(),
+            start_date=datetime.now(timezone.utc),
+        )
+
+        assert num_cycles == 10
+        assert session.bulk_insert_mappings.call_count == 2
+
+        call_1 = session.bulk_insert_mappings.call_args_list[1]
+        assert call_1[0][0] == GroupPayout
+        payouts = call_1[0][1]
+        assert len(payouts) == 10
+        # In auction bidding, user_id is None pending auction
+        assert payouts[0]["user_id"] is None
+        assert payouts[0]["amount_expected"] == 475000
+
+    def test_surplus_allocation_service(self):
+        from app.services.fee_engines.rotating.surplus import allocate_surplus_to_future_cycles
+        from app.services.fee_engines.rotating.surplus.schemas.coverage_status import CoverageStatus
+
+        # 1. Full coverage test
+        res_full = allocate_surplus_to_future_cycles(
+            surplus_amount_ugx=100000,
+            current_cycle_number=1,
+            standard_contribution_amount=50000,
+            max_cycles_in_group=10,
+        )
+        assert res_full.total_surplus_ugx == 100000
+        assert res_full.cycles_fully_covered_count == 2
+        assert res_full.fully_covered_cycles == [2, 3]
+        assert res_full.partially_covered_cycle is None
+        assert res_full.unallocated_residual_ugx == 0
+        assert res_full.next_cycle_requiring_payment == 4
+        assert len(res_full.coverage_breakdown) == 2
+        assert res_full.coverage_breakdown[0].status == CoverageStatus.FULLY_COVERED
+
+        # 2. Partial coverage test
+        res_partial = allocate_surplus_to_future_cycles(
+            surplus_amount_ugx=70000,
+            current_cycle_number=1,
+            standard_contribution_amount=50000,
+            max_cycles_in_group=10,
+        )
+        assert res_partial.cycles_fully_covered_count == 1
+        assert res_partial.fully_covered_cycles == [2]
+        assert res_partial.partially_covered_cycle is not None
+        assert res_partial.partially_covered_cycle.cycle_number == 3
+        assert res_partial.partially_covered_cycle.amount_allocated == 20000
+        assert res_partial.partially_covered_cycle.shortfall == 30000
+        assert res_partial.partially_covered_cycle.status == CoverageStatus.PARTIALLY_COVERED
+
+        # 3. Zero surplus test
+        res_zero = allocate_surplus_to_future_cycles(
+            surplus_amount_ugx=0,
+            current_cycle_number=2,
+            standard_contribution_amount=50000,
+        )
+        assert res_zero.total_surplus_ugx == 0
+        assert res_zero.cycles_fully_covered_count == 0
+        assert res_zero.next_cycle_requiring_payment == 3
+
+    def test_flexible_rotate_deposit_service(self):
+        from app.services.fee_engines.rotating.amortizer import calculate_flexible_rotate_deposit
+        from app.services.fee_engines.rotating.amortizer.schemas.member_deposit_schedule import TARGET_PAYOUT_FEE
+
+        # 1. Milestone triggered
+        res_trig = calculate_flexible_rotate_deposit(
+            deposit_amount=25000,
+            current_saved_amount=30000,
+            assigned_value_milestone=50000,
+            fee_already_collected=False,
+        )
+        assert res_trig.milestone_triggered_now is True
+        assert res_trig.hidden_payout_fee == TARGET_PAYOUT_FEE
+        assert res_trig.new_cumulative_total == 55000
+        assert res_trig.final_charge_amount == res_trig.base_charge_amount + TARGET_PAYOUT_FEE
+
+        # 2. Milestone not yet reached
+        res_no = calculate_flexible_rotate_deposit(
+            deposit_amount=10000,
+            current_saved_amount=10000,
+            assigned_value_milestone=50000,
+            fee_already_collected=False,
+        )
+        assert res_no.milestone_triggered_now is False
+        assert res_no.hidden_payout_fee == 0
+        assert res_no.new_cumulative_total == 20000
+        assert res_no.final_charge_amount == res_no.base_charge_amount
+
+        # 3. Milestone reached but fee already collected
+        res_already = calculate_flexible_rotate_deposit(
+            deposit_amount=25000,
+            current_saved_amount=55000,
+            assigned_value_milestone=50000,
+            fee_already_collected=True,
+        )
+        assert res_already.milestone_triggered_now is False
+        assert res_already.hidden_payout_fee == 0
+
+
+
 

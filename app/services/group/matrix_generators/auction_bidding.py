@@ -1,78 +1,84 @@
-import math
-import pandas as pd
-from datetime import datetime
-import pytz
+from datetime import datetime, timezone
+import json
 from sqlalchemy.orm import Session
 
 from app.models.group.group import GroupMembership
 from app.models.group.finance import MemberObligation, GroupPayout
+from app.core.microbond_core import generate_cycle_matrix
 
-def generate_auction_bidding_matrix(session: Session, group_id: str, members: list[GroupMembership], settings, details, start_date: datetime):
+
+def generate_auction_bidding_matrix(
+    session: Session,
+    group_id: str,
+    members: list[GroupMembership],
+    settings,
+    details,
+    start_date: datetime,
+) -> int:
     """
-    Generates the financial matrix for a Bidding/Auction group.
-    Leak 3 Fix: Payouts are generated with NULL recipient_user_id. The members will bid on them later!
+    Generates the financial matrix for a Bidding/Auction group using the microbond_core domain engine.
+    Payouts are generated with NULL user_id and AUCTION_PENDING status for subsequent member bidding.
     """
-    
-    member_count = len(members)
-    payouts_per_cycle = details.payouts_per_cycle or 1
-    num_cycles = math.ceil(member_count / payouts_per_cycle)
-    
-    gross_pool = details.contribution_amount * member_count
-    reserve_percentage = settings.reserve_fund_percentage or 0.0
-    net_payout = gross_pool * (1.0 - reserve_percentage)
-    
-    kampala_tz = pytz.timezone("Africa/Kampala")
-    start_date_kampala = start_date.astimezone(kampala_tz)
-    
-    deadlines = pd.date_range(
-        start=start_date_kampala, 
-        periods=num_cycles, 
-        freq=f"{details.collection_frequency_days}D",
-        tz="Africa/Kampala"
+    if not members:
+        return 0
+
+    current_time_epoch = int(datetime.now(timezone.utc).timestamp())
+    member_user_ids = [str(m.user_id) for m in members]
+
+    reserve_fund_bps = int(round((getattr(settings, "reserve_fund_percentage", 0.0) or 0.0) * 10_000))
+    payouts_per_cycle = getattr(details, "payouts_per_cycle", 1) or 1
+    collection_frequency_days = getattr(details, "collection_frequency_days", 7) or 7
+    contribution_amount = int(getattr(details, "contribution_amount", 0) or 0)
+    start_epoch = int(start_date.timestamp())
+
+    matrix_json = generate_cycle_matrix(
+        member_user_ids=member_user_ids,
+        group_type="BIDDING",
+        contribution_minor=contribution_amount,
+        payouts_per_cycle=payouts_per_cycle,
+        reserve_fund_bps=reserve_fund_bps,
+        collection_frequency_days=collection_frequency_days,
+        start_epoch_seconds=start_epoch,
+        created_at_epoch_seconds=current_time_epoch,
     )
-    
-    cycles_df = pd.DataFrame({
-        "cycle_number": range(1, num_cycles + 1),
-        "due_date_kampala": deadlines
-    })
-    cycles_df["due_date"] = cycles_df["due_date_kampala"].apply(lambda x: int(x.astimezone(pytz.UTC).timestamp()))
-    members_df = pd.DataFrame([{"user_id": m.user_id, "membership_id": m.membership_id} for m in members])
-    matrix_df = cycles_df.merge(members_df, how='cross')
-    
-    matrix_df["group_id"] = group_id
-    matrix_df["amount_due"] = details.contribution_amount
-    matrix_df["amount_paid"] = 0.0
-    matrix_df["status"] = "PENDING"
-    
-    current_time_epoch = int(datetime.utcnow().timestamp())
-    matrix_df["created_at"] = current_time_epoch
-    matrix_df["updated_at"] = current_time_epoch
-    
-    obligation_cols = ["group_id", "user_id", "cycle_number", "amount_due", "amount_paid", "due_date", "status", "created_at", "updated_at"]
-    obligations_records = matrix_df[obligation_cols].to_dict(orient="records")
-    
-    # Payouts with NO recipients
-    payout_records = []
-    for cycle_idx in range(num_cycles):
-        cycle_number = cycle_idx + 1
-        due_date_epoch = cycles_df.iloc[cycle_idx]["due_date"]
-        
-        for _ in range(payouts_per_cycle):
-            payout_records.append({
-                "group_id": group_id,
-                "cycle_number": cycle_number,
-                "user_id": None, # LEAK 3 FIX: NULL recipient. Bids will decide this!
-                "amount_expected": net_payout,
-                "amount_collected": 0.0,
-                "status": "AUCTION_PENDING", # Custom status indicating it's ready for bids
-                "payout_date": due_date_epoch,
-                "created_at": current_time_epoch,
-                "updated_at": current_time_epoch
-            })
-                
-    if obligations_records:
-        session.bulk_insert_mappings(MemberObligation, obligations_records)
-    if payout_records:
-        session.bulk_insert_mappings(GroupPayout, payout_records)
-        
-    return num_cycles
+    matrix_data = json.loads(matrix_json)
+
+    raw_obligations = matrix_data.get("obligations", [])
+    raw_payouts = matrix_data.get("payouts", [])
+
+    obligations = [
+        {
+            "group_id": group_id,
+            "user_id": o["user_id"],
+            "cycle_number": o["cycle_number"],
+            "amount_due": o["amount_due"],
+            "amount_paid": o.get("amount_paid", 0),
+            "due_date": o["due_date"],
+            "status": o.get("status", "PENDING"),
+            "created_at": o.get("created_at", current_time_epoch),
+            "updated_at": o.get("updated_at", current_time_epoch),
+        }
+        for o in raw_obligations
+    ]
+
+    payouts = [
+        {
+            "group_id": group_id,
+            "user_id": p["user_id"],
+            "cycle_number": p["cycle_number"],
+            "amount_expected": p["amount_expected"],
+            "amount_received": p.get("amount_received", p.get("amount_collected", 0)),
+            "status": p.get("status", "PENDING"),
+            "payout_date": p["payout_date"],
+            "created_at": p.get("created_at", current_time_epoch),
+        }
+        for p in raw_payouts
+    ]
+
+    if obligations:
+        session.bulk_insert_mappings(MemberObligation, obligations)
+    if payouts:
+        session.bulk_insert_mappings(GroupPayout, payouts)
+
+    return matrix_data.get("num_cycles", 0)
+
