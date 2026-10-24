@@ -121,7 +121,34 @@ def test_unrestricted_user_evaluation_and_creation(db_session: Session, monkeypa
     assert resp_bs.status_code == 200, resp_bs.text
     assert resp_bs.json()["status"] == "success"
 
-    # 3. Check /me/allowed-groups route returns all groups
+    # 3. Direct Rotating Group Create Endpoint
+    resp_rot_direct = client.post("/api/v1/groups/rotating/create", json={
+        "name": "Direct Rotating Super Circle",
+        "description": "Weekly pot",
+        "group_image_url": "https://example.com/pot.jpg",
+        "type": "MERRY_GO_ROUND",
+        "payment_mode": "OBLIGATION",
+        "visibility": "PRIVATE",
+        "currency": "UGX",
+        "contribution_amount": 50000.0,
+        "maximum_member_capacity": 10,
+        "payouts_per_cycle": 1,
+        "collection_frequency_days": 7,
+        "group_start_time": 1761400000000,
+        "payout_order_strategy": "Randomized by App",
+        "minimum_kyc_tier": 1,
+        "require_guarantor": False,
+        "guarantor_default_action": "NONE",
+        "allow_partial_payments": True,
+        "allow_advance_deposits": True,
+        "enforce_payout_holds": False,
+        "late_fee_amount": 0.0,
+    })
+    assert resp_rot_direct.status_code == 200, resp_rot_direct.text
+    assert resp_rot_direct.json()["status"] == "success"
+    assert "group_id" in resp_rot_direct.json()["data"]
+
+    # 4. Check /me/allowed-groups route returns all groups
     resp_allowed = client.get("/api/v1/users/me/allowed-groups")
     assert resp_allowed.status_code == 200, resp_allowed.text
     allowed_data = resp_allowed.json()

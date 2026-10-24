@@ -49,7 +49,7 @@ class RotatingGroupCreateRequest(BaseModel):
     
     # Group Settings (Late Fees & Grace Periods)
     enable_late_fees: bool = Field(default=False)
-    late_fee_amount: float = Field(default=0.0, ge=50.0, le=30000.0)
+    late_fee_amount: float = Field(default=0.0, ge=0.0, le=30000.0)
     late_fee_frequency: str = Field(default="DAILY", description="e.g. DAILY, ONCE")
     enable_grace_period: bool = Field(default=False)
     grace_period_hours: int = Field(default=0, description="Grace period in hours")
