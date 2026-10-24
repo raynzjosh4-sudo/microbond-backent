@@ -70,6 +70,7 @@ from .dashboard_summary import router as dashboard_summary_router
 from .deposit_pipeline import router as deposit_pipeline_router
 from .deposits.daily_deposit_widget import router as daily_deposit_widget_router
 
+from .settings.pending_disbursals import router as pending_disbursals_router
 from .create_group import router as create_group_router
 
 router = APIRouter()
@@ -144,3 +145,4 @@ router.include_router(group_media_gallery_router)
 router.include_router(chat_messages_router)
 router.include_router(chat_websocket_router)
 router.include_router(chat_polls_router)
+router.include_router(pending_disbursals_router)
