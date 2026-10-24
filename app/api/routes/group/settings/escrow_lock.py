@@ -8,6 +8,7 @@ from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.settings import GroupFinancialSettings, GroupVisibilitySettings
+from app.services.audit_service import AuditService
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Escrow Lock Settings"])
 
@@ -23,6 +24,7 @@ class UpdateEscrowLockRequest(BaseModel):
 
 
 @router.get("/{group_id}/settings/escrow", summary="Get Escrow Lock Settings")
+@router.get("/{group_id}/settings/escrow-lock", include_in_schema=False)
 def get_escrow_lock_settings(
     group_id: str,
     session: Session = Depends(get_session),
@@ -76,6 +78,7 @@ def get_escrow_lock_settings(
 
 
 @router.patch("/{group_id}/settings/escrow", summary="Update Escrow Lock Settings")
+@router.patch("/{group_id}/settings/escrow-lock", include_in_schema=False)
 def update_escrow_lock_settings(
     group_id: str,
     request: UpdateEscrowLockRequest,
@@ -117,6 +120,20 @@ def update_escrow_lock_settings(
         fin.escrow_release_condition = condition_val
 
     session.add(fin)
+
+    AuditService.record_event(
+        session=session,
+        action="ESCROW_LOCK_SETTINGS_UPDATED",
+        entity_type="GROUP",
+        entity_id=group_id,
+        payload={
+            "updated_by": str(current_user.id),
+            "enable_escrow": fin.enable_escrow,
+            "escrow_release_condition": fin.escrow_release_condition
+        },
+        actor_user_id=current_user.id
+    )
+
     session.commit()
     session.refresh(fin)
 

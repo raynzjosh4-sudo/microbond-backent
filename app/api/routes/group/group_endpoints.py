@@ -51,6 +51,7 @@ from .settings.get_settings import router as get_settings_router
 from .settings.get_financial_settings import router as get_financial_settings_router
 from .settings.goal_controls import router as goal_controls_router
 from .settings.escrow_lock import router as escrow_lock_router
+from .settings.timelock_disbursals import router as timelock_disbursals_router
 from .settings.multisig_roster import router as multisig_roster_router
 from .settings.quorum import router as quorum_router
 from .settings.my_authorization import router as my_authorization_router
@@ -134,6 +135,7 @@ router.include_router(get_settings_router)
 router.include_router(get_financial_settings_router)
 router.include_router(goal_controls_router)
 router.include_router(escrow_lock_router)
+router.include_router(timelock_disbursals_router)
 router.include_router(multisig_roster_router)
 router.include_router(quorum_router)
 router.include_router(my_authorization_router)
