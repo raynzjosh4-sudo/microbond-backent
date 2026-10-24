@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 
 from app.core.database import get_session
@@ -29,6 +29,10 @@ def update_shared_wallet_settings(
     if request.target_budget_limit is not None:
         op_settings.target_budget_limit = request.target_budget_limit
     if request.auto_approve_threshold is not None:
+        if request.auto_approve_threshold < 0:
+            raise HTTPException(status_code=400, detail="Auto-approve threshold cannot be negative.")
+        if request.auto_approve_threshold > 500000:
+            raise HTTPException(status_code=400, detail="Auto-approve threshold cannot exceed 500,000 UGX.")
         op_settings.auto_approve_threshold = request.auto_approve_threshold
     if request.approval_timeout_hours is not None:
         op_settings.approval_timeout_hours = request.approval_timeout_hours

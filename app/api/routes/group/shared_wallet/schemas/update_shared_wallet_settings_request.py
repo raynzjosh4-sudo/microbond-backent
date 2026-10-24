@@ -11,8 +11,8 @@ class UpdateSharedWalletSettingsRequest(BaseModel):
         description="Maximum wallet ceiling balance. Null = unlimited"
     )
     auto_approve_threshold: Optional[int] = Field(
-        default=None, ge=0,
-        description="Spending amount that can be disbursed without triggering a member approval vote"
+        default=None, ge=0, le=500000,
+        description="Spending amount that can be disbursed without triggering a member approval vote (max 500,000 UGX)"
     )
     approval_timeout_hours: Optional[int] = Field(
         default=None, ge=1, le=168,

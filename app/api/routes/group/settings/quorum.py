@@ -38,6 +38,16 @@ class UpdateQuorumSettingsRequest(BaseModel):
         ge=1,
         description="The absolute floor that quorum can decay to"
     )
+    auto_approve_small_requests: Optional[bool] = Field(
+        default=None,
+        description="Auto-approve routine requests below threshold"
+    )
+    auto_approve_max_amount: Optional[float] = Field(
+        default=None,
+        ge=0,
+        le=500000,
+        description="Auto-approve maximum amount (max 500,000 UGX)"
+    )
 
 
 def _parse_pct(pct_val: int | str) -> int:
@@ -119,6 +129,11 @@ def get_quorum_settings(
             "enable_quorum_decay": gov.enable_quorum_decay,
             "quorum_decay_hours": gov.quorum_decay_hours,
             "quorum_decay_minimum_approvals": gov.quorum_decay_minimum_approvals,
+            "auto_approve_small_requests": membership.auto_approve_small_requests,
+            "auto_approve_max_amount": membership.auto_approve_max_amount or 0,
+            "auto_approve_max_amount_formatted": f"{int(membership.auto_approve_max_amount or 0):,} UGX",
+            "auto_approve_ceiling": 500000,
+            "auto_approve_ceiling_formatted": "500,000 UGX",
             "allowed_options": [50, 60, 66, 75, 80, 100]
         }
     }
@@ -171,7 +186,20 @@ def update_quorum_settings(
     if request.quorum_decay_minimum_approvals is not None:
         gov.quorum_decay_minimum_approvals = request.quorum_decay_minimum_approvals
 
+    if request.auto_approve_small_requests is not None:
+        if request.auto_approve_small_requests == True and request.auto_approve_max_amount is None and not admin_membership.auto_approve_max_amount:
+            raise HTTPException(status_code=400, detail="You must specify a maximum amount when enabling auto-approve.")
+        admin_membership.auto_approve_small_requests = request.auto_approve_small_requests
+
+    if request.auto_approve_max_amount is not None:
+        if request.auto_approve_max_amount < 0:
+            raise HTTPException(status_code=400, detail="Auto-approve maximum amount cannot be negative.")
+        if request.auto_approve_max_amount > 500000:
+            raise HTTPException(status_code=400, detail="Auto-approve amount cannot exceed 500,000 UGX.")
+        admin_membership.auto_approve_max_amount = request.auto_approve_max_amount
+
     session.add(gov)
+    session.add(admin_membership)
 
     AuditService.record_event(
         session=session,
@@ -181,13 +209,16 @@ def update_quorum_settings(
         payload={
             "updated_by": str(current_user.id),
             "quorum_percentage": gov.quorum_percentage,
-            "enable_quorum_decay": gov.enable_quorum_decay
+            "enable_quorum_decay": gov.enable_quorum_decay,
+            "auto_approve_small_requests": admin_membership.auto_approve_small_requests,
+            "auto_approve_max_amount": admin_membership.auto_approve_max_amount
         },
         actor_user_id=current_user.id
     )
 
     session.commit()
     session.refresh(gov)
+    session.refresh(admin_membership)
 
     group = session.exec(select(Group).where(Group.group_id == group_id)).first()
     total_eligible = len(session.exec(
@@ -210,6 +241,11 @@ def update_quorum_settings(
             "total_eligible_members": total_eligible,
             "minimum_votes_required": min_votes,
             "approval_strategy": gov.approval_strategy,
-            "example_text": f"If set to {pct_int}%, at least {min_votes} of {total_eligible} eligible members must cast a vote for any resolution to pass."
+            "example_text": f"If set to {pct_int}%, at least {min_votes} of {total_eligible} eligible members must cast a vote for any resolution to pass.",
+            "auto_approve_small_requests": admin_membership.auto_approve_small_requests,
+            "auto_approve_max_amount": admin_membership.auto_approve_max_amount or 0,
+            "auto_approve_max_amount_formatted": f"{int(admin_membership.auto_approve_max_amount or 0):,} UGX",
+            "auto_approve_ceiling": 500000,
+            "auto_approve_ceiling_formatted": "500,000 UGX"
         }
     }

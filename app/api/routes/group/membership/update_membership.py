@@ -22,7 +22,12 @@ class UpdateMembershipRequest(BaseModel):
     is_favorite: Optional[bool] = Field(default=None, description="Pin this group to the top of the list")
     auto_pay_my_turn: Optional[bool] = Field(default=None, description="Automatically trigger payment logic when my turn comes")
     auto_approve_small_requests: Optional[bool] = Field(default=None, description="Automatically approve payout requests below a certain amount")
-    auto_approve_max_amount: Optional[float] = Field(default=None, description="The maximum amount to auto-approve")
+    auto_approve_max_amount: Optional[float] = Field(
+        default=None,
+        ge=0,
+        le=500000,
+        description="The maximum amount to auto-approve (must not exceed 500,000 UGX)"
+    )
 
 
 def _mask_account(number: Optional[str]) -> str:
@@ -230,6 +235,8 @@ def update_my_membership_settings(
     if request.auto_approve_max_amount is not None:
         if request.auto_approve_max_amount < 0:
             raise HTTPException(status_code=400, detail="Auto-approve maximum amount cannot be negative.")
+        if request.auto_approve_max_amount > 500000:
+            raise HTTPException(status_code=400, detail="Auto-approve amount cannot exceed 500,000 UGX.")
         membership.auto_approve_max_amount = request.auto_approve_max_amount
 
     # 3. Save to database
