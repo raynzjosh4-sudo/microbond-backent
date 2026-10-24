@@ -20,9 +20,11 @@ fn microbond_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 1. Group Join & Eligibility
     m.add_function(wrap_pyfunction!(join_rules::check_join_rules, m)?)?;
 
-    // 2. Financial Arithmetic & Penalties
+    // 2. Financial Arithmetic, Penalties & Liquidity Buffer
     m.add_function(wrap_pyfunction!(payout::calculate_rotating_payout, m)?)?;
     m.add_function(wrap_pyfunction!(payout::calculate_penalty, m)?)?;
+    m.add_function(wrap_pyfunction!(payout::evaluate_liquidity_reserve, m)?)?;
+    m.add_function(wrap_pyfunction!(payout::calculate_escalated_late_fee, m)?)?;
 
     // 3. Cryptographic Audit Hashing
     m.add_function(wrap_pyfunction!(audit::canonical_audit_hash, m)?)?;

@@ -148,6 +148,153 @@ pub fn calculate_penalty(
     })
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LiquidityReserveDecision {
+    pub is_permitted: bool,
+    pub total_balance_minor: i64,
+    pub locked_buffer_minor: i64,
+    pub max_available_disbursal_minor: i64,
+    pub requested_disbursal_minor: i64,
+    pub shortfall_minor: i64,
+    pub rejection_reason: Option<String>,
+}
+
+pub fn evaluate_liquidity_reserve_pure(
+    total_balance_minor: i64,
+    buffer_percentage: f64,
+    requested_disbursal_minor: i64,
+) -> LiquidityReserveDecision {
+    let pct = buffer_percentage.clamp(0.0, 100.0);
+    let locked_buffer_minor = ((total_balance_minor.max(0) as f64) * (pct / 100.0)).round() as i64;
+    let max_available = (total_balance_minor.saturating_sub(locked_buffer_minor)).max(0);
+
+    if requested_disbursal_minor <= max_available {
+        LiquidityReserveDecision {
+            is_permitted: true,
+            total_balance_minor,
+            locked_buffer_minor,
+            max_available_disbursal_minor: max_available,
+            requested_disbursal_minor,
+            shortfall_minor: 0,
+            rejection_reason: None,
+        }
+    } else {
+        let shortfall = requested_disbursal_minor - max_available;
+        LiquidityReserveDecision {
+            is_permitted: false,
+            total_balance_minor,
+            locked_buffer_minor,
+            max_available_disbursal_minor: max_available,
+            requested_disbursal_minor,
+            shortfall_minor: shortfall,
+            rejection_reason: Some(format!(
+                "Requested disbursal of {} UGX breaches the {}% liquidity buffer. Maximum permitted disbursal is {} UGX.",
+                requested_disbursal_minor, pct, max_available
+            )),
+        }
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (
+    total_balance_minor,
+    buffer_percentage,
+    requested_disbursal_minor
+))]
+pub fn evaluate_liquidity_reserve(
+    total_balance_minor: i64,
+    buffer_percentage: f64,
+    requested_disbursal_minor: i64,
+) -> PyResult<String> {
+    let res = evaluate_liquidity_reserve_pure(
+        total_balance_minor,
+        buffer_percentage,
+        requested_disbursal_minor,
+    );
+    serde_json::to_string(&res)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EscalatedLateFeeResult {
+    pub base_fee_minor: i64,
+    pub total_late_fee_minor: i64,
+    pub late_days: i32,
+    pub escalation_multiplier: f64,
+    pub is_escalated: bool,
+}
+
+pub fn calculate_escalated_late_fee_pure(
+    base_fee_minor: i64,
+    late_days: i32,
+    grace_period_days: i32,
+    escalation_enabled: bool,
+) -> EscalatedLateFeeResult {
+    if late_days <= grace_period_days {
+        return EscalatedLateFeeResult {
+            base_fee_minor,
+            total_late_fee_minor: 0,
+            late_days: late_days.max(0),
+            escalation_multiplier: 1.0,
+            is_escalated: false,
+        };
+    }
+
+    let overdue_days = late_days - grace_period_days;
+    if !escalation_enabled {
+        return EscalatedLateFeeResult {
+            base_fee_minor,
+            total_late_fee_minor: base_fee_minor,
+            late_days,
+            escalation_multiplier: 1.0,
+            is_escalated: false,
+        };
+    }
+
+    let multiplier = if overdue_days <= 7 {
+        1.0
+    } else if overdue_days <= 14 {
+        1.5
+    } else {
+        2.0
+    };
+
+    let total_late_fee_minor = ((base_fee_minor as f64) * multiplier).round() as i64;
+
+    EscalatedLateFeeResult {
+        base_fee_minor,
+        total_late_fee_minor,
+        late_days,
+        escalation_multiplier: multiplier,
+        is_escalated: multiplier > 1.0,
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (
+    base_fee_minor,
+    late_days,
+    grace_period_days=0,
+    escalation_enabled=true
+))]
+pub fn calculate_escalated_late_fee(
+    base_fee_minor: i64,
+    late_days: i32,
+    grace_period_days: i32,
+    escalation_enabled: bool,
+) -> PyResult<String> {
+    let res = calculate_escalated_late_fee_pure(
+        base_fee_minor,
+        late_days,
+        grace_period_days,
+        escalation_enabled,
+    );
+    serde_json::to_string(&res)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+}
+
+
+
 #[cfg(test)]
 mod tests {
     use super::*;

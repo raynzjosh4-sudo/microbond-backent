@@ -1538,6 +1538,104 @@ def evaluate_guarantor_capacity(
     })
 
 
+def evaluate_liquidity_reserve(
+    total_balance_minor: int,
+    buffer_percentage: float,
+    requested_disbursal_minor: int,
+) -> str:
+    """
+    Evaluates if a requested disbursal breaches the group's locked liquidity buffer percentage.
+    Delegates to compiled Rust engine when available.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "evaluate_liquidity_reserve"):
+        return _rust_core.evaluate_liquidity_reserve(
+            total_balance_minor,
+            buffer_percentage,
+            requested_disbursal_minor,
+        )
+
+    pct = max(0.0, min(100.0, float(buffer_percentage)))
+    locked_buffer = int(round(max(0, total_balance_minor) * (pct / 100.0)))
+    max_available = max(0, total_balance_minor - locked_buffer)
+
+    if requested_disbursal_minor <= max_available:
+        return json.dumps({
+            "is_permitted": True,
+            "total_balance_minor": total_balance_minor,
+            "locked_buffer_minor": locked_buffer,
+            "max_available_disbursal_minor": max_available,
+            "requested_disbursal_minor": requested_disbursal_minor,
+            "shortfall_minor": 0,
+            "rejection_reason": None
+        })
+    else:
+        shortfall = requested_disbursal_minor - max_available
+        return json.dumps({
+            "is_permitted": False,
+            "total_balance_minor": total_balance_minor,
+            "locked_buffer_minor": locked_buffer,
+            "max_available_disbursal_minor": max_available,
+            "requested_disbursal_minor": requested_disbursal_minor,
+            "shortfall_minor": shortfall,
+            "rejection_reason": f"Requested disbursal of {requested_disbursal_minor:,} UGX breaches the {int(pct)}% liquidity buffer. Maximum permitted disbursal is {max_available:,} UGX."
+        })
+
+
+def calculate_escalated_late_fee(
+    base_fee_minor: int,
+    late_days: int,
+    grace_period_days: int = 0,
+    escalation_enabled: bool = True,
+) -> str:
+    """
+    Calculates escalated late penalty fees across missed cycle windows.
+    Delegates to compiled Rust engine when available.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "calculate_escalated_late_fee"):
+        return _rust_core.calculate_escalated_late_fee(
+            base_fee_minor,
+            late_days,
+            grace_period_days,
+            escalation_enabled,
+        )
+
+    if late_days <= grace_period_days:
+        return json.dumps({
+            "base_fee_minor": base_fee_minor,
+            "total_late_fee_minor": 0,
+            "late_days": max(0, late_days),
+            "escalation_multiplier": 1.0,
+            "is_escalated": False
+        })
+
+    overdue_days = late_days - grace_period_days
+    if not escalation_enabled:
+        return json.dumps({
+            "base_fee_minor": base_fee_minor,
+            "total_late_fee_minor": base_fee_minor,
+            "late_days": late_days,
+            "escalation_multiplier": 1.0,
+            "is_escalated": False
+        })
+
+    if overdue_days <= 7:
+        multiplier = 1.0
+    elif overdue_days <= 14:
+        multiplier = 1.5
+    else:
+        multiplier = 2.0
+
+    total_fee = int(round(base_fee_minor * multiplier))
+    return json.dumps({
+        "base_fee_minor": base_fee_minor,
+        "total_late_fee_minor": total_fee,
+        "late_days": late_days,
+        "escalation_multiplier": multiplier,
+        "is_escalated": multiplier > 1.0
+    })
+
+
+
 
 
 

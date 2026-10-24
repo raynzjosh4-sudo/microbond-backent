@@ -9,6 +9,7 @@ from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.settings import GroupFinancialSettings, GroupVisibilitySettings
 from app.models.group.investment_association import InvestmentClubOperationalSettings
+from app.services.audit_service import AuditService
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Settings"])
 
@@ -179,6 +180,24 @@ def update_liquidity_settings(
             if request.enable_sms_call_reminders is not None:
                 club_ops.enable_sms_call_reminders = request.enable_sms_call_reminders
             session.add(club_ops)
+
+    AuditService.record_event(
+        session=session,
+        action="LIQUIDITY_SETTINGS_UPDATED",
+        entity_type="GROUP",
+        entity_id=group_id,
+        payload={
+            "updated_by": str(current_user.id),
+            "contribution_reminder_days_before": settings.contribution_reminder_days_before,
+            "auto_debit_consent_required": settings.auto_debit_consent_required,
+            "emergency_contact_name": settings.emergency_contact_name,
+            "emergency_contact_phone": settings.emergency_contact_phone,
+            "liquidity_buffer_percentage": settings.liquidity_buffer_percentage,
+            "enable_late_fee_escalation": settings.enable_late_fee_escalation,
+            "enable_sms_call_reminders": settings.enable_sms_call_reminders,
+        },
+        actor_user_id=current_user.id
+    )
 
     session.commit()
 
