@@ -51,6 +51,7 @@ from .settings.get_settings import router as get_settings_router
 from .settings.get_financial_settings import router as get_financial_settings_router
 from .settings.goal_controls import router as goal_controls_router
 from .settings.escrow_lock import router as escrow_lock_router
+from .settings.multisig_roster import router as multisig_roster_router
 from .membership.statement import router as statement_router
 from .membership.savings_growth import router as savings_growth_router
 from .report.weekly_report import router as weekly_report_router
@@ -130,6 +131,7 @@ router.include_router(get_settings_router)
 router.include_router(get_financial_settings_router)
 router.include_router(goal_controls_router)
 router.include_router(escrow_lock_router)
+router.include_router(multisig_roster_router)
 router.include_router(statement_router)
 router.include_router(weekly_report_router)
 router.include_router(dashboard_analytics_router)
