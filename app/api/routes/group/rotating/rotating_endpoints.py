@@ -30,30 +30,32 @@ def create_group(
     creator = current_user
         
     # --- Enforcement Checks ---
-    # A. Check Full KYC Requirement (Tier 2)
-    if creator.kyc_tier < 2 or getattr(creator, "is_dependent_account", False):
-        raise HTTPException(
-            status_code=403, 
-            detail="Group creation requires full Tier 2 National ID (NIN) verification. Dependent accounts are not permitted."
-        )
+    from app.services.group.group_auth_service import is_unrestricted_group_creator
+    if not is_unrestricted_group_creator(creator):
+        # A. Check Full KYC Requirement (Tier 2)
+        if creator.kyc_tier < 2 or getattr(creator, "is_dependent_account", False):
+            raise HTTPException(
+                status_code=403, 
+                detail="Group creation requires full Tier 2 National ID (NIN) verification. Dependent accounts are not permitted."
+            )
+            
+        # B. Trust Score Checks
+        current_trust = creator.trust_score or 50 # Base is 50 if null
         
-    # B. Trust Score Checks
-    current_trust = creator.trust_score or 50 # Base is 50 if null
-    
-    # Baseline for normal groups
-    if current_trust < 60:
-        raise HTTPException(
-            status_code=403, 
-            detail="Your Trust Score is too low to create groups. Build your score by completing individual savings cycles first."
-        )
-        
-    # Advanced groups need 80+
-    ADVANCED_GROUP_TYPES = ["INVESTMENT_CLUB", "HIGH_YIELD_BIDDING", "COMMERCIAL_SYNDICATE"]
-    if request.type in ADVANCED_GROUP_TYPES and current_trust < 80:
-        raise HTTPException(
-            status_code=403, 
-            detail=f"A minimum Trust Score of 80 is required to create a {request.type}. Yours is {current_trust}."
-        )
+        # Baseline for normal groups
+        if current_trust < 60:
+            raise HTTPException(
+                status_code=403, 
+                detail="Your Trust Score is too low to create groups. Build your score by completing individual savings cycles first."
+            )
+            
+        # Advanced groups need 80+
+        ADVANCED_GROUP_TYPES = ["INVESTMENT_CLUB", "HIGH_YIELD_BIDDING", "COMMERCIAL_SYNDICATE"]
+        if request.type in ADVANCED_GROUP_TYPES and current_trust < 80:
+            raise HTTPException(
+                status_code=403, 
+                detail=f"A minimum Trust Score of 80 is required to create a {request.type}. Yours is {current_trust}."
+            )
         
     # 2. Generate unique IDs and codes
     new_group_id = str(uuid.uuid4())

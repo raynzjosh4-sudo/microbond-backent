@@ -50,56 +50,70 @@ def create_unified_group(
     Sets up the Group, Wallet, Settings, Membership, and injects the initialization chat message.
     """
     # 1. Enforcement / Eligibility Checks (Progressive Unlocks)
-    from app.services.group.group_auth_service import get_permitted_group_creation_types, SavingsGroupType
+    from app.services.group.group_auth_service import (
+        get_permitted_group_creation_types,
+        is_unrestricted_group_creator,
+        SavingsGroupType,
+    )
     
+    is_super = is_unrestricted_group_creator(current_user)
+
+    # Normalize aliases if provided by frontend
+    normalized_type = request.type
+    if normalized_type == "TARGET_SAVINGS":
+        normalized_type = "GOAL_SAVINGS"
+    elif normalized_type == "ROTATING":
+        normalized_type = "MERRY_GO_ROUND"
+
     # Try to map the string type to the Enum
     try:
-        requested_type = SavingsGroupType(request.type)
+        requested_type = SavingsGroupType(normalized_type)
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid group type: {request.type}")
         
-    allowed_types = get_permitted_group_creation_types(session, current_user.id)
-    if requested_type not in allowed_types:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"You are not authorized to create a {request.type} group yet. Improve your KYC, trust score, or group health to unlock this feature."
-        )
-        
-    # 1b. Running Group Guard — cannot create a new group while owning a group that
-    #     has live funds (total_balance > 0) or active co-members, because abandoning
-    #     or mis-managing a live group risks other people's pooled money.
-    running_owned_groups = session.exec(
-        select(Group).where(
-            Group.created_by_user_id == current_user.id,
-            Group.status == "ACTIVE",
-            (Group.total_balance > 0) | (Group.member_count > 1)
-        )
-    ).all()
-
-    if running_owned_groups:
-        names = ", ".join(f"'{g.name}'" for g in running_owned_groups)
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"You cannot create a new group while you are still managing a running group: {names}. "
-                "Please close or transfer ownership of your active group(s) first to protect your members' funds."
+    if not is_super:
+        allowed_types = get_permitted_group_creation_types(session, current_user.id)
+        if requested_type not in allowed_types:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"You are not authorized to create a {request.type} group yet. Improve your KYC, trust score, or group health to unlock this feature."
             )
-        )
+            
+        # 1b. Running Group Guard — cannot create a new group while owning a group that
+        #     has live funds (total_balance > 0) or active co-members, because abandoning
+        #     or mis-managing a live group risks other people's pooled money.
+        running_owned_groups = session.exec(
+            select(Group).where(
+                Group.created_by_user_id == current_user.id,
+                Group.status == "ACTIVE",
+                (Group.total_balance > 0) | (Group.member_count > 1)
+            )
+        ).all()
 
-    # 1c. Spam / DoS Protection (Max 5 active groups per user)
-    from sqlalchemy import func
-    owned_groups_count = session.exec(
-        select(func.count()).where(
-            Group.created_by_user_id == current_user.id,
-            Group.status == "ACTIVE"
-        )
-    ).one()
-    
-    if owned_groups_count >= 5:
-        raise HTTPException(
-            status_code=429,
-            detail="You have reached the maximum limit of 5 active owned groups. Please close or delete an unused group first."
-        )
+        if running_owned_groups:
+            names = ", ".join(f"'{g.name}'" for g in running_owned_groups)
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"You cannot create a new group while you are still managing a running group: {names}. "
+                    "Please close or transfer ownership of your active group(s) first to protect your members' funds."
+                )
+            )
+
+        # 1c. Spam / DoS Protection (Max 5 active groups per user)
+        from sqlalchemy import func
+        owned_groups_count = session.exec(
+            select(func.count()).where(
+                Group.created_by_user_id == current_user.id,
+                Group.status == "ACTIVE"
+            )
+        ).one()
+        
+        if owned_groups_count >= 5:
+            raise HTTPException(
+                status_code=429,
+                detail="You have reached the maximum limit of 5 active owned groups. Please close or delete an unused group first."
+            )
 
     # 2. Setup Core Group with Collision-Safe Invite Code
     new_group_id = str(uuid.uuid4())

@@ -51,11 +51,13 @@ def create_target_savings_group(
         )
 
     # 3. Validation: Creator must have KYC Tier 2 (National ID verified)
-    if creator.kyc_tier < 2 or getattr(creator, "is_dependent_account", False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-            detail="Group creation requires full Tier 2 National ID (NIN) verification. Dependent accounts are not permitted."
-        )
+    from app.services.group.group_auth_service import is_unrestricted_group_creator
+    if not is_unrestricted_group_creator(creator):
+        if creator.kyc_tier < 2 or getattr(creator, "is_dependent_account", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, 
+                detail="Group creation requires full Tier 2 National ID (NIN) verification. Dependent accounts are not permitted."
+            )
 
     # 4. Generate unique IDs
     new_group_id = str(uuid.uuid4())

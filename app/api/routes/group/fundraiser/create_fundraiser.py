@@ -38,11 +38,13 @@ def create_fundraiser(
     current_time_ms = now_ms()
 
     # 1. KYC guard
-    if creator.kyc_tier < 2 or getattr(creator, "is_dependent_account", False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Starting a fundraiser requires full Tier 2 National ID (NIN) verification."
-        )
+    from app.services.group.group_auth_service import is_unrestricted_group_creator
+    if not is_unrestricted_group_creator(creator):
+        if creator.kyc_tier < 2 or getattr(creator, "is_dependent_account", False):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Starting a fundraiser requires full Tier 2 National ID (NIN) verification."
+            )
 
     # 2. Validation: campaign_deadline must be in the future if provided
     if request.campaign_deadline is not None and request.campaign_deadline <= current_time_ms:

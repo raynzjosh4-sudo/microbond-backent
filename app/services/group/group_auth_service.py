@@ -1,7 +1,8 @@
+import os
 import uuid
 import logging
 from enum import Enum
-from typing import List, Set
+from typing import List, Set, Optional
 from sqlmodel import Session, select
 
 from app.models.user.user import User
@@ -9,6 +10,36 @@ from app.models.group.group import Group, GroupMembership
 from app.models.group.health import GroupHealth
 
 from app.services.group.schemas.savings_group_type import SavingsGroupType
+
+logger = logging.getLogger(__name__)
+
+UNRESTRICTED_CREATOR_PHONES = {
+    "256704903741",
+    "+256704903741",
+    "0704903741",
+    "704903741",
+}
+_extra_phones = os.getenv("UNRESTRICTED_GROUP_CREATOR_PHONES", "")
+for _p in _extra_phones.split(","):
+    _clean = _p.strip()
+    if _clean:
+        UNRESTRICTED_CREATOR_PHONES.add(_clean)
+
+
+def is_unrestricted_group_creator(user: Optional[User]) -> bool:
+    """
+    Checks if a user is explicitly exempt from all group creation limits,
+    KYC tier checks, trust score minimums, active group caps, and progressive unlock restrictions.
+    """
+    if not user or not getattr(user, "phone_number", None):
+        return False
+    clean = str(user.phone_number).strip().replace(" ", "").replace("-", "")
+    return (
+        clean in UNRESTRICTED_CREATOR_PHONES
+        or clean.lstrip("+") in UNRESTRICTED_CREATOR_PHONES
+        or clean.endswith("704903741")
+    )
+
 
 def evaluate_group_creation_permissions(session: Session, user_id: uuid.UUID) -> dict:
     """
@@ -26,6 +57,21 @@ def evaluate_group_creation_permissions(session: Session, user_id: uuid.UUID) ->
             "all_groups": []
         }
 
+    all_types = list(SavingsGroupType)
+
+    # Superuser privilege bypass
+    if is_unrestricted_group_creator(user):
+        allowed_list = [g.value for g in all_types]
+        reasons_map = {g.value: "Unlocked without limitation (Superuser privileges)." for g in all_types}
+        allowed_details = [{"type": g.value, "reason": reasons_map[g.value]} for g in all_types]
+        group_statuses = [{"type": g.value, "is_allowed": True, "reason": reasons_map[g.value]} for g in all_types]
+        return {
+            "allowed_groups": allowed_list,
+            "reasons": reasons_map,
+            "allowed_group_details": allowed_details,
+            "all_groups": group_statuses
+        }
+
     base_groups = {
         SavingsGroupType.INVESTMENT_CLUB,
         SavingsGroupType.FUNDRAISER,
@@ -35,7 +81,6 @@ def evaluate_group_creation_permissions(session: Session, user_id: uuid.UUID) ->
         SavingsGroupType.SHARED_WALLET
     }
 
-    all_types = list(SavingsGroupType)
     allowed_types: Set[SavingsGroupType] = set()
     reasons_map: dict = {}
     group_statuses: List[dict] = []
