@@ -14,7 +14,7 @@ from app.models.group.settings import (
     GroupFinancialSettings,
     GroupVisibilitySettings
 )
-from app.models.group.chat.message import GroupChatMessage
+from app.models.group.chat import GroupChatMessage
 from app.services.audit_service import AuditService
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Privacy & Records Settings"])

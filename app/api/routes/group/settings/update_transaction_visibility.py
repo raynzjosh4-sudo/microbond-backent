@@ -22,6 +22,7 @@ class UpdateTransactionVisibilityRequest(BaseModel):
     vis_announce_admin_transactions: Optional[bool] = None
 
 @router.patch("/{group_id}/settings/transaction-visibility", summary="Admin: Update Transaction Messages Visibility")
+@router.patch("/{group_id}/settings/contribution-visibility", summary="Admin: Update Contribution Messages Visibility")
 @router.patch("/{group_id}/settings/loan-messages-visibility", summary="Admin: Update Loan & Investment Messages Visibility")
 def update_transaction_visibility_settings(
     group_id: str, 
