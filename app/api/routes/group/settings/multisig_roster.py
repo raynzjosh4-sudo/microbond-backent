@@ -94,12 +94,46 @@ def get_multisig_roster(
         else:
             eligible_members.append(member_data)
 
+    if not signers:
+        # Default all active admins to signers if no explicit signers are set
+        admin_members = [m for m, u in all_memberships if m.role == "ADMIN"]
+        if not admin_members and all_memberships:
+            admin_members = [all_memberships[0][0]]
+        for m in admin_members:
+            m.is_signer = True
+            session.add(m)
+        if admin_members:
+            session.commit()
+
+        # Re-populate signers and eligible_members
+        signers = []
+        eligible_members = []
+        for mem, u in all_memberships:
+            member_data = {
+                "user_id": str(u.id),
+                "full_name": u.full_name or "Unknown Member",
+                "phone_number": u.phone_number or "",
+                "role": mem.role,
+                "is_signer": bool(mem.is_signer),
+                "profile_picture_url": u.profile_picture_url,
+            }
+            if mem.is_signer:
+                signers.append(member_data)
+            else:
+                eligible_members.append(member_data)
+
     total_signers = len(signers)
     required = gov.multi_sig_required_approvals
 
-    # Ensure required does not exceed total signers in display
-    if total_signers > 0 and required > total_signers:
-        required = total_signers
+    if total_signers > 0:
+        if required > total_signers:
+            required = total_signers
+            gov.multi_sig_required_approvals = required
+            session.add(gov)
+            session.commit()
+    else:
+        required = 1
+        total_signers = 1
 
     return {
         "status": "success",

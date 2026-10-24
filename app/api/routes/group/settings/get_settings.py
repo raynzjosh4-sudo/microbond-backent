@@ -86,7 +86,34 @@ def get_governance_settings(
             GroupMembership.is_signer == True
         )
     ).all()
+    if not signers:
+        admins = session.exec(
+            select(GroupMembership).where(
+                GroupMembership.group_id == group_id,
+                GroupMembership.role == "ADMIN",
+                GroupMembership.status == "ACTIVE"
+            )
+        ).all()
+        if not admins:
+            admins = session.exec(
+                select(GroupMembership).where(
+                    GroupMembership.group_id == group_id,
+                    GroupMembership.status == "ACTIVE"
+                ).limit(1)
+            ).all()
+        for a in admins:
+            a.is_signer = True
+            session.add(a)
+        if admins:
+            session.commit()
+            signers = admins
+
     signers_count = len(signers) if signers else 1
+    actual_approvals = min(gov_settings.multi_sig_required_approvals, signers_count) if signers_count > 0 else 1
+    if gov_settings.multi_sig_required_approvals > signers_count and signers_count > 0:
+        gov_settings.multi_sig_required_approvals = actual_approvals
+        session.add(gov_settings)
+        session.commit()
 
     pending_payouts = session.exec(
         select(GroupPayout).where(
@@ -97,9 +124,8 @@ def get_governance_settings(
     pending_count = len(pending_payouts) if pending_payouts else 0
 
     response_data["total_signers_count"] = signers_count
-    response_data["signers_display"] = f"{gov_settings.multi_sig_required_approvals} of {max(signers_count, gov_settings.multi_sig_required_approvals)} Signers"
-    response_data["quorum_display"] = f"{gov_settings.multi_sig_required_approvals} of {max(signers_count, gov_settings.multi_sig_required_approvals)}"
-    response_data["pending_disbursals_count"] = pending_count
+    response_data["signers_display"] = f"{actual_approvals} of {signers_count} Signers"
+    response_data["quorum_display"] = f"{actual_approvals} of {signers_count}"
     response_data["my_approval_authorization"] = "Authorized" if (is_admin or getattr(membership, "is_signer", False)) else "Unauthorized"
     response_data["audit_status"] = "In Review" if gov_settings.is_audit_active else "Healthy"
     response_data["audit_status_title"] = "Active Audit In Progress" if gov_settings.is_audit_active else "No Active Audit"
