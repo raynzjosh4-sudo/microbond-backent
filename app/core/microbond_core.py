@@ -1318,4 +1318,124 @@ def is_name_similar(name_a: str, name_b: str, threshold: float = 75.0) -> str:
     })
 
 
+def calculate_single_health_grade(
+    group_id: str,
+    on_time_count: int,
+    late_count: int,
+    default_count: int,
+    total_defaulted_amount_minor: int = 0,
+    total_expected_amount_minor: int = 0,
+    members_in_arrears_count: int = 0,
+    total_active_members: int = 1,
+) -> str:
+    """
+    Evaluates group financial health score and letter grade.
+    Delegates to compiled Rust engine when available.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "calculate_single_health_grade"):
+        return _rust_core.calculate_single_health_grade(
+            group_id,
+            on_time_count,
+            late_count,
+            default_count,
+            total_defaulted_amount_minor,
+            total_expected_amount_minor,
+            members_in_arrears_count,
+            total_active_members,
+        )
+
+    completed = on_time_count + late_count + default_count
+    if completed > 0:
+        on_time_pct = (on_time_count / completed) * 100.0
+        default_pct = (default_count / completed) * 100.0
+    else:
+        on_time_pct = 100.0
+        default_pct = 0.0
+
+    arrears_ratio_pct = (members_in_arrears_count / total_active_members * 100.0) if total_active_members > 0 else 0.0
+
+    on_time_pts = round(on_time_pct * 0.60)
+    default_pts = round(max(0.0, 100.0 - default_pct) * 0.20)
+    solvency_pts = round(max(0.0, 100.0 - arrears_ratio_pct) * 0.20)
+
+    composite_score = max(0, min(100, int(on_time_pts + default_pts + solvency_pts)))
+
+    if composite_score >= 95:
+        grade, risk_tier = "A+", "LOW"
+    elif composite_score >= 85:
+        grade, risk_tier = "A", "LOW"
+    elif composite_score >= 75:
+        grade, risk_tier = "B", "MODERATE"
+    elif composite_score >= 60:
+        grade, risk_tier = "C", "MODERATE"
+    elif composite_score >= 45:
+        grade, risk_tier = "D", "HIGH"
+    else:
+        grade, risk_tier = "F", "CRITICAL"
+
+    return json.dumps({
+        "group_id": group_id,
+        "on_time_repayment_rate_pct": round(on_time_pct, 1),
+        "default_rate_pct": round(default_pct, 1),
+        "arrears_member_ratio_pct": round(arrears_ratio_pct, 1),
+        "composite_score": composite_score,
+        "grade": grade,
+        "risk_tier": risk_tier,
+    })
+
+
+def evaluate_benefit_eligibility(
+    require_guarantors: bool,
+    required_guarantors_count: int,
+    active_guarantors_count: int,
+    trust_score: int,
+    minimum_trust_score: Optional[int] = None,
+) -> str:
+    """
+    Evaluates whether a member is eligible for a benefit or payout based on guarantor requirements.
+    Delegates to compiled Rust engine when available.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "evaluate_benefit_eligibility"):
+        return _rust_core.evaluate_benefit_eligibility(
+            require_guarantors,
+            required_guarantors_count,
+            active_guarantors_count,
+            trust_score,
+            minimum_trust_score,
+        )
+
+    if minimum_trust_score is not None and trust_score < minimum_trust_score:
+        return json.dumps({
+            "is_eligible": False,
+            "active_guarantors_count": active_guarantors_count,
+            "required_guarantors_count": required_guarantors_count,
+            "trust_score": trust_score,
+            "minimum_trust_score": minimum_trust_score,
+            "status": "REJECTED_LOW_TRUST_SCORE",
+            "rejection_reason": f"Member Trust Score ({trust_score}) is below the required minimum of {minimum_trust_score}."
+        })
+
+    if require_guarantors and active_guarantors_count < required_guarantors_count:
+        return json.dumps({
+            "is_eligible": False,
+            "active_guarantors_count": active_guarantors_count,
+            "required_guarantors_count": required_guarantors_count,
+            "trust_score": trust_score,
+            "minimum_trust_score": minimum_trust_score,
+            "status": "REQUIRES_GUARANTOR",
+            "rejection_reason": f"Benefit requires {required_guarantors_count} active guarantor(s), but only {active_guarantors_count} verified."
+        })
+
+    return json.dumps({
+        "is_eligible": True,
+        "active_guarantors_count": active_guarantors_count,
+        "required_guarantors_count": required_guarantors_count,
+        "trust_score": trust_score,
+        "minimum_trust_score": minimum_trust_score,
+        "status": "APPROVED",
+        "rejection_reason": None
+    })
+
+
+
 

@@ -55,6 +55,7 @@ from .settings.timelock_disbursals import router as timelock_disbursals_router
 from .settings.multisig_roster import router as multisig_roster_router
 from .settings.quorum import router as quorum_router
 from .settings.my_authorization import router as my_authorization_router
+from .settings.trust_members import router as trust_members_router
 from .membership.statement import router as statement_router
 from .membership.savings_growth import router as savings_growth_router
 from .report.weekly_report import router as weekly_report_router
@@ -150,3 +151,4 @@ router.include_router(chat_messages_router)
 router.include_router(chat_websocket_router)
 router.include_router(chat_polls_router)
 router.include_router(pending_disbursals_router)
+router.include_router(trust_members_router)

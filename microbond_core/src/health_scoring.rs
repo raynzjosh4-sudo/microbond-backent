@@ -91,3 +91,110 @@ pub fn calculate_batch_health_grades(
     serde_json::to_string(&results)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Serialization error: {}", e)))
 }
+
+#[pyfunction]
+pub fn calculate_single_health_grade(
+    group_id: &str,
+    on_time_count: i64,
+    late_count: i64,
+    default_count: i64,
+    total_defaulted_amount_minor: i64,
+    total_expected_amount_minor: i64,
+    members_in_arrears_count: i32,
+    total_active_members: i32,
+) -> PyResult<String> {
+    let input = GroupHealthInput {
+        group_id: group_id.to_string(),
+        on_time_count,
+        late_count,
+        default_count,
+        total_defaulted_amount_minor,
+        total_expected_amount_minor,
+        members_in_arrears_count,
+        total_active_members,
+    };
+    let result = calculate_single_health_grade_pure(&input);
+    serde_json::to_string(&result)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Serialization error: {}", e)))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BenefitEligibilityResult {
+    pub is_eligible: bool,
+    pub active_guarantors_count: i32,
+    pub required_guarantors_count: i32,
+    pub trust_score: i32,
+    pub minimum_trust_score: Option<i32>,
+    pub status: String,
+    pub rejection_reason: Option<String>,
+}
+
+pub fn evaluate_benefit_eligibility_pure(
+    require_guarantors: bool,
+    required_guarantors_count: i32,
+    active_guarantors_count: i32,
+    trust_score: i32,
+    minimum_trust_score: Option<i32>,
+) -> BenefitEligibilityResult {
+    if let Some(min_score) = minimum_trust_score {
+        if trust_score < min_score {
+            return BenefitEligibilityResult {
+                is_eligible: false,
+                active_guarantors_count,
+                required_guarantors_count,
+                trust_score,
+                minimum_trust_score: Some(min_score),
+                status: "REJECTED_LOW_TRUST_SCORE".to_string(),
+                rejection_reason: Some(format!(
+                    "Member Trust Score ({}) is below the required minimum of {}.",
+                    trust_score, min_score
+                )),
+            };
+        }
+    }
+
+    if require_guarantors && active_guarantors_count < required_guarantors_count {
+        return BenefitEligibilityResult {
+            is_eligible: false,
+            active_guarantors_count,
+            required_guarantors_count,
+            trust_score,
+            minimum_trust_score,
+            status: "REQUIRES_GUARANTOR".to_string(),
+            rejection_reason: Some(format!(
+                "Benefit requires {} active guarantor(s), but only {} verified.",
+                required_guarantors_count, active_guarantors_count
+            )),
+        };
+    }
+
+    BenefitEligibilityResult {
+        is_eligible: true,
+        active_guarantors_count,
+        required_guarantors_count,
+        trust_score,
+        minimum_trust_score,
+        status: "APPROVED".to_string(),
+        rejection_reason: None,
+    }
+}
+
+#[pyfunction]
+pub fn evaluate_benefit_eligibility(
+    require_guarantors: bool,
+    required_guarantors_count: i32,
+    active_guarantors_count: i32,
+    trust_score: i32,
+    minimum_trust_score: Option<i32>,
+) -> PyResult<String> {
+    let result = evaluate_benefit_eligibility_pure(
+        require_guarantors,
+        required_guarantors_count,
+        active_guarantors_count,
+        trust_score,
+        minimum_trust_score,
+    );
+    serde_json::to_string(&result)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Serialization error: {}", e)))
+}
+

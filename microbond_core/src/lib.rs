@@ -51,8 +51,10 @@ fn microbond_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // 9. Time-Locked Quorum Decay (TLQD)
     m.add_function(wrap_pyfunction!(quorum_decay::calculate_decayed_quorum, m)?)?;
 
-    // 10. Batch Health Scoring
+    // 10. Batch Health Scoring & Benefit Eligibility
     m.add_function(wrap_pyfunction!(health_scoring::calculate_batch_health_grades, m)?)?;
+    m.add_function(wrap_pyfunction!(health_scoring::calculate_single_health_grade, m)?)?;
+    m.add_function(wrap_pyfunction!(health_scoring::evaluate_benefit_eligibility, m)?)?;
 
     // 11. Turn Swap Invariant Verification
     m.add_function(wrap_pyfunction!(turn_swap_engine::validate_turn_swap_eligibility, m)?)?;
