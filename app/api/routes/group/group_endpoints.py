@@ -41,6 +41,7 @@ from .settings.update_governance_visibility import router as governance_visibili
 from .settings.update_trust_visibility import router as trust_visibility_router
 from .settings.update_liquidity_visibility import router as liquidity_visibility_router
 from .settings.update_records_visibility import router as records_visibility_router
+from .settings.records import router as records_settings_router
 from .settings.update_transaction_visibility import router as transaction_visibility_router
 from .settings.update_reminders_visibility import router as reminders_visibility_router
 from .settings.update_liquidity import router as liquidity_settings_router
@@ -152,3 +153,4 @@ router.include_router(chat_websocket_router)
 router.include_router(chat_polls_router)
 router.include_router(pending_disbursals_router)
 router.include_router(trust_members_router)
+router.include_router(records_settings_router)
