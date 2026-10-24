@@ -1437,5 +1437,107 @@ def evaluate_benefit_eligibility(
     })
 
 
+def detect_guarantor_cycle(
+    existing_edges: list,
+    new_guarantor: str,
+    new_borrower: str,
+) -> bool:
+    """
+    Detects if adding a directed vouching edge (new_guarantor -> new_borrower)
+    creates a cyclic dependency in the vouching graph.
+    Delegates to compiled Rust engine when available.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "detect_guarantor_cycle"):
+        return _rust_core.detect_guarantor_cycle(existing_edges, new_guarantor, new_borrower)
+
+    if new_guarantor == new_borrower:
+        return True
+
+    from collections import defaultdict, deque
+    adj = defaultdict(list)
+    for g, b in existing_edges:
+        adj[str(g)].append(str(b))
+
+    visited = set()
+    queue = deque([str(new_borrower)])
+    visited.add(str(new_borrower))
+
+    while queue:
+        curr = queue.popleft()
+        if curr == str(new_guarantor):
+            return True
+        for neighbor in adj.get(curr, []):
+            if neighbor not in visited:
+                visited.add(neighbor)
+                queue.append(neighbor)
+    return False
+
+
+def evaluate_guarantor_capacity(
+    guarantor_trust_score: int,
+    total_contributed_minor: int,
+    current_active_liability_minor: int,
+    new_pledge_minor: int,
+    bad_obligations_count: int = 0,
+    min_guarantor_trust_score: int = 70,
+    base_allowance_minor: int = 500_000,
+) -> str:
+    """
+    Evaluates dynamic guarantor risk capacity based on trust score and contribution history.
+    Delegates to compiled Rust engine when available.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "evaluate_guarantor_capacity"):
+        return _rust_core.evaluate_guarantor_capacity(
+            guarantor_trust_score,
+            total_contributed_minor,
+            current_active_liability_minor,
+            new_pledge_minor,
+            bad_obligations_count,
+            min_guarantor_trust_score,
+            base_allowance_minor,
+        )
+
+    if bad_obligations_count > 0:
+        return json.dumps({
+            "is_approved": False,
+            "dynamic_max_liability_minor": 0,
+            "total_projected_liability_minor": current_active_liability_minor + new_pledge_minor,
+            "remaining_capacity_minor": 0,
+            "rejection_reason": "Guarantor currently has overdue or defaulted payments and cannot take on risk."
+        })
+
+    if guarantor_trust_score < min_guarantor_trust_score:
+        return json.dumps({
+            "is_approved": False,
+            "dynamic_max_liability_minor": 0,
+            "total_projected_liability_minor": current_active_liability_minor + new_pledge_minor,
+            "remaining_capacity_minor": 0,
+            "rejection_reason": f"Guarantor has a Trust Score of {guarantor_trust_score}. A minimum of {min_guarantor_trust_score} is required to vouch for others."
+        })
+
+    historical_weight = (total_contributed_minor * 5 * guarantor_trust_score) // 100
+    dynamic_max_liability = max(base_allowance_minor, historical_weight)
+    total_projected = current_active_liability_minor + new_pledge_minor
+
+    if total_projected > dynamic_max_liability:
+        remaining = max(0, dynamic_max_liability - current_active_liability_minor)
+        return json.dumps({
+            "is_approved": False,
+            "dynamic_max_liability_minor": dynamic_max_liability,
+            "total_projected_liability_minor": total_projected,
+            "remaining_capacity_minor": remaining,
+            "rejection_reason": f"Guarantor capacity exceeded. Remaining capacity is {remaining:,} UGX."
+        })
+
+    return json.dumps({
+        "is_approved": True,
+        "dynamic_max_liability_minor": dynamic_max_liability,
+        "total_projected_liability_minor": total_projected,
+        "remaining_capacity_minor": dynamic_max_liability - total_projected,
+        "rejection_reason": None
+    })
+
+
+
 
 
