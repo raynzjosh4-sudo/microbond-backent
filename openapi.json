@@ -3244,7 +3244,148 @@
         }
       }
     },
+    "/api/v1/groups/rotating/{group_id}/settings": {
+      "get": {
+        "tags": [
+          "Rotating Groups"
+        ],
+        "summary": "Get Rotating Group Settings (Alias)",
+        "operationId": "get_rotating_group_settings_api_v1_groups_rotating__group_id__settings_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Rotating Groups"
+        ],
+        "summary": "Update Rotating Group Settings (Alias)",
+        "operationId": "update_rotating_group_settings_api_v1_groups_rotating__group_id__settings_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRotatingSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/groups/rotating/{group_id}/settings/rotating": {
+      "get": {
+        "tags": [
+          "Rotating Groups"
+        ],
+        "summary": "Get Rotating Group Settings",
+        "operationId": "get_rotating_group_settings_api_v1_groups_rotating__group_id__settings_rotating_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "Rotating Groups"
@@ -3915,6 +4056,50 @@
       }
     },
     "/api/v1/groups/fundraiser/{group_id}/settings": {
+      "get": {
+        "tags": [
+          "Fundraiser Groups"
+        ],
+        "summary": "Get fundraiser campaign settings",
+        "description": "Returns the locked campaign configuration and mutable settings/counters.",
+        "operationId": "get_fundraiser_settings_api_v1_groups_fundraiser__group_id__settings_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "Fundraiser Groups"
@@ -4210,6 +4395,50 @@
       }
     },
     "/api/v1/groups/shared-wallet/{group_id}/settings": {
+      "get": {
+        "tags": [
+          "Shared Wallet Groups"
+        ],
+        "summary": "Get shared wallet settings and operational limits",
+        "description": "Returns the immutable config and live operational limits for the Shared Wallet.",
+        "operationId": "get_shared_wallet_settings_api_v1_groups_shared_wallet__group_id__settings_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "Shared Wallet Groups"
@@ -4541,6 +4770,50 @@
       }
     },
     "/api/v1/groups/welfare-fund/{group_id}/settings": {
+      "get": {
+        "tags": [
+          "Welfare Fund Groups"
+        ],
+        "summary": "Get welfare fund settings and rules",
+        "description": "Returns the welfare fund constitutional rules and mutable operational settings.",
+        "operationId": "get_welfare_fund_settings_api_v1_groups_welfare_fund__group_id__settings_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "Welfare Fund Groups"
@@ -4866,6 +5139,50 @@
       }
     },
     "/api/v1/groups/event-committee/{group_id}/settings": {
+      "get": {
+        "tags": [
+          "Event Committee Groups"
+        ],
+        "summary": "Get event committee settings and rules",
+        "description": "Returns the event budget config and live mutable operational settings.",
+        "operationId": "get_event_committee_settings_api_v1_groups_event_committee__group_id__settings_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "Event Committee Groups"
@@ -5171,12 +5488,56 @@
       }
     },
     "/api/v1/groups/investment-club/{group_id}/settings": {
+      "get": {
+        "tags": [
+          "Investment Club Groups"
+        ],
+        "summary": "Get investment club settings and credit rules",
+        "description": "Returns the investment club constitutional rules and mutable operational settings.",
+        "operationId": "get_investment_club_settings_api_v1_groups_investment_club__group_id__settings_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "Investment Club Groups"
         ],
         "summary": "Admin updates mutable club settings",
-        "description": "Updates mutable operational settings for the Investment Club:\n- minimum_purchase_quota\n- proposal_approval_threshold_pct\n- admin_management_fee_pct\n- allow_internal_share_transfers\n- enable_late_fees",
+        "description": "Updates mutable operational settings for the Investment Club:\n- minimum_purchase_quota\n- proposal_approval_threshold_pct\n- admin_management_fee_pct\n- allow_internal_share_transfers\n- enable_late_fees\n- internal lending & credit rules\n- fund stability & reminders",
         "operationId": "update_investment_club_settings_api_v1_groups_investment_club__group_id__settings_patch",
         "security": [
           {
@@ -5912,12 +6273,56 @@
       }
     },
     "/api/v1/groups/association-dues/{group_id}/settings": {
+      "get": {
+        "tags": [
+          "Association Dues Groups"
+        ],
+        "summary": "Get association dues settings and arrears policies",
+        "description": "Returns the association dues subscription rules and operational arrears settings.",
+        "operationId": "get_association_settings_api_v1_groups_association_dues__group_id__settings_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "Association Dues Groups"
         ],
         "summary": "Admin updates mutable operational settings",
-        "description": "Updates mutable operational settings for the Association:\n- auto_sweep_trigger\n- allow_advance_payments\n- grace_period_days\n- late_fee_amount\n- arrears_action\n- max_missed_cycles_allowed\n- show_defaulters_publicly\n- treasury_ledger_visibility",
+        "description": "Updates mutable operational settings for the Association:\n- auto_sweep_trigger\n- allow_advance_payments\n- allow_installments\n- grace_period_days\n- late_fee_amount\n- arrears_action\n- max_missed_cycles_allowed\n- show_defaulters_publicly\n- treasury_ledger_visibility",
         "operationId": "update_association_settings_api_v1_groups_association_dues__group_id__settings_patch",
         "security": [
           {
@@ -21994,7 +22399,8 @@
                 "type": "null"
               }
             ],
-            "title": "Contribution Amount"
+            "title": "Contribution Amount",
+            "description": "Per-cycle contribution amount"
           },
           "group_start_time": {
             "anyOf": [
@@ -22005,7 +22411,20 @@
                 "type": "null"
               }
             ],
-            "title": "Group Start Time"
+            "title": "Group Start Time",
+            "description": "Start time epoch timestamp"
+          },
+          "collection_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Time",
+            "description": "Cutoff time of day (e.g. 18:00)"
           },
           "payout_order_strategy": {
             "anyOf": [
@@ -22016,7 +22435,33 @@
                 "type": "null"
               }
             ],
-            "title": "Payout Order Strategy"
+            "title": "Payout Order Strategy",
+            "description": "Randomized by App, Fixed Roster, Admin Decided, Bidding/Auction"
+          },
+          "is_payout_order_locked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Payout Order Locked",
+            "description": "Freeze payout order schedule"
+          },
+          "minimum_kyc_tier": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minimum Kyc Tier"
           },
           "require_guarantor": {
             "anyOf": [
@@ -22028,6 +22473,50 @@
               }
             ],
             "title": "Require Guarantor"
+          },
+          "guarantor_default_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Guarantor Default Action"
+          },
+          "allow_partial_payments": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Partial Payments"
+          },
+          "allow_advance_deposits": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Advance Deposits"
+          },
+          "enforce_payout_holds": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enforce Payout Holds"
           }
         },
         "type": "object",

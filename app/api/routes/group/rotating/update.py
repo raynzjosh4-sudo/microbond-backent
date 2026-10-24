@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session
-from sqlalchemy import cast, String
+from sqlmodel import Session, select
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import datetime
 
 from app.core.database import get_session
@@ -13,42 +12,115 @@ from app.models.group.rotating import RotatingGroupDetails
 
 router = APIRouter()
 
+
 class UpdateRotatingSettingsRequest(BaseModel):
     # Logistics
-    contribution_amount: Optional[float] = None
-    group_start_time: Optional[int] = None
-    payout_order_strategy: Optional[str] = None
-    require_guarantor: Optional[bool] = None
+    contribution_amount: Optional[float] = Field(default=None, description="Per-cycle contribution amount")
+    group_start_time: Optional[int] = Field(default=None, description="Start time epoch timestamp")
+    collection_time: Optional[str] = Field(default=None, description="Cutoff time of day (e.g. 18:00)")
+    payout_order_strategy: Optional[str] = Field(default=None, description="Randomized by App, Fixed Roster, Admin Decided, Bidding/Auction")
+    is_payout_order_locked: Optional[bool] = Field(default=None, description="Freeze payout order schedule")
+    
+    # Risk controls
+    minimum_kyc_tier: Optional[int] = Field(default=None, ge=1, le=3)
+    require_guarantor: Optional[bool] = Field(default=None)
+    guarantor_default_action: Optional[str] = Field(default=None)
+    allow_partial_payments: Optional[bool] = Field(default=None)
+    allow_advance_deposits: Optional[bool] = Field(default=None)
+    enforce_payout_holds: Optional[bool] = Field(default=None)
+
+
+@router.get("/{group_id}/settings/rotating", summary="Get Rotating Group Settings")
+@router.get("/{group_id}/settings", summary="Get Rotating Group Settings (Alias)")
+def get_rotating_group_settings(
+    group_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found.")
+
+    membership = session.exec(
+        select(GroupMembership).where(
+            GroupMembership.group_id == group_id,
+            GroupMembership.user_id == current_user.id,
+            GroupMembership.status == "ACTIVE"
+        )
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="You must be an active member of this group.")
+
+    details = session.exec(
+        select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group_id)
+    ).first()
+    if not details:
+        raise HTTPException(status_code=404, detail="Rotating group details not found.")
+
+    return {
+        "status": "success",
+        "data": {
+            "group_id": group_id,
+            "group_name": group.name,
+            "is_admin": membership.role == "ADMIN",
+            "contribution_amount": details.contribution_amount,
+            "payouts_per_cycle": details.payouts_per_cycle,
+            "number_of_cycles": details.number_of_cycles,
+            "collection_frequency_days": details.collection_frequency_days,
+            "collection_time": details.collection_time,
+            "group_start_time": details.group_start_time,
+            "payout_order_strategy": details.payout_order_strategy,
+            "is_payout_order_locked": details.is_payout_order_locked,
+            "total_expected_pool_per_cycle": details.total_expected_pool_per_cycle,
+            "minimum_kyc_tier": details.minimum_kyc_tier,
+            "require_guarantor": details.require_guarantor,
+            "guarantor_default_action": details.guarantor_default_action,
+            "allow_partial_payments": details.allow_partial_payments,
+            "allow_advance_deposits": details.allow_advance_deposits,
+            "enforce_payout_holds": details.enforce_payout_holds,
+            "current_cycle": details.current_cycle,
+        }
+    }
+
 
 @router.put("/{group_id}/settings/rotating", summary="Update Rotating Group Settings")
 @router.patch("/{group_id}/settings/rotating", summary="Partial Update Rotating Group Settings")
+@router.patch("/{group_id}/settings", summary="Update Rotating Group Settings (Alias)")
 def update_rotating_group_settings(
     group_id: str,
     request: UpdateRotatingSettingsRequest,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    group = session.query(Group).filter(Group.group_id == group_id).with_for_update().first()
+    group = session.exec(select(Group).where(Group.group_id == group_id)).first()
     if not group:
         raise HTTPException(status_code=404, detail="Group not found.")
         
-    admin_membership = session.query(GroupMembership).filter(
-        GroupMembership.group_id == group.group_id,
-        cast(GroupMembership.user_id, String) == str(current_user.id),
-        GroupMembership.role == "ADMIN",
-        GroupMembership.status == "ACTIVE"
+    admin_membership = session.exec(
+        select(GroupMembership).where(
+            GroupMembership.group_id == group_id,
+            GroupMembership.user_id == current_user.id,
+            GroupMembership.role == "ADMIN",
+            GroupMembership.status == "ACTIVE"
+        )
     ).first()
     
     if not admin_membership:
         raise HTTPException(status_code=403, detail="Only the Group Admin can update settings.")
 
-    details = session.query(RotatingGroupDetails).filter(RotatingGroupDetails.group_id == group.group_id).first()
+    details = session.exec(
+        select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group_id)
+    ).first()
+    if not details:
+        raise HTTPException(status_code=404, detail="Rotating group details not found.")
     
     if group.status == "ACTIVE" or details.is_payout_order_locked:
-        raise HTTPException(
-            status_code=400, 
-            detail="Settings are permanently locked. You cannot modify rotating logistics after the cycle has launched."
-        )
+        # If locked or active, only allow toggling operational flags that don't alter the financial pool core
+        if request.contribution_amount is not None and request.contribution_amount != details.contribution_amount:
+            raise HTTPException(
+                status_code=400, 
+                detail="Settings are permanently locked. You cannot modify contribution amounts after the cycle has launched."
+            )
 
     if request.contribution_amount is not None:
         details.contribution_amount = request.contribution_amount
@@ -56,16 +128,43 @@ def update_rotating_group_settings(
             details.total_expected_pool_per_cycle = request.contribution_amount * group.max_members
             
     if request.group_start_time is not None:
-        current_time = int(datetime.datetime.utcnow().timestamp())
+        current_time = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
         if request.group_start_time <= current_time:
             raise HTTPException(status_code=400, detail="New start time must be in the future.")
         details.group_start_time = request.group_start_time
         
+    if request.collection_time is not None:
+        details.collection_time = request.collection_time
     if request.payout_order_strategy is not None:
         details.payout_order_strategy = request.payout_order_strategy
-        
+    if request.is_payout_order_locked is not None:
+        details.is_payout_order_locked = request.is_payout_order_locked
+    if request.minimum_kyc_tier is not None:
+        details.minimum_kyc_tier = request.minimum_kyc_tier
     if request.require_guarantor is not None:
         details.require_guarantor = request.require_guarantor
+    if request.guarantor_default_action is not None:
+        details.guarantor_default_action = request.guarantor_default_action
+    if request.allow_partial_payments is not None:
+        details.allow_partial_payments = request.allow_partial_payments
+    if request.allow_advance_deposits is not None:
+        details.allow_advance_deposits = request.allow_advance_deposits
+    if request.enforce_payout_holds is not None:
+        details.enforce_payout_holds = request.enforce_payout_holds
 
+    session.add(details)
     session.commit()
-    return {"status": "success", "message": "Rotating specific settings updated successfully."}
+    session.refresh(details)
+    return {
+        "status": "success",
+        "message": "Rotating specific settings updated successfully.",
+        "data": {
+            "contribution_amount": details.contribution_amount,
+            "payout_order_strategy": details.payout_order_strategy,
+            "is_payout_order_locked": details.is_payout_order_locked,
+            "require_guarantor": details.require_guarantor,
+            "allow_partial_payments": details.allow_partial_payments,
+            "allow_advance_deposits": details.allow_advance_deposits,
+            "enforce_payout_holds": details.enforce_payout_holds
+        }
+    }

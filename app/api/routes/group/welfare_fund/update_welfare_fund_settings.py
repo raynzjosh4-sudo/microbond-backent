@@ -12,6 +12,38 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
+@router.get("/{group_id}/settings", summary="Get welfare fund settings and rules")
+def get_welfare_fund_settings(
+    group_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns the welfare fund constitutional rules and mutable operational settings.
+    """
+    config, settings = get_welfare_fund(group_id, session)
+
+    return {
+        "status": "success",
+        "data": {
+            "group_id": group_id,
+            "welfare_config": config.model_dump(mode="json"),
+            "operational_settings": {
+                "minimum_reserve_balance": settings.minimum_reserve_balance,
+                "approval_timeout_hours": settings.approval_timeout_hours,
+                "missed_payment_action": settings.missed_payment_action,
+                "enable_late_fees": settings.enable_late_fees,
+                "allow_annual_dividend_split": settings.allow_annual_dividend_split,
+                "current_balance": settings.current_balance,
+                "total_collected": settings.total_collected,
+                "total_paid_out": settings.total_paid_out,
+                "is_active": settings.is_active,
+            }
+        }
+    }
+
+
 @router.patch("/{group_id}/settings", summary="Admin updates mutable operational settings")
 def update_welfare_fund_settings(
     group_id: str,
