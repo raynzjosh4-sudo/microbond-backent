@@ -11,7 +11,10 @@ class PayoutOrderStrategy(str, Enum):
 class RotatingGroupCreateRequest(BaseModel):
     name: str = Field(..., description="Name of the savings group")
     description: str = Field(default="", description="Optional description")
-    group_image_url: str = Field(..., description="URL of the uploaded group image")
+    group_image_url: str = Field(
+        default="https://pub-2895dbbc59724eaeb22e030eb9bbdd60.r2.dev/groups/default_rotating.png",
+        description="URL of the uploaded group image or Cloudflare R2 URL"
+    )
     type: str = Field(..., description="e.g. MERRY_GO_ROUND, GOAL_SAVINGS")
     payment_mode: str = Field(default="OBLIGATION")
     visibility: str = Field(default="PRIVATE")

@@ -68,7 +68,7 @@ def create_group(
         group_id=new_group_id,
         name=request.name,
         description=request.description,
-        group_image_url=request.group_image_url,
+        group_image_url=(request.group_image_url.strip() if request.group_image_url and request.group_image_url.strip() else "https://pub-2895dbbc59724eaeb22e030eb9bbdd60.r2.dev/groups/default_rotating.png"),
         type=request.type,
         payment_mode=request.payment_mode,
         visibility=request.visibility,

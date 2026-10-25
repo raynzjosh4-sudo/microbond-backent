@@ -329,3 +329,86 @@ def remove_group_image(
             "updated_at": group.updated_at,
         },
     }
+
+
+@router.post("/upload-image", summary="Upload Group Image to Cloudflare R2 (Pre-Creation)")
+async def upload_standalone_group_image(
+    file: UploadFile = File(..., description="Image file (JPEG, PNG, or WebP — max 5 MB)"),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Upload an image file directly to Cloudflare R2 before group creation.
+    Returns the public Cloudflare R2 CDN URL to include in the group creation payload.
+    """
+    content_type = file.content_type or ""
+    extension = ALLOWED_IMAGE_TYPES.get(content_type)
+    if not extension and file.filename:
+        file_ext = file.filename.rsplit(".", 1)[-1].lower()
+        if file_ext in ["jpg", "jpeg"]:
+            extension = "jpg"
+            content_type = "image/jpeg"
+        elif file_ext == "png":
+            extension = "png"
+            content_type = "image/png"
+        elif file_ext == "webp":
+            extension = "webp"
+            content_type = "image/webp"
+
+    file_bytes = await file.read()
+    if len(file_bytes) > MAX_IMAGE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Image exceeds the 5 MB limit ({len(file_bytes) // 1024} KB received).",
+        )
+
+    if not extension:
+        try:
+            with Image.open(io.BytesIO(file_bytes)) as test_img:
+                fmt = (test_img.format or "").lower()
+                if fmt in ["jpeg", "jpg"]:
+                    extension = "jpg"
+                    content_type = "image/jpeg"
+                elif fmt == "png":
+                    extension = "png"
+                    content_type = "image/png"
+                elif fmt == "webp":
+                    extension = "webp"
+                    content_type = "image/webp"
+        except Exception:
+            pass
+
+    if not extension:
+        extension = "jpg"
+        content_type = "image/jpeg"
+
+    try:
+        with Image.open(io.BytesIO(file_bytes)) as img:
+            img.verify()
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or corrupt image file. Please upload a valid JPEG, PNG, or WebP.",
+        )
+
+    # Upload bytes directly to Cloudflare R2
+    image_url = await upload_bytes_to_r2(
+        file_bytes=file_bytes,
+        folder=f"groups/pre-creation/{current_user.id}",
+        content_type=content_type,
+        extension=extension,
+    )
+    if not image_url:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to upload image to Cloudflare R2 storage. Please try again.",
+        )
+
+    return {
+        "status": "success",
+        "message": "Image uploaded successfully to Cloudflare R2",
+        "image_url": image_url,
+        "data": {
+            "image_url": image_url
+        }
+    }
+
