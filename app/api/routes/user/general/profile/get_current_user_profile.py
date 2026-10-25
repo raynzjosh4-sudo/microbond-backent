@@ -54,9 +54,11 @@ def get_current_user_profile(
     return {
         "status": "success",
         "data": {
+            "id": str(current_user.id),
             "user_id": str(current_user.id),
             "phone_number": current_user.phone_number,
             "full_name": current_user.full_name,
+            "avatar_url": current_user.profile_picture_url,
             "profile_picture_url": current_user.profile_picture_url,
             "avatar_color": current_user.avatar_color,
             "about_status": current_user.about_status,

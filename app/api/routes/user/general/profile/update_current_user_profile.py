@@ -24,26 +24,27 @@ def update_current_user_profile(
 
     if request.full_name is not None:
         clean_name = request.full_name.strip()
-        if len(clean_name) < 2:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Full name must be at least 2 characters long.",
-            )
-        db_user.full_name = clean_name
+        if clean_name:
+            if len(clean_name) < 2:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Full name must be at least 2 characters long.",
+                )
+            db_user.full_name = clean_name
 
-        # Sync KycProfile
-        kyc_profile = session.exec(
-            select(KycProfile).where(KycProfile.user_id == db_user.id)
-        ).first()
+            # Sync KycProfile
+            kyc_profile = session.exec(
+                select(KycProfile).where(KycProfile.user_id == db_user.id)
+            ).first()
 
-        if kyc_profile:
-            parts = clean_name.split()
-            kyc_profile.first_name = parts[0]
-            kyc_profile.last_name = (
-                " ".join(parts[1:]) if len(parts) > 1 else ""
-            )
-            kyc_profile.sim_registered_name = clean_name
-            session.add(kyc_profile)
+            if kyc_profile:
+                parts = clean_name.split()
+                kyc_profile.first_name = parts[0]
+                kyc_profile.last_name = (
+                    " ".join(parts[1:]) if len(parts) > 1 else ""
+                )
+                kyc_profile.sim_registered_name = clean_name
+                session.add(kyc_profile)
 
     if request.profile_picture_url is not None:
         db_user.profile_picture_url = (
@@ -67,10 +68,14 @@ def update_current_user_profile(
     return {
         "status": "success",
         "message": "User profile updated successfully.",
+        "avatar_url": db_user.profile_picture_url,
+        "profile_picture_url": db_user.profile_picture_url,
         "data": {
+            "id": str(db_user.id),
             "user_id": str(db_user.id),
             "full_name": db_user.full_name,
             "phone_number": db_user.phone_number,
+            "avatar_url": db_user.profile_picture_url,
             "profile_picture_url": db_user.profile_picture_url,
             "avatar_color": db_user.avatar_color,
             "about_status": db_user.about_status,

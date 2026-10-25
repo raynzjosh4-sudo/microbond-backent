@@ -77,8 +77,12 @@ async def upload_user_avatar(
     return {
         "status": "success",
         "message": "Avatar uploaded and updated successfully.",
+        "avatar_url": db_user.profile_picture_url,
+        "profile_picture_url": db_user.profile_picture_url,
         "data": {
+            "id": str(db_user.id),
             "user_id": str(db_user.id),
+            "avatar_url": db_user.profile_picture_url,
             "profile_picture_url": db_user.profile_picture_url,
         },
     }

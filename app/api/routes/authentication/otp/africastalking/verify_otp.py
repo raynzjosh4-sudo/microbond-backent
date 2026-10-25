@@ -123,6 +123,7 @@ def verify_otp(
             is_profile_complete=user.is_profile_complete,
             has_app_pin=bool(user.hashed_pin is not None),
             full_name=user.full_name,
+            avatar_url=user.profile_picture_url,
             profile_picture_url=user.profile_picture_url,
             avatar_color=user.avatar_color,
             about_status=user.about_status,
