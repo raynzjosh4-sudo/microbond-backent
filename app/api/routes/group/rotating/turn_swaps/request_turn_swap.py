@@ -1,4 +1,5 @@
 import json
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 from app.core.database import get_session
@@ -145,3 +146,46 @@ def request_turn_swap(
         )
 
     return swap
+
+
+@router.get("/{group_id}/swaps", summary="List turn swap requests for group")
+def list_turn_swaps(
+    group_id: str,
+    status: Optional[str] = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns turn swap requests in this group, enriched with requester and target names.
+    Filterable by status (e.g. 'PENDING', 'ACCEPTED', 'REJECTED', 'PENDING_ADMIN').
+    """
+    query = session.query(TurnSwapRequest).filter(TurnSwapRequest.group_id == group_id)
+    if status:
+        query = query.filter(TurnSwapRequest.status == status.upper())
+    swaps = query.order_by(TurnSwapRequest.created_at.desc()).all()
+
+    user_ids = set()
+    for s in swaps:
+        user_ids.add(s.requester_user_id)
+        user_ids.add(s.target_user_id)
+
+    users = session.query(User).filter(User.id.in_(user_ids)).all() if user_ids else []
+    user_map = {u.id: u.full_name or "Unknown" for u in users}
+
+    return [
+        {
+            "swap_request_id": s.swap_request_id,
+            "group_id": s.group_id,
+            "requester_user_id": str(s.requester_user_id),
+            "requester_name": user_map.get(s.requester_user_id, "Unknown"),
+            "requester_cycle_number": s.requester_cycle_number,
+            "target_user_id": str(s.target_user_id),
+            "target_name": user_map.get(s.target_user_id, "Unknown"),
+            "target_cycle_number": s.target_cycle_number,
+            "status": s.status,
+            "created_at": s.created_at,
+            "updated_at": s.updated_at
+        }
+        for s in swaps
+    ]
+
