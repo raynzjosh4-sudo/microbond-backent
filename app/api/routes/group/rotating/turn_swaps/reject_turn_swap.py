@@ -15,9 +15,10 @@ def reject_turn_swap(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    swap = session.query(TurnSwapRequest).filter_by(
-        swap_request_id=swap_request_id,
-        group_id=group_id
+    is_numeric = str(swap_request_id).isdigit()
+    swap = session.query(TurnSwapRequest).filter(
+        TurnSwapRequest.group_id == group_id,
+        (TurnSwapRequest.swap_request_id == swap_request_id) | (TurnSwapRequest.id == (int(swap_request_id) if is_numeric else -1))
     ).first()
     
     if not swap:

@@ -21,13 +21,13 @@ def request_turn_swap(
     current_user: User = Depends(get_current_user)
 ):
     # 1. Check if group allows turn swapping
-    settings = session.query(GroupGovernanceSettings).filter_by(group_id=group_id).first()
-    if settings and not settings.allow_turn_swaps:
-        raise HTTPException(status_code=403, detail="This group does not allow turn swapping.")
-        
     rotating_details = session.query(RotatingGroupDetails).filter_by(group_id=group_id).first()
     if not rotating_details:
         raise HTTPException(status_code=400, detail="Not a rotating savings group.")
+
+    settings = session.query(GroupGovernanceSettings).filter_by(group_id=group_id).first()
+    if (settings and not settings.allow_turn_swaps) or not getattr(rotating_details, "allow_turn_swaps", True):
+        raise HTTPException(status_code=403, detail="This group does not allow turn swapping.")
 
     # 2. Find pending payouts for both users
     requester_payout = session.query(GroupPayout).filter(
@@ -48,6 +48,24 @@ def request_turn_swap(
     if not target_payout:
         raise HTTPException(status_code=400, detail="Target user has no pending payouts to swap.")
 
+    # 2b. Enforce Guarantor check for early turn swaps
+    if getattr(rotating_details, "require_guarantor", False):
+        from app.models.group.finance import GuarantorPledge
+        total_cycles = rotating_details.number_of_cycles or 10
+        half_mark = (total_cycles + 1) // 2
+        for moving_user_id, destination_cycle in [(current_user.id, target_payout.cycle_number), (payload.target_user_id, requester_payout.cycle_number)]:
+            if destination_cycle <= half_mark:
+                pledge = session.query(GuarantorPledge).filter(
+                    GuarantorPledge.group_id == group_id,
+                    GuarantorPledge.borrower_user_id == moving_user_id,
+                    GuarantorPledge.status == "ACTIVE"
+                ).first()
+                if not pledge:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Cannot swap into early Round {destination_cycle} without an active guarantor."
+                    )
+
     # 3. Check if an active swap request already exists between these cycles
     existing_swap = session.query(TurnSwapRequest).filter(
         TurnSwapRequest.group_id == group_id,
@@ -58,6 +76,7 @@ def request_turn_swap(
     
     if existing_swap:
         raise HTTPException(status_code=400, detail="A pending swap request already exists for these turns.")
+
 
     # 4. Authoritative microbond_core Invariant Verification
     target_user = session.get(User, payload.target_user_id)

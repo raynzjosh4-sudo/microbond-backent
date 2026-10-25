@@ -19,9 +19,10 @@ def accept_turn_swap(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    swap = session.query(TurnSwapRequest).filter_by(
-        swap_request_id=swap_request_id,
-        group_id=group_id
+    is_numeric = str(swap_request_id).isdigit()
+    swap = session.query(TurnSwapRequest).filter(
+        TurnSwapRequest.group_id == group_id,
+        (TurnSwapRequest.swap_request_id == swap_request_id) | (TurnSwapRequest.id == (int(swap_request_id) if is_numeric else -1))
     ).first()
     
     if not swap:
@@ -100,8 +101,34 @@ def accept_turn_swap(
         session.commit()
         raise HTTPException(status_code=400, detail=f"Swap rejected by risk engine: {val_res['rejection_reason']}")
 
-    # 3. PERFORM THE SWAP
-    # Just exchange the user_ids!
+    approval_mode = getattr(rotating_details, "turn_swap_approval_mode", "MUTUAL_CONSENT") or "MUTUAL_CONSENT"
+
+    # 3. IF ADMIN APPROVAL IS REQUIRED, GATE THE SWAP
+    if approval_mode == "ADMIN_APPROVAL_REQUIRED":
+        swap.status = "PENDING_ADMIN_APPROVAL"
+        swap.updated_at = utc_now()
+        session.commit()
+
+        # Notify the requester that peer accepted, now pending admin review
+        requester_user = session.get(User, swap.requester_user_id)
+        if requester_user and requester_user.fcm_token:
+            send_push_notification(
+                token=requester_user.fcm_token,
+                title="Swap Agreed — Awaiting Admin Approval ⏳",
+                body=f"{current_user.full_name} agreed to swap. The request is now waiting for Group Admin approval.",
+                data={"type": "SWAP_PENDING_ADMIN", "group_id": group_id}
+            )
+
+        return {
+            "status": "success",
+            "message": "Turn swap agreed by both members. Awaiting Group Admin final approval.",
+            "data": {
+                "swap_id": swap.id,
+                "status": "PENDING_ADMIN_APPROVAL"
+            }
+        }
+
+    # 4. PERFORM IMMEDIATE SWAP (MUTUAL CONSENT)
     requester_payout.user_id = swap.target_user_id
     target_payout.user_id = swap.requester_user_id
     
@@ -121,3 +148,4 @@ def accept_turn_swap(
         )
 
     return {"status": "success", "message": "Turn swap successfully completed! Your payout position has been updated."}
+

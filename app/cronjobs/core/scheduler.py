@@ -6,6 +6,8 @@ from app.cronjobs.launcher.group_launcher import check_and_launch_pending_groups
 from app.cronjobs.finance.late_fee_processor import process_daily_late_fees
 from app.cronjobs.finance.payout_disbursement_worker import process_due_group_payouts
 from app.cronjobs.health.daily_health_ratings import process_daily_health_ratings
+from app.cronjobs.finance.collection_reminder_worker import process_collection_reminders
+from app.cronjobs.finance.auto_debit_prompt_worker import process_auto_debit_prompts
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +57,26 @@ def start_scheduler():
         id="process_health_ratings",
         name="Process Group Health Ratings",
         replace_existing=True
+    )
+
+    # Run the Collection Reminder Worker every 15 minutes
+    scheduler.add_job(
+        process_collection_reminders,
+        trigger=IntervalTrigger(minutes=15),
+        id="process_collection_reminders",
+        name="Process Rotating Collection Reminders",
+        replace_existing=True,
+        coalesce=True
+    )
+
+    # Run the Auto-Debit Prompt Worker every 5 minutes
+    scheduler.add_job(
+        process_auto_debit_prompts,
+        trigger=IntervalTrigger(minutes=5),
+        id="process_auto_debit_prompts",
+        name="Process Auto-Debit USSD Prompts",
+        replace_existing=True,
+        coalesce=True
     )
     
     scheduler.start()

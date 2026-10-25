@@ -14,7 +14,7 @@ from .dispatch_payout_notifications import dispatch_payout_notifications
 logger = logging.getLogger(__name__)
 
 
-def process_single_payout(session: Session, payout: GroupPayout, now_ms: int):
+def process_single_payout(session: Session, payout: GroupPayout, now_ms: int, force_disburse: bool = False):
     # Fetch User and Group
     user = session.exec(select(User).where(User.id == payout.user_id)).first()
     group = session.exec(select(Group).where(Group.group_id == payout.group_id)).first()
@@ -71,6 +71,48 @@ def process_single_payout(session: Session, payout: GroupPayout, now_ms: int):
         session.commit()
         return
 
+    # ── 3b. Enforce Rotating Group Settings (Auto-Disburse & Multi-Sig) ───────
+    from app.models.group.rotating import RotatingGroupDetails
+    rotating = None
+    if group.type == "MERRY_GO_ROUND":
+        rotating = session.exec(
+            select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == payout.group_id)
+        ).first()
+
+    if rotating and not force_disburse:
+        # Check Multi-Sig requirement first
+        if rotating.multi_sig_payout_approval and payout.status != "APPROVED_FOR_DISBURSEMENT":
+            payout.status = "PENDING_MULTISIG_APPROVAL"
+            payout.hold_reason = "Awaiting required multi-signature approvals (Admin & Treasurer)."
+            session.add(payout)
+            session.commit()
+            logger.info(f"[PAYOUT_WORKER] Payout {payout.id} held for Multi-Sig approval.")
+            return
+
+        # Check Auto-Disburse requirement
+        if not rotating.auto_disburse_when_full and payout.status != "APPROVED_FOR_DISBURSEMENT":
+            payout.status = "READY_FOR_DISBURSEMENT"
+            payout.hold_reason = "Awaiting manual disbursement release by Group Admin."
+            session.add(payout)
+            session.commit()
+            logger.info(f"[PAYOUT_WORKER] Payout {payout.id} waiting for manual admin release.")
+            return
+
+    # ── 3c. Calculate Early-Turn Security Hold ───────────────────────────────
+    hold_amount = 0
+    disburse_amount = payout.amount_expected
+    if rotating and rotating.early_turn_security_hold_percentage > 0:
+        total_cycles = rotating.number_of_cycles or 10
+        half_mark = (total_cycles + 1) // 2
+        if payout.cycle_number <= half_mark:
+            hold_pct = rotating.early_turn_security_hold_percentage / 100.0
+            hold_amount = int(round(payout.amount_expected * hold_pct))
+            disburse_amount = payout.amount_expected - hold_amount
+            logger.info(
+                f"[PAYOUT_WORKER] Applying early-turn security hold: {hold_amount:,} UGX "
+                f"({rotating.early_turn_security_hold_percentage}%) for Round {payout.cycle_number}."
+            )
+
     # ── 4. Resolve Chosen Payout Destination Account ─────────────────────────
     chosen_account = resolve_member_payout_destination(session, payout.group_id, payout.user_id)
     masked_acc = mask_account_number(chosen_account.account_number)
@@ -78,14 +120,14 @@ def process_single_payout(session: Session, payout: GroupPayout, now_ms: int):
     logger.info(
         f"[PAYOUT_WORKER] Processing payout {payout.id} -> User: {user.phone_number}, "
         f"Target: {chosen_account.provider_name} ({masked_acc}, source={chosen_account.source}), "
-        f"Amount: {payout.amount_expected:,} UGX"
+        f"Amount: {disburse_amount:,} UGX (Gross: {payout.amount_expected:,} UGX)"
     )
 
     # ── 5. Execute B2C Mobile Money / Bank Disbursement ──────────────────────
     narrative = f"Payout Round {payout.cycle_number} - {group.name[:25]}"
     disbursement_result = DisbursementService.disburse(
         destination=chosen_account,
-        amount=payout.amount_expected,
+        amount=disburse_amount,
         narrative=narrative,
         external_id=f"payout_tx_{payout.id}_c{payout.cycle_number}"
     )
@@ -107,7 +149,9 @@ def process_single_payout(session: Session, payout: GroupPayout, now_ms: int):
 
     # ── 6. Update Double-Entry Ledger & Wallet Balances ───────────────────────
     wallet.pooled_funds -= payout.amount_expected
-    wallet.total_lifetime_payouts += payout.amount_expected
+    wallet.total_lifetime_payouts += disburse_amount
+    if hold_amount > 0:
+        wallet.reserve_funds += hold_amount
     wallet.updated_at = now_ms
     session.add(wallet)
 
@@ -117,7 +161,7 @@ def process_single_payout(session: Session, payout: GroupPayout, now_ms: int):
         payout_id=payout.id,
         source_account="GROUP_POOLED",
         destination_account=f"{chosen_account.provider_name}:{chosen_account.account_number}",
-        amount=payout.amount_expected,
+        amount=disburse_amount,
         currency="UGX",
         transaction_type="PAYOUT",
         external_reference_id=disbursement_result.transaction_id,
@@ -127,7 +171,9 @@ def process_single_payout(session: Session, payout: GroupPayout, now_ms: int):
     session.add(ledger_entry)
 
     payout.status = "COMPLETED"
-    payout.amount_received = payout.amount_expected
+    payout.amount_received = disburse_amount
+    if hold_amount > 0:
+        payout.hold_reason = f"Security reserve: {hold_amount:,} UGX held in escrow until cycle completion."
     session.add(payout)
 
     from app.services.audit_service import AuditService
@@ -139,7 +185,8 @@ def process_single_payout(session: Session, payout: GroupPayout, now_ms: int):
         payload={
             "group_id": payout.group_id,
             "user_id": str(payout.user_id),
-            "amount": payout.amount_expected,
+            "amount_disbursed": disburse_amount,
+            "amount_held": hold_amount,
             "cycle_number": payout.cycle_number,
             "transaction_id": disbursement_result.transaction_id,
             "provider": chosen_account.provider_name
@@ -151,10 +198,31 @@ def process_single_payout(session: Session, payout: GroupPayout, now_ms: int):
 
     logger.info(
         f"[PAYOUT_WORKER] Payout {payout.id} successfully COMPLETED! "
-        f"Amount: {payout.amount_expected:,} UGX sent to {chosen_account.provider_name}."
+        f"Amount: {disburse_amount:,} UGX sent to {chosen_account.provider_name}."
     )
 
-    # ── 7. Dispatch Multi-Channel Notifications ──────────────────────────────
+    # ── 7. Check Cycle Completion & Auto-Renewal ─────────────────────────────
+    if rotating and rotating.number_of_cycles and payout.cycle_number >= rotating.number_of_cycles:
+        # Check if all scheduled payouts in this cycle have COMPLETED
+        uncompleted_payouts = session.exec(
+            select(GroupPayout).where(
+                GroupPayout.group_id == payout.group_id,
+                GroupPayout.status != "COMPLETED"
+            )
+        ).all()
+
+        if not uncompleted_payouts:
+            if rotating.auto_renew_cycle:
+                from app.services.group.rotating.cycle_renewal_service import execute_cycle_renewal
+                logger.info(f"[PAYOUT_WORKER] All payouts complete for group {group.group_id}. Triggering Auto-Renewal.")
+                execute_cycle_renewal(session, payout.group_id, rotating, now_ms=now_ms)
+            else:
+                group.status = "COMPLETED"
+                session.add(group)
+                session.commit()
+                logger.info(f"[PAYOUT_WORKER] Group {group.group_id} has reached completion of all cycles.")
+
+    # ── 8. Dispatch Multi-Channel Notifications ──────────────────────────────
     dispatch_payout_notifications(
         session=session,
         user=user,
@@ -163,3 +231,4 @@ def process_single_payout(session: Session, payout: GroupPayout, now_ms: int):
         chosen_account=chosen_account,
         masked_acc=masked_acc
     )
+

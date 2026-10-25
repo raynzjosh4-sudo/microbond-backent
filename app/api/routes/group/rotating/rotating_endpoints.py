@@ -14,9 +14,11 @@ router = APIRouter(prefix="/api/v1/groups/rotating", tags=["Rotating Groups"])
 
 from app.api.routes.group.rotating.update import router as update_router
 from app.api.routes.group.rotating.auction import router as auction_router
+from app.api.routes.group.rotating.disburse_payout import router as disburse_router
 
 router.include_router(update_router)
 router.include_router(auction_router)
+router.include_router(disburse_router)
 
 from app.schemas.rotating_group_create_request import RotatingGroupCreateRequest
 @router.post("/create")
