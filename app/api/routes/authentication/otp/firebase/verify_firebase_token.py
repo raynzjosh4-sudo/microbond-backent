@@ -56,5 +56,9 @@ def verify_otp_login(
         "firebase_uid": user.firebase_uid,
         "phone_number": user.phone_number,
         "is_new_user": is_new_user,
-        "is_profile_complete": user.is_profile_complete
+        "is_profile_complete": user.is_profile_complete,
+        "full_name": user.full_name,
+        "profile_picture_url": user.profile_picture_url,
+        "avatar_color": user.avatar_color,
+        "about_status": user.about_status,
     }

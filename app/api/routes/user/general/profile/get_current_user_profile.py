@@ -13,6 +13,7 @@ router = APIRouter()
 
 
 @router.get("/me", summary="Get Full Authenticated User Profile")
+@router.get("/me/profile", summary="Get Full Authenticated User Profile (Alias)")
 def get_current_user_profile(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),

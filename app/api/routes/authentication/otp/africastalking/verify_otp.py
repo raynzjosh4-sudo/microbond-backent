@@ -122,6 +122,10 @@ def verify_otp(
             is_new_user=is_new,
             is_profile_complete=user.is_profile_complete,
             has_app_pin=bool(user.hashed_pin is not None),
+            full_name=user.full_name,
+            profile_picture_url=user.profile_picture_url,
+            avatar_color=user.avatar_color,
+            about_status=user.about_status,
         )
     except HTTPException:
         # Re-raise HTTP exceptions so they aren't caught by the general DB exception handler

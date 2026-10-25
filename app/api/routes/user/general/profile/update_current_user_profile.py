@@ -10,6 +10,9 @@ router = APIRouter()
 
 
 @router.patch("/me/profile", summary="Update Current User Profile Details")
+@router.put("/me/profile", summary="Update Current User Profile Details (PUT alias)")
+@router.patch("/me", summary="Update Current User Profile Details (PATCH /me alias)")
+@router.put("/me", summary="Update Current User Profile Details (PUT /me alias)")
 def update_current_user_profile(
     request: UpdateUserProfileRequest,
     session: Session = Depends(get_session),
@@ -53,6 +56,10 @@ def update_current_user_profile(
     if request.about_status is not None:
         db_user.about_status = request.about_status.strip()
 
+    # Mark profile as completed once full name is provided
+    if db_user.full_name and len(db_user.full_name.strip()) >= 2:
+        db_user.is_profile_complete = True
+
     session.add(db_user)
     session.commit()
     session.refresh(db_user)
@@ -67,6 +74,7 @@ def update_current_user_profile(
             "profile_picture_url": db_user.profile_picture_url,
             "avatar_color": db_user.avatar_color,
             "about_status": db_user.about_status,
+            "is_profile_complete": db_user.is_profile_complete,
             "kyc_tier": db_user.kyc_tier,
         },
     }
