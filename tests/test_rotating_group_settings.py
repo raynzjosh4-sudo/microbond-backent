@@ -140,3 +140,48 @@ def test_rotating_group_creation_and_settings_lifecycle(db_session: Session, mon
 
     app.dependency_overrides.clear()
 
+
+def test_rotating_group_creation_minimal_and_string_enums(db_session: Session, monkeypatch):
+    import app.api.routes.group.chat.messages.helpers.messages_helpers as mh
+    monkeypatch.setattr(mh, "notify_all_group_members", lambda **kwargs: None)
+
+    admin_user = User(
+        id=uuid.uuid4(),
+        phone_number="+256704903741",
+        full_name="Alice Admin",
+        kyc_tier=3,
+        trust_score=90,
+        is_verified=True,
+    )
+    db_session.add(admin_user)
+    db_session.commit()
+
+    app.dependency_overrides[get_session] = lambda: db_session
+    app.dependency_overrides[get_current_user] = lambda: admin_user
+    client = TestClient(app)
+
+    # Minimal payload without optional fields or nested risk controls
+    minimal_payload = {
+        "name": "Minimal Rotating",
+        "type": "MERRY_GO_ROUND",
+        "contribution_amount": 25000.0,
+        "payouts_per_cycle": 1,
+        "collection_frequency_days": 7,
+        "payout_order_strategy": "RANDOMIZED",  # lowercase / uppercase variation
+        "collection_time": 1740000000000,
+    }
+
+    create_resp = client.post("/api/v1/groups/rotating/create", json=minimal_payload)
+    assert create_resp.status_code == 200, create_resp.text
+    group_id = create_resp.json()["data"]["group_id"]
+    assert group_id is not None
+
+    details = db_session.exec(
+        select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group_id)
+    ).first()
+    assert details is not None
+    assert details.payout_order_strategy == "Randomized by App"
+    assert details.collection_time == "1740000000000"
+
+    app.dependency_overrides.clear()
+

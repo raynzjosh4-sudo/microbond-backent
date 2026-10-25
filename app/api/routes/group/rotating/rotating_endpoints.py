@@ -5,6 +5,7 @@ from sqlmodel import Session
 import uuid
 import time
 
+from app.utils.time.now_epoch_ms import now_epoch_ms
 from app.core.database import get_session
 from app.models.group.group import Group, GroupMembership
 from app.models.user.user import User
@@ -124,20 +125,37 @@ def create_group(
             calculated_cycles = math.ceil(request.maximum_member_capacity / request.payouts_per_cycle)
             expected_pool = request.contribution_amount * request.maximum_member_capacity
         
-        if request.payout_order_strategy == "Admin Assigned":
+        # Normalize payout order strategy
+        raw_strat = request.payout_order_strategy
+        strat_val = raw_strat.value if hasattr(raw_strat, "value") else str(raw_strat)
+        strat_upper = strat_val.upper().strip()
+        if strat_upper in ["RANDOMIZED", "RANDOMIZED BY APP", "RANDOM"]:
+            normalized_strategy = "Randomized by App"
+        elif strat_upper in ["ADMIN ASSIGNED", "ADMIN_ASSIGNED", "ADMIN"]:
+            normalized_strategy = "Admin Assigned"
+        elif strat_upper in ["TRUST SCORE RANKED", "TRUST_SCORE", "TRUST"]:
+            normalized_strategy = "Trust Score Ranked"
+        elif strat_upper in ["FIRST COME FIRST SERVE", "FIRST_COME_FIRST_SERVE", "FCFS"]:
+            normalized_strategy = "First Come First Serve"
+        else:
+            normalized_strategy = strat_val
+
+        if normalized_strategy == "Admin Assigned":
             if not request.admin_assigned_order:
                 raise HTTPException(
                     status_code=400, 
                     detail="Admin Assigned strategy requires a drag-and-drop order list of member IDs."
                 )
-            if len(request.admin_assigned_order) > request.maximum_member_capacity:
+            if request.maximum_member_capacity and len(request.admin_assigned_order) > request.maximum_member_capacity:
                 raise HTTPException(
                     status_code=400, 
                     detail="Admin assigned list exceeds the maximum member capacity."
                 )
                 
-        # group_start_time is always a Unix epoch int (ms) — use directly
-        start_time_val = request.group_start_time
+        # group_start_time is Unix epoch int (ms) — default to 24h from now if missing
+        start_time_val = int(request.group_start_time) if request.group_start_time else (now_epoch_ms() + 86400000)
+        # collection_time string representation for VARCHAR column
+        collection_time_val = str(request.collection_time) if request.collection_time is not None else None
                 
         rotating_details = RotatingGroupDetails(
             group_id=new_group_id,
@@ -145,9 +163,9 @@ def create_group(
             payouts_per_cycle=request.payouts_per_cycle,
             number_of_cycles=calculated_cycles,
             collection_frequency_days=request.collection_frequency_days,
-            collection_time=request.collection_time,
+            collection_time=collection_time_val,
             group_start_time=start_time_val,
-            payout_order_strategy=request.payout_order_strategy.value,
+            payout_order_strategy=normalized_strategy,
             is_payout_order_locked=False,
             total_expected_pool_per_cycle=expected_pool,
             minimum_kyc_tier=request.minimum_kyc_tier,
@@ -179,24 +197,39 @@ def create_group(
         status="ACTIVE"
     )
     session.add(new_membership)
+
     # 5. Create the Group Wallet
     from app.models.group.wallet import GroupWallet
     new_wallet = GroupWallet(group_id=new_group_id)
     session.add(new_wallet)
     
-    session.commit()
-    session.refresh(new_group)
+    try:
+        session.commit()
+        session.refresh(new_group)
+    except Exception as e:
+        session.rollback()
+        import traceback
+        err_tb = traceback.format_exc()
+        print(f"[ERROR creating rotating group]: {e}\n{err_tb}", flush=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error during rotating group creation: {e}"
+        )
     
     # --- CHAT INTEGRATION ---
-    from app.api.routes.group.chat.messages import broadcast_system_message_sync
-    broadcast_system_message_sync(
-        group_id=new_group_id,
-        message_text=f"{creator.full_name} created the group '{new_group.name}'.",
-        message_type="SYSTEM_EVENT",
-        sender_id=str(creator.id),
-        session=session,
-        background_tasks=background_tasks
-    )
+    try:
+        from app.api.routes.group.chat.messages import broadcast_system_message_sync
+        creator_name = creator.full_name or "Creator"
+        broadcast_system_message_sync(
+            group_id=new_group_id,
+            message_text=f"{creator_name} created the group '{new_group.name}'.",
+            message_type="SYSTEM_EVENT",
+            sender_id=str(creator.id),
+            session=session,
+            background_tasks=background_tasks
+        )
+    except Exception as chat_err:
+        print(f"[Warning] Failed to broadcast creation chat message: {chat_err}", flush=True)
     
     return {
         "status": "success",
@@ -207,3 +240,4 @@ def create_group(
             "name": new_group.name
         }
     }
+

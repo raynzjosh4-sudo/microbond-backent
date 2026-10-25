@@ -25,6 +25,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import traceback
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+@app.middleware("http")
+async def log_requests_and_errors(request: Request, call_next):
+    try:
+        response = await call_next(request)
+        if response.status_code >= 400:
+            print(f"[HTTP {response.status_code}] {request.method} {request.url.path}", flush=True)
+        return response
+    except Exception as exc:
+        err_msg = traceback.format_exc()
+        print(f"[CRITICAL 500 ERROR] {request.method} {request.url.path} - Exception: {exc}\n{err_msg}", flush=True)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": "Internal Server Error",
+                "detail": str(exc),
+                "traceback": err_msg
+            }
+        )
+
 from app.cronjobs.core.scheduler import start_scheduler
 import redis.asyncio as redis
 from fastapi_limiter import FastAPILimiter

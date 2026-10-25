@@ -25,23 +25,23 @@ class RotatingGroupCreateRequest(BaseModel):
     maximum_member_capacity: Optional[int] = Field(default=None, ge=2, description="Must be a whole number, e.g. 20. Optional for infinite cycles.")
     payouts_per_cycle: int = Field(..., ge=1, description="Members paid per cycle, e.g. 1")
     collection_frequency_days: int = Field(..., ge=0, description="0 means daily at specific time, 7 means weekly, etc.")
-    collection_time: Optional[int] = Field(default=None, description="Optional Unix epoch timestamp (ms) for collection time, e.g. 1700000000000")
-    group_start_time: int = Field(..., description="Unix epoch timestamp (ms) when the group kicks off, e.g. 1700000000000")
+    collection_time: Optional[Any] = Field(default=None, description="Optional Unix epoch timestamp (ms) or time string")
+    group_start_time: Optional[int] = Field(default=None, description="Unix epoch timestamp (ms) when the group kicks off")
     
     # Strategy & Overrides
-    payout_order_strategy: PayoutOrderStrategy = Field(..., description="Must be selected by user")
+    payout_order_strategy: Any = Field(default="Randomized by App", description="Payout order strategy")
     admin_assigned_order: Optional[List[int]] = Field(
         default=None, 
         description="Ordered list of user IDs from 1st to last"
     )
     
-    # Risk Controls (Must be set)
-    minimum_kyc_tier: int = Field(..., ge=0, le=3, description="0: Unverified, 1: Phone, 2: ID, 3: Address")
-    require_guarantor: bool = Field(...)
-    guarantor_default_action: str = Field(...)
-    allow_partial_payments: bool = Field(...)
-    allow_advance_deposits: bool = Field(...)
-    enforce_payout_holds: bool = Field(...)
+    # Risk Controls
+    minimum_kyc_tier: int = Field(default=1, ge=0, le=3, description="0: Unverified, 1: Phone, 2: ID, 3: Address")
+    require_guarantor: bool = Field(default=False)
+    guarantor_default_action: str = Field(default="COVER_OBLIGATION")
+    allow_partial_payments: bool = Field(default=False)
+    allow_advance_deposits: bool = Field(default=True)
+    enforce_payout_holds: bool = Field(default=True)
     allow_substitute_members: bool = Field(default=False)
     
     # Escrow & Timelocks
