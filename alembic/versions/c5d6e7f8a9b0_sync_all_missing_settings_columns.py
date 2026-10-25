@@ -1,6 +1,6 @@
 """Sync all missing settings columns for communication, visibility, governance, and rotating details
 
-Revision ID: c4d5e6f7a8b9
+Revision ID: c5d6e7f8a9b0
 Revises: b3c4d5e6f7a8
 Create Date: 2026-10-25 08:20:00.000000
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 import sqlmodel
 
 
-revision: str = 'c4d5e6f7a8b9'
+revision: str = 'c5d6e7f8a9b0'
 down_revision: Union[str, Sequence[str], None] = 'b3c4d5e6f7a8'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

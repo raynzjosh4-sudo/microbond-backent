@@ -136,11 +136,11 @@ app.include_router(internal_tasks_router)
 from app.api.routes.payments import router as payments_router
 app.include_router(payments_router)
 
-@app.get("/", tags=["System"])
+@app.api_route("/", methods=["GET", "HEAD"], tags=["System"])
 def read_root():
     return {"message": "Microbond Backend API is running"}
 
-@app.get("/healthz", tags=["System"], summary="Liveness probe")
+@app.api_route("/healthz", methods=["GET", "HEAD"], tags=["System"], summary="Liveness probe")
 def healthz():
     return {"status": "ok"}
 
