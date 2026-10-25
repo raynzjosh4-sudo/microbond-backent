@@ -29,6 +29,26 @@ class UpdateRotatingSettingsRequest(BaseModel):
     allow_advance_deposits: Optional[bool] = Field(default=None)
     enforce_payout_holds: Optional[bool] = Field(default=None)
 
+    # Settlement & Automation
+    auto_disburse_when_full: Optional[bool] = Field(default=None)
+    multi_sig_payout_approval: Optional[bool] = Field(default=None)
+
+    # Turn Swaps & Queue Flexibility
+    allow_turn_swaps: Optional[bool] = Field(default=None)
+    turn_swap_approval_mode: Optional[str] = Field(default=None)
+
+    # Risk Mitigation (Early-Turn Flight Risk)
+    early_turn_security_hold_percentage: Optional[float] = Field(default=None)
+    require_guarantors_for_early_turns_only: Optional[bool] = Field(default=None)
+
+    # Renewal & Sequencing
+    auto_renew_cycle: Optional[bool] = Field(default=None)
+    reverse_payout_order_on_renew: Optional[bool] = Field(default=None)
+
+    # Reminders & Automated Collection
+    reminder_lead_time_hours: Optional[int] = Field(default=None)
+    enable_auto_debit_prompt: Optional[bool] = Field(default=None)
+
 
 @router.get("/{group_id}/settings/rotating", summary="Get Rotating Group Settings")
 @router.get("/{group_id}/settings", summary="Get Rotating Group Settings (Alias)")
@@ -78,6 +98,16 @@ def get_rotating_group_settings(
             "allow_partial_payments": details.allow_partial_payments,
             "allow_advance_deposits": details.allow_advance_deposits,
             "enforce_payout_holds": details.enforce_payout_holds,
+            "auto_disburse_when_full": details.auto_disburse_when_full,
+            "multi_sig_payout_approval": details.multi_sig_payout_approval,
+            "allow_turn_swaps": details.allow_turn_swaps,
+            "turn_swap_approval_mode": details.turn_swap_approval_mode,
+            "early_turn_security_hold_percentage": details.early_turn_security_hold_percentage,
+            "require_guarantors_for_early_turns_only": details.require_guarantors_for_early_turns_only,
+            "auto_renew_cycle": details.auto_renew_cycle,
+            "reverse_payout_order_on_renew": details.reverse_payout_order_on_renew,
+            "reminder_lead_time_hours": details.reminder_lead_time_hours,
+            "enable_auto_debit_prompt": details.enable_auto_debit_prompt,
             "current_cycle": details.current_cycle,
         }
     }
@@ -151,6 +181,26 @@ def update_rotating_group_settings(
         details.allow_advance_deposits = request.allow_advance_deposits
     if request.enforce_payout_holds is not None:
         details.enforce_payout_holds = request.enforce_payout_holds
+    if request.auto_disburse_when_full is not None:
+        details.auto_disburse_when_full = request.auto_disburse_when_full
+    if request.multi_sig_payout_approval is not None:
+        details.multi_sig_payout_approval = request.multi_sig_payout_approval
+    if request.allow_turn_swaps is not None:
+        details.allow_turn_swaps = request.allow_turn_swaps
+    if request.turn_swap_approval_mode is not None:
+        details.turn_swap_approval_mode = request.turn_swap_approval_mode
+    if request.early_turn_security_hold_percentage is not None:
+        details.early_turn_security_hold_percentage = request.early_turn_security_hold_percentage
+    if request.require_guarantors_for_early_turns_only is not None:
+        details.require_guarantors_for_early_turns_only = request.require_guarantors_for_early_turns_only
+    if request.auto_renew_cycle is not None:
+        details.auto_renew_cycle = request.auto_renew_cycle
+    if request.reverse_payout_order_on_renew is not None:
+        details.reverse_payout_order_on_renew = request.reverse_payout_order_on_renew
+    if request.reminder_lead_time_hours is not None:
+        details.reminder_lead_time_hours = request.reminder_lead_time_hours
+    if request.enable_auto_debit_prompt is not None:
+        details.enable_auto_debit_prompt = request.enable_auto_debit_prompt
 
     session.add(details)
     session.commit()
@@ -165,6 +215,17 @@ def update_rotating_group_settings(
             "require_guarantor": details.require_guarantor,
             "allow_partial_payments": details.allow_partial_payments,
             "allow_advance_deposits": details.allow_advance_deposits,
-            "enforce_payout_holds": details.enforce_payout_holds
+            "enforce_payout_holds": details.enforce_payout_holds,
+            "auto_disburse_when_full": details.auto_disburse_when_full,
+            "multi_sig_payout_approval": details.multi_sig_payout_approval,
+            "allow_turn_swaps": details.allow_turn_swaps,
+            "turn_swap_approval_mode": details.turn_swap_approval_mode,
+            "early_turn_security_hold_percentage": details.early_turn_security_hold_percentage,
+            "require_guarantors_for_early_turns_only": details.require_guarantors_for_early_turns_only,
+            "auto_renew_cycle": details.auto_renew_cycle,
+            "reverse_payout_order_on_renew": details.reverse_payout_order_on_renew,
+            "reminder_lead_time_hours": details.reminder_lead_time_hours,
+            "enable_auto_debit_prompt": details.enable_auto_debit_prompt
         }
     }
+

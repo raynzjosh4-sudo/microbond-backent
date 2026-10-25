@@ -98,7 +98,10 @@ def create_group(
     )
     gov_settings = GroupGovernanceSettings(
         group_id=new_group_id,
-        requires_admin_approval=request.requires_admin_approval
+        requires_admin_approval=request.requires_admin_approval,
+        allow_turn_swaps=request.allow_turn_swaps,
+        turn_swap_approval_mode=request.turn_swap_approval_mode,
+        require_multi_signature=request.multi_sig_payout_approval
     )
     comm_settings = GroupCommunicationSettings(group_id=new_group_id)
     vis_settings = GroupVisibilitySettings(group_id=new_group_id)
@@ -150,7 +153,17 @@ def create_group(
             guarantor_default_action=request.guarantor_default_action,
             allow_partial_payments=request.allow_partial_payments,
             allow_advance_deposits=request.allow_advance_deposits,
-            enforce_payout_holds=request.enforce_payout_holds
+            enforce_payout_holds=request.enforce_payout_holds,
+            auto_disburse_when_full=request.auto_disburse_when_full,
+            multi_sig_payout_approval=request.multi_sig_payout_approval,
+            allow_turn_swaps=request.allow_turn_swaps,
+            turn_swap_approval_mode=request.turn_swap_approval_mode,
+            early_turn_security_hold_percentage=request.early_turn_security_hold_percentage,
+            require_guarantors_for_early_turns_only=request.require_guarantors_for_early_turns_only,
+            auto_renew_cycle=request.auto_renew_cycle,
+            reverse_payout_order_on_renew=request.reverse_payout_order_on_renew,
+            reminder_lead_time_hours=request.reminder_lead_time_hours,
+            enable_auto_debit_prompt=request.enable_auto_debit_prompt
         )
         session.add(rotating_details)
     
