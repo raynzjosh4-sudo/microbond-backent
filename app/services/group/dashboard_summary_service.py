@@ -367,3 +367,51 @@ class GroupDashboardSummaryService:
 
         return max(0, total_msgs - read_msgs)
 
+    @classmethod
+    def calculate_group_ring(
+        cls,
+        session: Session,
+        group_id: str
+    ) -> RingStatus:
+        """
+        Calculates the real-time RingStatus for a single group.
+        Used by the direct deposit pipeline and real-time WebSocket broadcast.
+        """
+        now_ms = int(time.time() * 1000)
+
+        # 1. Total active members
+        total_members = session.exec(
+            select(func.count(GroupMembership.id)).where(
+                GroupMembership.group_id == group_id,
+                GroupMembership.status == "ACTIVE"
+            )
+        ).one() or 0
+
+        # 2. Get current cycle (default 1 if not rotating or not set)
+        rot_detail = session.exec(
+            select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group_id)
+        ).first()
+        target_cycle = rot_detail.current_cycle if (rot_detail and rot_detail.current_cycle) else 1
+
+        # 3. Obligations for this cycle
+        obligations = session.exec(
+            select(MemberObligation).where(
+                MemberObligation.group_id == group_id,
+                MemberObligation.cycle_number == target_cycle
+            )
+        ).all()
+
+        paid_count = 0
+        missed_count = 0
+        for ob in obligations:
+            if ob.status == "PAID" or (ob.amount_paid >= ob.amount_due and ob.amount_due > 0):
+                paid_count += 1
+            elif ob.due_date and now_ms > ob.due_date:
+                missed_count += 1
+
+        return RingStatus(
+            total_expected_members=total_members,
+            paid_on_time_count=paid_count,
+            missed_deadline_count=missed_count
+        )
+

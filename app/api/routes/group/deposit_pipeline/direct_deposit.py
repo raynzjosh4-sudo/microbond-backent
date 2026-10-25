@@ -195,8 +195,12 @@ async def direct_deposit(
 
     # Calculate group ring completion fraction
     from app.services.group.dashboard_summary_service import GroupDashboardSummaryService
-    ring = GroupDashboardSummaryService.calculate_group_ring(session, group_id)
-    fraction = ring.ring_fraction if hasattr(ring, "ring_fraction") else 0.0
+    try:
+        ring = GroupDashboardSummaryService.calculate_group_ring(session, group_id)
+        fraction = ring.ring_fraction if hasattr(ring, "ring_fraction") else 0.0
+    except Exception as ring_err:
+        logger.warning(f"[DIRECT_DEPOSIT] Ring calculation warning: {ring_err}")
+        fraction = 0.0
 
     return DirectDepositResponse(
         status="SUCCESS",

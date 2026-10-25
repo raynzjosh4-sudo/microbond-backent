@@ -1,8 +1,13 @@
 import hashlib
 import time
 import logging
-from typing import Optional, Dict
-import redis
+from typing import Optional, Dict, Any
+
+try:
+    import redis
+except ImportError:
+    redis = None
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -12,16 +17,18 @@ _memory_blacklist: Dict[str, float] = {}
 # L1 In-Memory User Revocation: user_id -> revoked_after_timestamp (epoch seconds)
 _user_revocation_memory: Dict[str, float] = {}
 
-_sync_redis_client: Optional[redis.Redis] = None
+_sync_redis_client: Optional[Any] = None
 _redis_last_failure_time: float = 0.0
 _REDIS_FAILURE_COOLDOWN: float = 30.0  # Cooldown before retrying if Redis is down
 
 
-def get_sync_redis() -> Optional[redis.Redis]:
+def get_sync_redis() -> Optional[Any]:
     """
     Returns a pooled synchronous Redis client with short timeouts.
     If Redis is down or unreachable, sets a cooldown and returns None gracefully.
     """
+    if redis is None:
+        return None
     global _sync_redis_client, _redis_last_failure_time
     now = time.time()
     if now - _redis_last_failure_time < _REDIS_FAILURE_COOLDOWN:

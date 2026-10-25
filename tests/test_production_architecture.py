@@ -977,6 +977,30 @@ class TestOption2WiredServices:
         assert res.fees_cleared == 1
         assert res.hidden_payout_fee == TARGET_PAYOUT_FEE
 
+    def test_calculate_group_ring_service(self):
+        import time
+        from unittest.mock import MagicMock
+        from app.services.group.dashboard_summary_service import GroupDashboardSummaryService
+        from app.models.group.finance import MemberObligation
+        from app.models.group.rotating import RotatingGroupDetails
+        from app.schemas.group_dashboard_summary import RingStatus
+
+        now_ms = int(time.time() * 1000)
+        session = MagicMock()
+        session.exec.return_value.one.return_value = 10
+        session.exec.return_value.first.return_value = RotatingGroupDetails(group_id="grp_ring_1", current_cycle=1)
+
+        ob_paid = MemberObligation(group_id="grp_ring_1", user_id="00000000-0000-0000-0000-000000000001", cycle_number=1, amount_due=50000, amount_paid=50000, status="PAID", due_date=now_ms + 100000)
+        ob_overdue = MemberObligation(group_id="grp_ring_1", user_id="00000000-0000-0000-0000-000000000002", cycle_number=1, amount_due=50000, amount_paid=0, status="PENDING", due_date=now_ms - 100000)
+        session.exec.return_value.all.return_value = [ob_paid, ob_overdue]
+
+        ring = GroupDashboardSummaryService.calculate_group_ring(session, "grp_ring_1")
+        assert isinstance(ring, RingStatus)
+        assert ring.total_expected_members == 10
+        assert ring.paid_on_time_count == 1
+        assert ring.missed_deadline_count == 1
+        assert ring.ring_fraction == 0.1
+
 
 
 
