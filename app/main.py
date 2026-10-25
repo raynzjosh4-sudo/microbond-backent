@@ -50,8 +50,15 @@ async def log_requests_and_errors(request: Request, call_next):
         )
 
 from app.cronjobs.core.scheduler import start_scheduler
-import redis.asyncio as redis
-from fastapi_limiter import FastAPILimiter
+try:
+    import redis.asyncio as redis
+except Exception:
+    redis = None
+
+try:
+    from fastapi_limiter import FastAPILimiter
+except Exception:
+    FastAPILimiter = None
 
 @app.on_event("startup")
 async def on_startup():
@@ -75,9 +82,12 @@ async def on_startup():
                 socket_connect_timeout=1.5,
                 socket_timeout=1.5
             )
-            await redis_conn.ping()
-            await FastAPILimiter.init(redis_conn)
-            print("[Redis] Rate Limiter initialized successfully")
+            if redis and FastAPILimiter:
+                await redis_conn.ping()
+                await FastAPILimiter.init(redis_conn)
+                print("[Redis] Rate Limiter initialized successfully")
+            else:
+                print("[Redis] FastAPILimiter not installed or unavailable.")
         else:
             print("[Redis] REDIS_URL not configured. Rate Limiter operates in fallback mode.")
     except Exception as e:

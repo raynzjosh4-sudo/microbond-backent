@@ -908,6 +908,114 @@
         }
       }
     },
+    "/api/v1/users/me/profile": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get Full Authenticated User Profile (Alias)",
+        "operationId": "get_current_user_profile_api_v1_users_me_profile_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Update Current User Profile Details (PUT alias)",
+        "operationId": "update_current_user_profile_api_v1_users_me_profile_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "patch": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Update Current User Profile Details",
+        "operationId": "update_current_user_profile_api_v1_users_me_profile_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/users/me": {
       "get": {
         "tags": [
@@ -921,6 +1029,48 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Update Current User Profile Details (PUT /me alias)",
+        "operationId": "update_current_user_profile_api_v1_users_me_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserProfileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -972,43 +1122,13 @@
             "HTTPBearer": []
           }
         ]
-      }
-    },
-    "/api/v1/users/me/allowed-groups": {
-      "get": {
-        "tags": [
-          "Users"
-        ],
-        "summary": "Get Authorized Group Creation Types",
-        "operationId": "get_allowed_groups_api_v1_users_me_allowed_groups_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Get Allowed Groups Api V1 Users Me Allowed Groups Get"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/users/me/profile": {
+      },
       "patch": {
         "tags": [
           "Users"
         ],
-        "summary": "Update Current User Profile Details",
-        "operationId": "update_current_user_profile_api_v1_users_me_profile_patch",
+        "summary": "Update Current User Profile Details (PATCH /me alias)",
+        "operationId": "update_current_user_profile_api_v1_users_me_patch",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1034,6 +1154,34 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/users/me/allowed-groups": {
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "summary": "Get Authorized Group Creation Types",
+        "operationId": "get_allowed_groups_api_v1_users_me_allowed_groups_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Get Allowed Groups Api V1 Users Me Allowed Groups Get"
                 }
               }
             }
@@ -2992,6 +3140,121 @@
         }
       }
     },
+    "/api/v1/groups/{group_id}/deposit": {
+      "post": {
+        "tags": [
+          "Group Deposit Pipeline"
+        ],
+        "summary": "Record Group Deposit (Alias)",
+        "operationId": "direct_deposit_api_v1_groups__group_id__deposit_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectDepositRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectDepositResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{group_id}/deposits/direct": {
+      "post": {
+        "tags": [
+          "Group Deposit Pipeline"
+        ],
+        "summary": "Record Direct / Peer-to-Peer Group Deposit",
+        "description": "Direct deposit endpoint for rotating (and other) groups. Immediately updates ledger, member obligations, group wallet, countdowns, statistics, and injects a deposit message into the group thread.",
+        "operationId": "direct_deposit_api_v1_groups__group_id__deposits_direct_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectDepositRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DirectDepositResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/groups/{group_id}/deposits/daily-widget": {
       "get": {
         "tags": [
@@ -3697,6 +3960,116 @@
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/rotating/{group_id}/payouts/{payout_id}/disburse": {
+      "post": {
+        "tags": [
+          "Rotating Groups"
+        ],
+        "summary": "Manually Release / Disburse Payout",
+        "description": "Allows the Group Admin or Treasurer to manually trigger payout disbursement\nwhen auto_disburse_when_full is False or when Multi-Sig approval is completed.",
+        "operationId": "manually_disburse_payout_api_v1_groups_rotating__group_id__payouts__payout_id__disburse_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "payout_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Payout Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/rotating/{group_id}/payouts/{payout_id}/sign": {
+      "post": {
+        "tags": [
+          "Rotating Groups"
+        ],
+        "summary": "Sign / Approve Multi-Sig Payout",
+        "description": "Allows designated signers (Admin and Treasurer) to co-sign an upcoming payout.\nWhen approved, marks payout status as APPROVED_FOR_DISBURSEMENT.",
+        "operationId": "sign_multisig_payout_api_v1_groups_rotating__group_id__payouts__payout_id__sign_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "payout_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Payout Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -7421,6 +7794,51 @@
         }
       }
     },
+    "/api/v1/groups/upload-image": {
+      "post": {
+        "tags": [
+          "Group Settings"
+        ],
+        "summary": "Upload Group Image to Cloudflare R2 (Pre-Creation)",
+        "description": "Upload an image file directly to Cloudflare R2 before group creation.\nReturns the public Cloudflare R2 CDN URL to include in the group creation payload.",
+        "operationId": "upload_standalone_group_image_api_v1_groups_upload_image_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_standalone_group_image_api_v1_groups_upload_image_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/groups/{group_id}/settings/privacy": {
       "get": {
         "tags": [
@@ -9213,6 +9631,68 @@
         }
       }
     },
+    "/api/v1/groups/{group_id}/swaps": {
+      "get": {
+        "tags": [
+          "Group Payout Turn Swapping"
+        ],
+        "summary": "List turn swap requests for group",
+        "description": "Returns turn swap requests in this group, enriched with requester and target names.\nFilterable by status (e.g. 'PENDING', 'ACCEPTED', 'REJECTED', 'PENDING_ADMIN').",
+        "operationId": "list_turn_swaps_api_v1_groups__group_id__swaps_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/groups/{group_id}/swaps/{swap_request_id}/accept": {
       "post": {
         "tags": [
@@ -9299,6 +9779,71 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{group_id}/swaps/{swap_request_id}/admin-review": {
+      "post": {
+        "tags": [
+          "Group Payout Turn Swapping"
+        ],
+        "summary": "Admin Review & Finalize Turn Swap",
+        "description": "Allows the Group Admin to approve or reject a turn swap when\nturn_swap_approval_mode is ADMIN_APPROVAL_REQUIRED.",
+        "operationId": "admin_review_turn_swap_api_v1_groups__group_id__swaps__swap_request_id__admin_review_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "swap_request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Swap Request Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminReviewSwapPayload"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -13893,21 +14438,76 @@
       "AdminPayoutOrderRequest": {
         "properties": {
           "user_positions": {
-            "additionalProperties": {
-              "type": "integer"
-            },
-            "propertyNames": {
-              "format": "uuid"
-            },
-            "type": "object",
-            "title": "User Positions"
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Positions",
+            "description": "Map of user_id to position number (1-based)"
+          },
+          "ordered_member_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ordered Member Ids",
+            "description": "Ordered list of user IDs from position 1 to N"
+          },
+          "strategy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy",
+            "description": "Optionally update payout_order_strategy at the same time"
+          }
+        },
+        "type": "object",
+        "title": "AdminPayoutOrderRequest"
+      },
+      "AdminReviewSwapPayload": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "APPROVE or REJECT"
+          },
+          "rejection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Reason",
+            "description": "Reason if rejecting the swap"
           }
         },
         "type": "object",
         "required": [
-          "user_positions"
+          "action"
         ],
-        "title": "AdminPayoutOrderRequest"
+        "title": "AdminReviewSwapPayload"
       },
       "ApplyLoanRequest": {
         "properties": {
@@ -14591,6 +15191,21 @@
           "file"
         ],
         "title": "Body_upload_group_image_api_v1_groups__group_id__settings_image_post"
+      },
+      "Body_upload_standalone_group_image_api_v1_groups_upload_image_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "Image file (JPEG, PNG, or WebP \u2014 max 5 MB)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_standalone_group_image_api_v1_groups_upload_image_post"
       },
       "Body_upload_user_avatar_api_v1_users_me_avatar_post": {
         "properties": {
@@ -15514,6 +16129,126 @@
           "quote_token"
         ],
         "title": "DepositQuoteResponse"
+      },
+      "DirectDepositRequest": {
+        "properties": {
+          "amount": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Amount",
+            "description": "Amount to deposit in group currency (e.g., 25000 UGX)"
+          },
+          "payment_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Method",
+            "description": "Payment method label (e.g., 'TEST_WALLET', 'MTN_MOMO', 'AIRTEL_MONEY')",
+            "default": "TEST_SIMULATION"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes",
+            "description": "Optional note or reference"
+          },
+          "client_reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Reference",
+            "description": "Optional idempotency reference"
+          }
+        },
+        "type": "object",
+        "required": [
+          "amount"
+        ],
+        "title": "DirectDepositRequest"
+      },
+      "DirectDepositResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "SUCCESS"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "transaction_id": {
+            "type": "string",
+            "title": "Transaction Id"
+          },
+          "reference_id": {
+            "type": "string",
+            "title": "Reference Id"
+          },
+          "group_id": {
+            "type": "string",
+            "title": "Group Id"
+          },
+          "amount_deposited": {
+            "type": "integer",
+            "title": "Amount Deposited"
+          },
+          "member_total_contributed": {
+            "type": "integer",
+            "title": "Member Total Contributed"
+          },
+          "cycle_number": {
+            "type": "integer",
+            "title": "Cycle Number"
+          },
+          "obligation_status": {
+            "type": "string",
+            "title": "Obligation Status"
+          },
+          "group_total_balance": {
+            "type": "integer",
+            "title": "Group Total Balance"
+          },
+          "ring_completion_fraction": {
+            "type": "number",
+            "title": "Ring Completion Fraction"
+          },
+          "timestamp": {
+            "type": "integer",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "transaction_id",
+          "reference_id",
+          "group_id",
+          "amount_deposited",
+          "member_total_contributed",
+          "cycle_number",
+          "obligation_status",
+          "group_total_balance",
+          "ring_completion_fraction",
+          "timestamp"
+        ],
+        "title": "DirectDepositResponse"
       },
       "DiscoverableContactGroup": {
         "properties": {
@@ -17527,6 +18262,61 @@
             "type": "boolean",
             "title": "Has App Pin",
             "default": false
+          },
+          "full_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          },
+          "profile_picture_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Picture Url"
+          },
+          "avatar_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Color"
+          },
+          "about_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "About Status"
           }
         },
         "type": "object",
@@ -17776,16 +18566,6 @@
           "verification_type"
         ],
         "title": "PayoutDestinationResponse"
-      },
-      "PayoutOrderStrategy": {
-        "type": "string",
-        "enum": [
-          "Admin Assigned",
-          "Randomized by App",
-          "Trust Score Ranked",
-          "First Come First Serve"
-        ],
-        "title": "PayoutOrderStrategy"
       },
       "ProxyUserResponse": {
         "properties": {
@@ -18293,7 +19073,8 @@
           "group_image_url": {
             "type": "string",
             "title": "Group Image Url",
-            "description": "URL of the uploaded group image"
+            "description": "URL of the uploaded group image or Cloudflare R2 URL",
+            "default": "https://pub-2895dbbc59724eaeb22e030eb9bbdd60.r2.dev/groups/default_rotating.png"
           },
           "type": {
             "type": "string",
@@ -18347,6 +19128,16 @@
           },
           "collection_time": {
             "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Time",
+            "description": "Optional Unix epoch timestamp (ms) or time string"
+          },
+          "group_start_time": {
+            "anyOf": [
               {
                 "type": "integer"
               },
@@ -18354,17 +19145,13 @@
                 "type": "null"
               }
             ],
-            "title": "Collection Time",
-            "description": "Optional Unix epoch timestamp (ms) for collection time, e.g. 1700000000000"
-          },
-          "group_start_time": {
-            "type": "integer",
             "title": "Group Start Time",
-            "description": "Unix epoch timestamp (ms) when the group kicks off, e.g. 1700000000000"
+            "description": "Unix epoch timestamp (ms) when the group kicks off"
           },
           "payout_order_strategy": {
-            "$ref": "#/components/schemas/PayoutOrderStrategy",
-            "description": "Must be selected by user"
+            "title": "Payout Order Strategy",
+            "description": "Payout order strategy",
+            "default": "Randomized by App"
           },
           "admin_assigned_order": {
             "anyOf": [
@@ -18386,27 +19173,33 @@
             "maximum": 3.0,
             "minimum": 0.0,
             "title": "Minimum Kyc Tier",
-            "description": "0: Unverified, 1: Phone, 2: ID, 3: Address"
+            "description": "0: Unverified, 1: Phone, 2: ID, 3: Address",
+            "default": 1
           },
           "require_guarantor": {
             "type": "boolean",
-            "title": "Require Guarantor"
+            "title": "Require Guarantor",
+            "default": false
           },
           "guarantor_default_action": {
             "type": "string",
-            "title": "Guarantor Default Action"
+            "title": "Guarantor Default Action",
+            "default": "COVER_OBLIGATION"
           },
           "allow_partial_payments": {
             "type": "boolean",
-            "title": "Allow Partial Payments"
+            "title": "Allow Partial Payments",
+            "default": false
           },
           "allow_advance_deposits": {
             "type": "boolean",
-            "title": "Allow Advance Deposits"
+            "title": "Allow Advance Deposits",
+            "default": true
           },
           "enforce_payout_holds": {
             "type": "boolean",
-            "title": "Enforce Payout Holds"
+            "title": "Enforce Payout Holds",
+            "default": true
           },
           "allow_substitute_members": {
             "type": "boolean",
@@ -18441,7 +19234,7 @@
           "late_fee_amount": {
             "type": "number",
             "maximum": 30000.0,
-            "minimum": 50.0,
+            "minimum": 0.0,
             "title": "Late Fee Amount",
             "default": 0.0
           },
@@ -18481,24 +19274,79 @@
             "title": "Reserve Fund Percentage",
             "description": "Percentage going to emergency reserve or admin",
             "default": 0.0
+          },
+          "auto_disburse_when_full": {
+            "type": "boolean",
+            "title": "Auto Disburse When Full",
+            "description": "Automatically disburse payout when all member contributions for the cycle are received",
+            "default": true
+          },
+          "multi_sig_payout_approval": {
+            "type": "boolean",
+            "title": "Multi Sig Payout Approval",
+            "description": "Require multi-signature approval from admin and treasurer before disbursement",
+            "default": false
+          },
+          "allow_turn_swaps": {
+            "type": "boolean",
+            "title": "Allow Turn Swaps",
+            "description": "Allow members to swap payout turns with each other",
+            "default": true
+          },
+          "turn_swap_approval_mode": {
+            "type": "string",
+            "title": "Turn Swap Approval Mode",
+            "description": "MUTUAL_CONSENT or ADMIN_APPROVAL_REQUIRED",
+            "default": "MUTUAL_CONSENT"
+          },
+          "early_turn_security_hold_percentage": {
+            "type": "number",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Early Turn Security Hold Percentage",
+            "description": "Percentage held in escrow for early payout turns until cycle completion",
+            "default": 0.0
+          },
+          "require_guarantors_for_early_turns_only": {
+            "type": "boolean",
+            "title": "Require Guarantors For Early Turns Only",
+            "description": "Only require guarantors for members taking payouts in the first half of the cycle",
+            "default": true
+          },
+          "auto_renew_cycle": {
+            "type": "boolean",
+            "title": "Auto Renew Cycle",
+            "description": "Automatically start a new cycle when all rounds complete",
+            "default": false
+          },
+          "reverse_payout_order_on_renew": {
+            "type": "boolean",
+            "title": "Reverse Payout Order On Renew",
+            "description": "Reverse the payout sequence for the renewed cycle so last becomes first",
+            "default": true
+          },
+          "reminder_lead_time_hours": {
+            "type": "integer",
+            "maximum": 168.0,
+            "minimum": 0.0,
+            "title": "Reminder Lead Time Hours",
+            "description": "Hours before collection deadline to send reminders",
+            "default": 24
+          },
+          "enable_auto_debit_prompt": {
+            "type": "boolean",
+            "title": "Enable Auto Debit Prompt",
+            "description": "Trigger automatic MoMo USSD prompt at collection time",
+            "default": true
           }
         },
         "type": "object",
         "required": [
           "name",
-          "group_image_url",
           "type",
           "contribution_amount",
           "payouts_per_cycle",
-          "collection_frequency_days",
-          "group_start_time",
-          "payout_order_strategy",
-          "minimum_kyc_tier",
-          "require_guarantor",
-          "guarantor_default_action",
-          "allow_partial_payments",
-          "allow_advance_deposits",
-          "enforce_payout_holds"
+          "collection_frequency_days"
         ],
         "title": "RotatingGroupCreateRequest"
       },
@@ -22517,6 +23365,116 @@
               }
             ],
             "title": "Enforce Payout Holds"
+          },
+          "auto_disburse_when_full": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Disburse When Full"
+          },
+          "multi_sig_payout_approval": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Multi Sig Payout Approval"
+          },
+          "allow_turn_swaps": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allow Turn Swaps"
+          },
+          "turn_swap_approval_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turn Swap Approval Mode"
+          },
+          "early_turn_security_hold_percentage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Early Turn Security Hold Percentage"
+          },
+          "require_guarantors_for_early_turns_only": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Require Guarantors For Early Turns Only"
+          },
+          "auto_renew_cycle": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Renew Cycle"
+          },
+          "reverse_payout_order_on_renew": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reverse Payout Order On Renew"
+          },
+          "reminder_lead_time_hours": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Lead Time Hours"
+          },
+          "enable_auto_debit_prompt": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enable Auto Debit Prompt"
           }
         },
         "type": "object",
