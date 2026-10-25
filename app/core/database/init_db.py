@@ -53,6 +53,81 @@ def _run_create_all():
     _run_migrations()
 
 
+def _ensure_critical_columns():
+    """Idempotently adds missing settings columns in PostgreSQL if not present."""
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            sql_statements = [
+                # groupcommunicationsettings
+                'ALTER TABLE "groupcommunicationsettings" ADD COLUMN IF NOT EXISTS "send_dues_due_prompts" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupcommunicationsettings" ADD COLUMN IF NOT EXISTS "send_loan_due_prompts" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupcommunicationsettings" ADD COLUMN IF NOT EXISTS "broadcast_individual_dues_receipts" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupcommunicationsettings" ADD COLUMN IF NOT EXISTS "broadcast_individual_loan_receipts" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupcommunicationsettings" ADD COLUMN IF NOT EXISTS "announce_dues_adjustment_updates" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupcommunicationsettings" ADD COLUMN IF NOT EXISTS "announce_loan_disbursement_updates" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupcommunicationsettings" ADD COLUMN IF NOT EXISTS "post_loan_approval_polls" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupcommunicationsettings" ADD COLUMN IF NOT EXISTS "enable_automated_audit_dispatch" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupcommunicationsettings" ADD COLUMN IF NOT EXISTS "audit_report_recipient_email" VARCHAR;',
+                'ALTER TABLE "groupcommunicationsettings" ADD COLUMN IF NOT EXISTS "dispatch_monthly_compliance_statement" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupcommunicationsettings" ADD COLUMN IF NOT EXISTS "export_file_format" VARCHAR NOT NULL DEFAULT \'PDF\';',
+
+                # groupvisibilitysettings
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_member_total_savings" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_dues_schedule" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_allow_installments" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_arrears_policy" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_fee_exemptions" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_interest_rates" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_loan_guarantor_rules" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_max_borrowing_limit" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_early_repayment_discount" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_new_share_issuance" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_default_asset_seizure" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_pending_dues_adjustments" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_pending_loans" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_auto_debit_consent" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_emergency_contact" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_sms_call_reminders" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_broadcast_individual_dues_receipts" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_broadcast_individual_loan_receipts" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_announce_dues_adjustment_updates" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_announce_loan_disbursement_updates" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_send_dues_due_prompts" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_send_loan_due_prompts" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_post_loan_approval_polls" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "notify_important_rule_changes" BOOLEAN NOT NULL DEFAULT TRUE;',
+
+                # groupgovernancesettings
+                'ALTER TABLE "groupgovernancesettings" ADD COLUMN IF NOT EXISTS "turn_swap_approval_mode" VARCHAR NOT NULL DEFAULT \'MUTUAL_CONSENT\';',
+                'ALTER TABLE "groupgovernancesettings" ADD COLUMN IF NOT EXISTS "allow_turn_swaps" BOOLEAN NOT NULL DEFAULT TRUE;',
+
+                # rotatinggroupdetails
+                'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "auto_disburse_when_full" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "multi_sig_payout_approval" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "allow_turn_swaps" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "turn_swap_approval_mode" VARCHAR NOT NULL DEFAULT \'MUTUAL_CONSENT\';',
+                'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "early_turn_security_hold_percentage" DOUBLE PRECISION NOT NULL DEFAULT 0.0;',
+                'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "require_guarantors_for_early_turns_only" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "auto_renew_cycle" BOOLEAN NOT NULL DEFAULT FALSE;',
+                'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "reverse_payout_order_on_renew" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "reminder_lead_time_hours" INTEGER NOT NULL DEFAULT 24;',
+                'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "enable_auto_debit_prompt" BOOLEAN NOT NULL DEFAULT TRUE;',
+                'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "current_cycle" INTEGER NOT NULL DEFAULT 1;',
+            ]
+
+            for stmt in sql_statements:
+                try:
+                    conn.execute(text(stmt))
+                except Exception:
+                    pass
+            conn.commit()
+            print("[init_db] Ensured all critical settings columns exist in database.")
+    except Exception as e:
+        print(f"[init_db warning] Column reconciliation skipped or non-Postgres: {e}")
+
+
 def init_db():
     """Run DDL check and migrations so tables and columns exist before handling requests."""
     _run_create_all()
+    _ensure_critical_columns()
