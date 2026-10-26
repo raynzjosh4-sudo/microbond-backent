@@ -83,10 +83,13 @@ async def send_chat_message(
                     reply_id = ref_msg.id
 
     # 4. Save to database
+    is_system_msg = request.message_type in ("SYSTEM", "SYSTEM_EVENT")
+    msg_sender_id = "SYSTEM" if is_system_msg else str(current_user.id)
+
     new_message = GroupChatMessage(
         client_message_id=request.client_message_id,
         group_id=group_id,
-        sender_id=str(current_user.id),
+        sender_id=msg_sender_id,
         message_type=request.message_type,
         message_text=request.message_text,
         media_url=request.media_url,
@@ -151,7 +154,7 @@ async def send_chat_message(
             "event_type": "NEW_MESSAGE",
             "message": msg_payload
         },
-        exclude_user_id=str(current_user.id) # The sender already has the message locally
+        exclude_user_id=None if is_system_msg else str(current_user.id) # System messages go to everyone
     )
 
     # 5. Trigger offline push notifications for the rest of the group

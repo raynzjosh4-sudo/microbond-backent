@@ -17,6 +17,8 @@ from app.models.group.ledger import LedgerEntry
 from app.models.group.chat import GroupChatMessage
 from app.utils.time.now_epoch_ms import now_epoch_ms
 from app.services.finance.ledger.broadcast_group_ring_update import broadcast_group_ring_update
+from app.services.websocket_manager import ws_manager
+from app.api.routes.group.chat.messages.helpers.messages_helpers import broadcast_system_message_sync
 from .schemas import DirectDepositRequest, DirectDepositResponse
 from .helpers.trigger_post_deposit_notifications import trigger_post_deposit_notifications
 
@@ -200,37 +202,41 @@ async def direct_deposit(
         membership.credit_balance_ugx = (membership.credit_balance_ugx or 0) + surplus
     session.add(membership)
 
-    # 8. Insert a DEPOSIT chat message into group thread
+    # 8. Announce verified deposit into group thread via System Event Message
     depositor_name = current_user.full_name or "A member"
     remaining_due = max(0, obligation.amount_due - obligation.amount_paid)
     if surplus > 0:
-        msg_text = f"{depositor_name} deposited {amount:,} {currency} ({cycle_deposit:,} for Cycle {current_cycle} + {surplus:,} advance savings for future cycles) 🌟"
+        msg_text = (
+            f"💰 Verified Deposit: {depositor_name} deposited {amount:,} {currency}! "
+            f"{cycle_deposit:,} {currency} settled for Cycle {current_cycle} obligation, and "
+            f"{surplus:,} {currency} credited as advance surplus for future cycles 🌟"
+        )
     elif obligation.status == "PARTIAL":
-        msg_text = f"{depositor_name} deposited {amount:,} {currency} (Partial payment). Remaining due: {remaining_due:,} {currency}."
+        msg_text = (
+            f"💰 Partial Deposit: {depositor_name} deposited {amount:,} {currency} for Cycle {current_cycle}. "
+            f"Remaining due: {remaining_due:,} {currency}."
+        )
     else:
-        msg_text = f"{depositor_name} deposited {amount:,} {currency}"
+        msg_text = (
+            f"💰 Verified Deposit: {depositor_name} deposited {amount:,} {currency} for Cycle {current_cycle} "
+            f"(Settled in Full). Remaining due: 0 {currency}."
+        )
 
-    deposit_msg = GroupChatMessage(
-        client_message_id=str(uuid.uuid4()),
-        group_id=group_id,
-        sender_id=str(current_user.id),
-        message_type="DEPOSIT",
-        message_text=msg_text,
-        attachments=[{
-            "amount": amount,
-            "currency": currency,
-            "payment_method": payment_method,
-            "reference_id": ref_id,
-            "cycle_number": current_cycle,
-            "cycle_contribution": cycle_deposit,
-            "surplus_advance": surplus,
-            "remaining_due": remaining_due,
-            "obligation_status": obligation.status,
-            "is_verified": True
-        }],
-        created_at=now_ms
-    )
-    session.add(deposit_msg)
+    receipt_attachment = {
+        "category": "DEPOSIT_NOTICE",
+        "amount": amount,
+        "currency": currency,
+        "payment_method": payment_method,
+        "reference_id": ref_id,
+        "cycle_number": current_cycle,
+        "cycle_contribution": cycle_deposit,
+        "surplus_advance": surplus,
+        "remaining_due": remaining_due,
+        "obligation_status": obligation.status,
+        "depositor_id": str(current_user.id),
+        "depositor_name": depositor_name,
+        "is_verified": True
+    }
 
     # Commit the transaction atomically
     session.commit()
@@ -239,8 +245,27 @@ async def direct_deposit(
     session.refresh(membership)
     session.refresh(obligation)
 
-    # 9. Real-time WebSocket Ring Status Broadcast
+    # 9. Broadcast system event message into group chat (saves to DB & triggers push/websockets)
+    system_msg = broadcast_system_message_sync(
+        group_id=group_id,
+        message_text=msg_text,
+        message_type="SYSTEM_EVENT",
+        sender_id="SYSTEM",
+        session=session,
+        background_tasks=background_tasks,
+        attachments=[receipt_attachment]
+    )
+
+    # 10. Real-time WebSocket Broadcasts (Chat & Ring Status)
     try:
+        if system_msg:
+            await ws_manager.broadcast_to_group(
+                group_id,
+                {
+                    "event_type": "NEW_MESSAGE",
+                    "message": system_msg.model_dump(mode="json")
+                }
+            )
         await broadcast_group_ring_update(
             group_id=group_id,
             depositor_name=depositor_name,

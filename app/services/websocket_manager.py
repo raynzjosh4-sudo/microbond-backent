@@ -172,6 +172,21 @@ class ConnectionManager:
                     except Exception as e:
                         logger.error(f"Failed to send to user {user_id}: {e}")
 
+    def broadcast_to_group_sync(self, group_id: str, message: dict, exclude_user_id: str = None):
+        """Synchronously broadcast to group, safely handling running or stopped event loops."""
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(self.broadcast_to_group(group_id, message, exclude_user_id))
+            else:
+                loop.run_until_complete(self.broadcast_to_group(group_id, message, exclude_user_id))
+        except Exception:
+            try:
+                asyncio.run(self.broadcast_to_group(group_id, message, exclude_user_id))
+            except Exception as e:
+                logger.warning(f"broadcast_to_group_sync failed: {e}")
+
     async def force_disconnect_user(self, user_id: str, reason: str = "Session invalidated"):
         """
         Immediately closes all active WebSocket connections for a user across all groups.
