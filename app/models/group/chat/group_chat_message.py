@@ -44,11 +44,11 @@ class GroupChatMessage(SQLModel, table=True):
     media_height: Optional[int] = Field(default=None, description="Image/video pixel height")
     aspect_ratio: Optional[float] = Field(default=None, description="Calculated aspect ratio (width / height)")
 
-    # Multi-file gallery / albums (list of media objects with url, dimensions, ratio, mime, etc.)
-    attachments: Optional[List[Dict[str, Any]]] = Field(
+    # Multi-file gallery / albums or structured payload (list of media objects or structured notice dict)
+    attachments: Optional[Any] = Field(
         default=None,
         sa_column=Column(JSON),
-        description="List of media attachments with URLs, dimensions, and aspect ratios"
+        description="List of media attachments or structured payload"
     )
     
     # For WhatsApp-like features
