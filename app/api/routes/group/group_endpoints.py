@@ -60,6 +60,7 @@ from .settings.trust_members import router as trust_members_router
 from .membership.statement import router as statement_router
 from .membership.savings_growth import router as savings_growth_router
 from .report.weekly_report import router as weekly_report_router
+from .report.rotating_cycle_report import router as rotating_cycle_report_router
 from .report.dashboard_analytics import router as dashboard_analytics_router
 from .report.universal_analytics import router as universal_analytics_router
 from .report.analytics_series import router as analytics_series_router
@@ -143,6 +144,7 @@ router.include_router(quorum_router)
 router.include_router(my_authorization_router)
 router.include_router(statement_router)
 router.include_router(weekly_report_router)
+router.include_router(rotating_cycle_report_router)
 router.include_router(dashboard_analytics_router)
 router.include_router(universal_analytics_router)
 router.include_router(analytics_series_router)

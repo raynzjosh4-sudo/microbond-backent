@@ -9,6 +9,8 @@ from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.settings import GroupGovernanceSettings
 
+from app.models.group.rotating import RotatingGroupDetails
+
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Settings"])
 
 class UpdatePermissionsSettingsRequest(BaseModel):
@@ -17,8 +19,9 @@ class UpdatePermissionsSettingsRequest(BaseModel):
     members_can_invite_via_link: Optional[bool] = None
     members_can_manage_payout_roster: Optional[bool] = None
     
-    # Admin Permissions
+    # Admin Permissions (requires_admin_approval is authoritative)
     admins_must_approve_new_members: Optional[bool] = None
+    requires_admin_approval: Optional[bool] = None
 
 @router.get("/{group_id}/settings/permissions", summary="Get Group Permissions Settings")
 def get_group_permissions_settings(
@@ -44,6 +47,11 @@ def get_group_permissions_settings(
     ).first()
     if not gov_settings:
         raise HTTPException(status_code=404, detail="Governance settings not found.")
+
+    rotating_details = session.exec(
+        select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group.group_id)
+    ).first()
+    allow_turn_swaps = rotating_details.allow_turn_swaps if rotating_details else False
         
     return {
         "status": "success",
@@ -52,8 +60,9 @@ def get_group_permissions_settings(
             "members_can_send_messages": gov_settings.members_can_send_messages,
             "members_can_invite_via_link": gov_settings.members_can_invite_via_link,
             "members_can_manage_payout_roster": gov_settings.members_can_manage_payout_roster,
-            "admins_must_approve_new_members": bool(gov_settings.admins_must_approve_new_members or gov_settings.requires_admin_approval),
-            "allow_turn_swaps": gov_settings.allow_turn_swaps
+            "admins_must_approve_new_members": gov_settings.requires_admin_approval,
+            "requires_admin_approval": gov_settings.requires_admin_approval,
+            "allow_turn_swaps": allow_turn_swaps
         }
     }
 
@@ -93,12 +102,19 @@ def update_group_permissions_settings(
         gov_settings.members_can_invite_via_link = request.members_can_invite_via_link
     if request.members_can_manage_payout_roster is not None:
         gov_settings.members_can_manage_payout_roster = request.members_can_manage_payout_roster
-    if request.admins_must_approve_new_members is not None:
-        gov_settings.admins_must_approve_new_members = request.admins_must_approve_new_members
+    if request.requires_admin_approval is not None:
+        gov_settings.requires_admin_approval = request.requires_admin_approval
+    elif request.admins_must_approve_new_members is not None:
         gov_settings.requires_admin_approval = request.admins_must_approve_new_members
 
     session.commit()
     session.refresh(gov_settings)
+
+    rotating_details = session.exec(
+        select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group.group_id)
+    ).first()
+    allow_turn_swaps = rotating_details.allow_turn_swaps if rotating_details else False
+
     return {
         "status": "success",
         "message": "Permissions settings updated.",
@@ -107,7 +123,8 @@ def update_group_permissions_settings(
             "members_can_send_messages": gov_settings.members_can_send_messages,
             "members_can_invite_via_link": gov_settings.members_can_invite_via_link,
             "members_can_manage_payout_roster": gov_settings.members_can_manage_payout_roster,
-            "admins_must_approve_new_members": bool(gov_settings.admins_must_approve_new_members or gov_settings.requires_admin_approval),
-            "allow_turn_swaps": gov_settings.allow_turn_swaps
+            "admins_must_approve_new_members": gov_settings.requires_admin_approval,
+            "requires_admin_approval": gov_settings.requires_admin_approval,
+            "allow_turn_swaps": allow_turn_swaps
         }
     }

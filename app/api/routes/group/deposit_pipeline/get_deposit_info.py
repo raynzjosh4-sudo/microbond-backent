@@ -40,6 +40,16 @@ def get_deposit_info(
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
 
+    from app.utils.time.now_epoch_ms import now_epoch_ms
+    now_ms = now_epoch_ms()
+
+    # Rule: Group must not be forming
+    if group.status in ["FORMING", "PENDING"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Group is still forming ({group.member_count}/{group.max_members or '?'} members). Deposits open once the circle is full."
+        )
+
     # Defaults
     allow_partial = False
     allow_overpay = True
@@ -52,6 +62,11 @@ def get_deposit_info(
             select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group_id)
         ).first()
         if rot:
+            if rot.group_start_time and now_ms < rot.group_start_time and not rot.is_payout_order_locked:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This group schedule has not started yet. No deposits can be accepted until the start time."
+                )
             base_contribution = int(rot.contribution_amount)
             allow_partial = rot.allow_partial_payments
             allow_overpay = rot.allow_advance_deposits
@@ -92,5 +107,6 @@ def get_deposit_info(
         total_due=total_due,
         allow_partial_pay=allow_partial,
         allow_overpay=allow_overpay,
-        currency=group.currency or "UGX"
+        currency=group.currency or "UGX",
+        member_prepaid_balance=membership.credit_balance_ugx or 0
     )

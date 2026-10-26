@@ -79,7 +79,6 @@ def test_payout_mechanics_enforcement(db_session: Session, monkeypatch):
         guarantor_default_action="NONE",
         allow_partial_payments=False,
         allow_advance_deposits=True,
-        enforce_payout_holds=True,
         # Settings to test
         auto_disburse_when_full=False,
         multi_sig_payout_approval=True,
@@ -87,6 +86,7 @@ def test_payout_mechanics_enforcement(db_session: Session, monkeypatch):
         auto_renew_cycle=True,
         reverse_payout_order_on_renew=True
     )
+    fin_settings = GroupFinancialSettings(group_id=group_id, enforce_payout_holds=True)
     admin_m = GroupMembership(membership_id=str(uuid.uuid4()), group_id=group_id, user_id=admin.id, role="ADMIN", status="ACTIVE")
     m1_m = GroupMembership(membership_id=str(uuid.uuid4()), group_id=group_id, user_id=member_1.id, role="MEMBER", status="ACTIVE")
     m2_m = GroupMembership(membership_id=str(uuid.uuid4()), group_id=group_id, user_id=member_2.id, role="MEMBER", status="ACTIVE")
@@ -101,7 +101,7 @@ def test_payout_mechanics_enforcement(db_session: Session, monkeypatch):
         status="PENDING",
         payout_date=1700000000000
     )
-    db_session.add_all([group, wallet, rotating, admin_m, m1_m, m2_m, payout_1])
+    db_session.add_all([group, wallet, rotating, fin_settings, admin_m, m1_m, m2_m, payout_1])
     db_session.commit()
 
     now_ms = 1700000000000
@@ -162,11 +162,11 @@ def test_turn_swap_admin_approval_mode(db_session: Session, monkeypatch):
         guarantor_default_action="NONE",
         allow_partial_payments=False,
         allow_advance_deposits=True,
-        enforce_payout_holds=True,
         allow_turn_swaps=True,
         turn_swap_approval_mode="ADMIN_APPROVAL_REQUIRED"
     )
-    gov = GroupGovernanceSettings(group_id=group_id, allow_turn_swaps=True, turn_swap_approval_mode="ADMIN_APPROVAL_REQUIRED")
+    fin = GroupFinancialSettings(group_id=group_id, enforce_payout_holds=True)
+    gov = GroupGovernanceSettings(group_id=group_id)
     admin_m = GroupMembership(membership_id=str(uuid.uuid4()), group_id=group_id, user_id=admin.id, role="ADMIN", status="ACTIVE")
     a_m = GroupMembership(membership_id=str(uuid.uuid4()), group_id=group_id, user_id=user_a.id, role="MEMBER", status="ACTIVE")
     b_m = GroupMembership(membership_id=str(uuid.uuid4()), group_id=group_id, user_id=user_b.id, role="MEMBER", status="ACTIVE")
@@ -175,7 +175,7 @@ def test_turn_swap_admin_approval_mode(db_session: Session, monkeypatch):
     payout_a = GroupPayout(group_id=group_id, user_id=user_a.id, cycle_number=3, amount_expected=100000, status="PENDING", payout_date=1700000000000)
     payout_b = GroupPayout(group_id=group_id, user_id=user_b.id, cycle_number=7, amount_expected=100000, status="PENDING", payout_date=1700000000000)
 
-    db_session.add_all([group, rotating, gov, admin_m, a_m, b_m, payout_a, payout_b])
+    db_session.add_all([group, rotating, fin, gov, admin_m, a_m, b_m, payout_a, payout_b])
     db_session.commit()
 
     app.dependency_overrides[get_session] = lambda: db_session

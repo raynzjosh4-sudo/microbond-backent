@@ -15,12 +15,19 @@ def trigger_post_deposit_notifications(
     group_id: str,
     user_id,
     amount_deposited: int,
-    session: Session
+    session: Session,
+    cycle_deposit: int = None,
+    surplus: int = 0,
+    obligation_status: str = "PAID",
+    remaining_due: int = 0,
+    cycle_number: int = 1,
+    ref_id: str = None
 ):
     """
     Called by the payment webhook/confirmation handler after a successful deposit.
     - Sends SMS receipt if member is opted in.
     - Sends email receipt if member has a verified security email.
+    - Sends targeted push notifications (Regular, Advance 4x, or Partial).
     - Resets pending_sms_fee_ugx to 0 (it was already billed into the quote).
     """
     try:
@@ -42,51 +49,66 @@ def trigger_post_deposit_notifications(
 
         # 1. SMS receipt (if opted in)
         if membership.sms_reminders_opted_in and user.phone_number:
-            send_deposit_receipt_sms(
-                phone_number=user.phone_number,
-                member_name=member_name,
-                group_name=group_name,
-                amount_deposited=amount_deposited,
-                sms_fee=SMS_FEE_UGX,
-                currency=currency
-            )
-            # Reset pending fee counter
-            membership.pending_sms_fee_ugx = 0
-            session.add(membership)
-            session.commit()
+            from app.services.communication.sms.helpers.send_sms import send_sms
+            sms_text = f"Microbond: {amount_deposited:,} {currency} received for {group_name} Cycle {cycle_number}."
+            if ref_id:
+                sms_text += f" Ref: {ref_id}."
+            sms_text += " Thank you!"
+            try:
+                send_sms(user.phone_number, sms_text)
+                membership.pending_sms_fee_ugx = 0
+                session.add(membership)
+                session.commit()
+            except Exception as sms_err:
+                logger.warning(f"[DEPOSIT SMS] Failed: {sms_err}")
 
-        # 3. Push: personal deposit receipt to the depositor
+        # 2. Push: personal deposit receipt to the depositor (Events 9, 10, 11)
+        if surplus > 0:
+            push_title = "🌟 Advance Deposit Settled"
+            push_body = (
+                f"{(cycle_deposit or amount_deposited):,} {currency} applied to Cycle {cycle_number}. "
+                f"{surplus:,} {currency} stored in your prepaid balance covering future cycles."
+            )
+        elif obligation_status == "PARTIAL":
+            push_title = "⚠️ Partial Deposit Recorded"
+            push_body = (
+                f"Received {amount_deposited:,} {currency}. "
+                f"You still owe {remaining_due:,} {currency} to complete your Cycle {cycle_number} contribution."
+            )
+        else:
+            push_title = "✅ Deposit Confirmed"
+            push_body = f"Your {amount_deposited:,} {currency} contribution for Cycle {cycle_number} has been settled in {group_name}."
+
         if user.fcm_token:
             send_push_notification(
                 token=user.fcm_token,
-                title="Deposit Received ✅",
-                body=f"Your {currency} {amount_deposited:,} deposit to '{group_name}' was recorded successfully.",
-                data={"type": "DEPOSIT_RECEIPT", "group_id": group_id}
+                title=push_title,
+                body=push_body,
+                data={
+                    "type": "DEPOSIT_RECEIPT",
+                    "group_id": group_id,
+                    "cycle_number": str(cycle_number)
+                }
             )
 
-        # 4. Push: broadcast to all other group members (social accountability nudge)
+        # 3. Push: broadcast to all other group members (social accountability nudge)
+        broadcast_title = f"💰 {member_name} just deposited"
+        if surplus > 0:
+            broadcast_body = f"{member_name} deposited {amount_deposited:,} {currency} ({(cycle_deposit or amount_deposited):,} for Cycle {cycle_number} + {surplus:,} advance) in '{group_name}'."
+        elif obligation_status == "PARTIAL":
+            broadcast_body = f"{member_name} made a partial deposit of {amount_deposited:,} {currency} in '{group_name}'."
+        else:
+            broadcast_body = f"{member_name} deposited {currency} {amount_deposited:,} in '{group_name}'."
+
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.ensure_future(
-                    notify_all_group_members(
-                        group_id=group_id,
-                        sender_id=str(user_id),
-                        title=f"💰 {member_name} just deposited",
-                        body=f"{member_name} deposited {currency} {amount_deposited:,} in '{group_name}'.",
-                        data={"type": "DEPOSIT_BROADCAST", "group_id": group_id}
-                    )
-                )
-            else:
-                loop.run_until_complete(
-                    notify_all_group_members(
-                        group_id=group_id,
-                        sender_id=str(user_id),
-                        title=f"💰 {member_name} just deposited",
-                        body=f"{member_name} deposited {currency} {amount_deposited:,} in '{group_name}'.",
-                        data={"type": "DEPOSIT_BROADCAST", "group_id": group_id}
-                    )
-                )
+            from app.services.push_notifications import notify_all_group_members_sync
+            notify_all_group_members_sync(
+                group_id=group_id,
+                sender_id=str(user_id),
+                title=broadcast_title,
+                body=broadcast_body,
+                data={"type": "DEPOSIT_BROADCAST", "group_id": group_id}
+            )
         except Exception as push_err:
             logger.warning(f"[DEPOSIT_BROADCAST_PUSH] Failed: {push_err}")
 

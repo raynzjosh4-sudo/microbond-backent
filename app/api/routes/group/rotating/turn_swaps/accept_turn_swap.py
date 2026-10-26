@@ -134,18 +134,40 @@ def accept_turn_swap(
     
     swap.status = "ACCEPTED"
     swap.updated_at = utc_now()
+
+    # Event 19: Insert Chat Confirmation into Group Thread
+    import uuid
+    from app.models.group.chat import GroupChatMessage
+    requester_user = session.get(User, swap.requester_user_id)
+    requester_name = requester_user.full_name if requester_user else "Requester"
+    target_name = current_user.full_name or "Target"
+    c1 = swap.requester_cycle_number
+    c2 = swap.target_cycle_number
+
+    chat_msg = GroupChatMessage(
+        client_message_id=str(uuid.uuid4()),
+        group_id=group_id,
+        sender_id="SYSTEM",
+        message_type="SYSTEM_EVENT",
+        message_text=f"🔄 Turn Swap Confirmed: {requester_name} (was Turn {c1}) and {target_name} (was Turn {c2}) have successfully swapped payout positions.",
+        status="SENT"
+    )
+    session.add(chat_msg)
     
     session.commit()
 
-    # Push: notify the original requester that their swap was accepted
-    requester_user = session.get(User, swap.requester_user_id)
-    if requester_user and requester_user.fcm_token:
-        send_push_notification(
-            token=requester_user.fcm_token,
-            title="Swap Accepted ✅",
-            body=f"{current_user.full_name} accepted your turn swap. Your payout position has been updated.",
-            data={"type": "SWAP_ACCEPTED", "group_id": group_id}
+    # Event 19: Push broadcast to all group members
+    try:
+        from app.services.push_notifications import notify_all_group_members_sync
+        notify_all_group_members_sync(
+            group_id=group_id,
+            sender_id="SYSTEM",
+            title="🔄 Turn Swap Confirmed",
+            body=f"{requester_name} and {target_name} have swapped payout positions (Turn {c1} & Turn {c2}).",
+            data={"route": "rotation_schedule", "group_id": group_id}
         )
+    except Exception as push_err:
+        pass
 
     return {"status": "success", "message": "Turn swap successfully completed! Your payout position has been updated."}
 

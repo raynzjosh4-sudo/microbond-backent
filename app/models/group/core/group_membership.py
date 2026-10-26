@@ -26,8 +26,9 @@ class GroupMembership(SQLModel, table=True):
     # Rotating Settings
     payout_position: Optional[int] = Field(default=None, description="The assigned turn order in a rotating group (1, 2, 3...)")
     
-    # Money in
+    # Money in & Prepaid Balance
     total_contributed: int = Field(default=0)
+    credit_balance_ugx: int = Field(default=0, sa_column=Column(BigInteger, server_default="0", nullable=False), description="Prepaid savings balance available for future cycles in this group")
     
     # Personal Settings
     auto_pay_my_turn: bool = Field(default=True)

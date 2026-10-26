@@ -154,6 +154,16 @@ def admin_add_member(
         session.commit()
         session.refresh(new_membership)
         
+        # If capacity reached for rotating group, auto-launch
+        if group.max_members and group.member_count >= group.max_members:
+            if group.type == "MERRY_GO_ROUND":
+                from app.services.group.launcher_service import execute_group_launch
+                try:
+                    execute_group_launch(session, group_id)
+                    session.commit()
+                except Exception as launch_err:
+                    logger.warning(f"Auto-launch error on group fill {group_id}: {launch_err}")
+
         # Chat integration
         broadcast_system_message_sync(
             group_id=group_id,

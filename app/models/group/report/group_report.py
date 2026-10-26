@@ -13,6 +13,7 @@ class GroupReport(SQLModel, table=True):
     
     group_id: str = Field(foreign_key="group.group_id", index=True)
     reporter_user_id: uuid.UUID = Field(foreign_key="user.id", index=True)
+    reported_user_id: Optional[uuid.UUID] = Field(default=None, foreign_key="user.id", index=True, nullable=True)
     
     reason: str = Field(description="High-level category, e.g., SCAM, SPAM, HARASSMENT")
     description: Optional[str] = Field(default=None, description="Detailed user description")

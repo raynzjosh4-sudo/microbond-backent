@@ -88,49 +88,74 @@ def manually_disburse_payout(
     }
 
 
-@router.post("/{group_id}/payouts/{payout_id}/sign", summary="Sign / Approve Multi-Sig Payout")
-def sign_multisig_payout(
+from pydantic import BaseModel
+from app.services.group.multisig_service import sign_payout, get_payout_multisig_status, dispute_payout
+
+
+class SignPayoutRequest(BaseModel):
+    pin: Optional[str] = None
+    device_fingerprint: Optional[str] = None
+
+
+class DisputePayoutRequest(BaseModel):
+    reason: str
+
+
+@router.get("/{group_id}/payouts/{payout_id}/multisig-status", summary="Get Payout Multi-Sig Approval Status")
+def get_payout_signing_status(
     group_id: str,
     payout_id: int,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Allows designated signers (Admin and Treasurer) to co-sign an upcoming payout.
-    When approved, marks payout status as APPROVED_FOR_DISBURSEMENT.
+    Returns live signer progress, collected signatures roster, and TLQD countdown.
     """
-    membership = session.exec(
-        select(GroupMembership).where(
-            GroupMembership.group_id == group_id,
-            GroupMembership.user_id == current_user.id,
-            GroupMembership.status == "ACTIVE"
-        )
-    ).first()
-
-    if not membership or membership.role not in ["ADMIN", "TREASURER"]:
-        raise HTTPException(status_code=403, detail="Only authorized signers (Admin/Treasurer) can sign payouts.")
-
-    payout = session.exec(
-        select(GroupPayout).where(
-            GroupPayout.id == payout_id,
-            GroupPayout.group_id == group_id
-        )
-    ).first()
-
-    if not payout:
-        raise HTTPException(status_code=404, detail="Payout record not found.")
-
-    payout.status = "APPROVED_FOR_DISBURSEMENT"
-    payout.hold_reason = f"Signed and approved by {membership.role} {current_user.full_name}."
-    session.add(payout)
-    session.commit()
-    session.refresh(payout)
-
     return {
         "status": "success",
-        "message": f"Payout signed and approved by {membership.role}.",
-        "data": {
-            "payout_id": payout.id,
-            "status": payout.status
-        }
+        "data": get_payout_multisig_status(session, group_id, payout_id, current_user.id)
     }
+
+
+@router.post("/{group_id}/payouts/{payout_id}/sign", summary="Sign / Approve Multi-Sig Payout")
+def sign_multisig_payout(
+    group_id: str,
+    payout_id: int,
+    request: Optional[SignPayoutRequest] = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Allows designated signers (Admin and Treasurer) to co-sign an upcoming payout with biometric/PIN verification.
+    When quorum is met, marks payout status as APPROVED_FOR_DISBURSEMENT.
+    """
+    pin = request.pin if request else None
+    device = request.device_fingerprint if request else None
+    return sign_payout(
+        session=session,
+        group_id=group_id,
+        payout_id=payout_id,
+        user=current_user,
+        pin=pin,
+        device_fingerprint=device
+    )
+
+
+@router.post("/{group_id}/payouts/{payout_id}/dispute", summary="Freeze / Dispute Payout")
+def dispute_multisig_payout(
+    group_id: str,
+    payout_id: int,
+    request: DisputePayoutRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Allows a signer to veto and freeze an upcoming payout due to suspected discrepancy or fraud.
+    """
+    return dispute_payout(
+        session=session,
+        group_id=group_id,
+        payout_id=payout_id,
+        user=current_user,
+        reason=request.reason
+    )

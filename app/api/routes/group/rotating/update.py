@@ -9,6 +9,7 @@ from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.rotating import RotatingGroupDetails
+from app.models.group.settings import GroupFinancialSettings
 
 router = APIRouter()
 
@@ -77,6 +78,10 @@ def get_rotating_group_settings(
     if not details:
         raise HTTPException(status_code=404, detail="Rotating group details not found.")
 
+    fin_settings = session.exec(
+        select(GroupFinancialSettings).where(GroupFinancialSettings.group_id == group_id)
+    ).first()
+
     return {
         "status": "success",
         "data": {
@@ -97,7 +102,7 @@ def get_rotating_group_settings(
             "guarantor_default_action": details.guarantor_default_action,
             "allow_partial_payments": details.allow_partial_payments,
             "allow_advance_deposits": details.allow_advance_deposits,
-            "enforce_payout_holds": details.enforce_payout_holds,
+            "enforce_payout_holds": fin_settings.enforce_payout_holds if fin_settings else False,
             "auto_disburse_when_full": details.auto_disburse_when_full,
             "multi_sig_payout_approval": details.multi_sig_payout_approval,
             "allow_turn_swaps": details.allow_turn_swaps,
@@ -179,8 +184,14 @@ def update_rotating_group_settings(
         details.allow_partial_payments = request.allow_partial_payments
     if request.allow_advance_deposits is not None:
         details.allow_advance_deposits = request.allow_advance_deposits
-    if request.enforce_payout_holds is not None:
-        details.enforce_payout_holds = request.enforce_payout_holds
+        
+    fin_settings = session.exec(
+        select(GroupFinancialSettings).where(GroupFinancialSettings.group_id == group_id)
+    ).first()
+    if request.enforce_payout_holds is not None and fin_settings:
+        fin_settings.enforce_payout_holds = request.enforce_payout_holds
+        session.add(fin_settings)
+
     if request.auto_disburse_when_full is not None:
         details.auto_disburse_when_full = request.auto_disburse_when_full
     if request.multi_sig_payout_approval is not None:
@@ -215,7 +226,7 @@ def update_rotating_group_settings(
             "require_guarantor": details.require_guarantor,
             "allow_partial_payments": details.allow_partial_payments,
             "allow_advance_deposits": details.allow_advance_deposits,
-            "enforce_payout_holds": details.enforce_payout_holds,
+            "enforce_payout_holds": fin_settings.enforce_payout_holds if fin_settings else False,
             "auto_disburse_when_full": details.auto_disburse_when_full,
             "multi_sig_payout_approval": details.multi_sig_payout_approval,
             "allow_turn_swaps": details.allow_turn_swaps,

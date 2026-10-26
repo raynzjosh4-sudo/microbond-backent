@@ -344,3 +344,34 @@ def get_settings_summary(
     base["type_specific_settings"] = type_specific
 
     return {"status": "success", "data": base}
+
+
+@router.get("/{group_id}/rotating-details", summary="Get Rotating Group Details (Direct Alias)")
+@router.get("/{group_id}/settings/rotating", summary="Get Rotating Group Settings (Direct Alias)")
+def get_rotating_details_direct(
+    group_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    from app.api.routes.group.rotating.update import get_rotating_group_settings
+    return get_rotating_group_settings(group_id=group_id, session=session, current_user=current_user)
+
+
+@router.patch("/{group_id}/rotating-details", summary="Update Rotating Group Details (Direct Alias)")
+@router.put("/{group_id}/rotating-details", summary="Update Rotating Group Details (Direct Alias)")
+@router.patch("/{group_id}/settings/rotating", summary="Update Rotating Group Settings (Direct Alias)")
+@router.put("/{group_id}/settings/rotating", summary="Update Rotating Group Settings (Direct Alias)")
+def update_rotating_details_direct(
+    group_id: str,
+    request: Any = None,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    from app.api.routes.group.rotating.update import UpdateRotatingSettingsRequest, update_rotating_group_settings
+    if isinstance(request, dict):
+        parsed_req = UpdateRotatingSettingsRequest(**request)
+    elif isinstance(request, UpdateRotatingSettingsRequest):
+        parsed_req = request
+    else:
+        parsed_req = UpdateRotatingSettingsRequest()
+    return update_rotating_group_settings(group_id=group_id, request=parsed_req, session=session, current_user=current_user)

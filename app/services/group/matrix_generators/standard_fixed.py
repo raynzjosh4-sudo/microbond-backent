@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import json
+import uuid
 from sqlalchemy.orm import Session
 
 from app.models.group.group import GroupMembership
@@ -46,17 +47,31 @@ def generate_standard_fixed_matrix(
     raw_obligations = matrix_data.get("obligations", [])
     raw_payouts = matrix_data.get("payouts", [])
 
+    from app.utils.time.now_epoch_ms import now_epoch_ms
+    now_ms = now_epoch_ms()
+
+    def to_ms(val) -> int:
+        ts = int(val)
+        return ts * 1000 if ts < 10_000_000_000 else ts
+
+    def to_uuid(val):
+        if isinstance(val, uuid.UUID):
+            return val
+        return uuid.UUID(str(val))
+
+    freq_ms = collection_frequency_days * 86400 * 1000
+
     obligations = [
         {
             "group_id": group_id,
-            "user_id": o["user_id"],
+            "user_id": to_uuid(o["user_id"]),
             "cycle_number": o["cycle_number"],
             "amount_due": o["amount_due"],
             "amount_paid": o.get("amount_paid", 0),
-            "due_date": o["due_date"],
+            "due_date": to_ms(o["due_date"]) + freq_ms,
             "status": o.get("status", "PENDING"),
-            "created_at": o.get("created_at", current_time_epoch),
-            "updated_at": o.get("updated_at", current_time_epoch),
+            "created_at": now_ms,
+            "updated_at": now_ms,
         }
         for o in raw_obligations
     ]
@@ -64,13 +79,13 @@ def generate_standard_fixed_matrix(
     payouts = [
         {
             "group_id": group_id,
-            "user_id": p["user_id"],
+            "user_id": to_uuid(p["user_id"]),
             "cycle_number": p["cycle_number"],
             "amount_expected": p["amount_expected"],
             "amount_received": p.get("amount_received", p.get("amount_collected", 0)),
             "status": p.get("status", "PENDING"),
-            "payout_date": p["payout_date"],
-            "created_at": p.get("created_at", current_time_epoch),
+            "payout_date": to_ms(p["payout_date"]) + freq_ms,
+            "created_at": now_ms,
         }
         for p in raw_payouts
     ]
@@ -79,6 +94,11 @@ def generate_standard_fixed_matrix(
         session.bulk_insert_mappings(MemberObligation, obligations)
     if payouts:
         session.bulk_insert_mappings(GroupPayout, payouts)
+
+    # Assign payout positions (1, 2, 3...) to members in rotation order
+    for idx, m in enumerate(members, start=1):
+        m.payout_position = idx
+        session.add(m)
 
     return matrix_data.get("num_cycles", 0)
 

@@ -13,6 +13,9 @@ class GroupWallet(SQLModel, table=True):
     # The primary pool where member contributions for the current cycle go
     pooled_funds: int = Field(default=0, description="Virtual balance of member contributions", sa_column=Column(BigInteger))
     
+    # Advance contributions held in trust for future cycles
+    prepaid_funds: int = Field(default=0, description="Virtual balance of advance member contributions held for future cycles", sa_column=Column(BigInteger, server_default="0", nullable=False))
+    
     # The reserve/cut pool
     reserve_funds: int = Field(default=0, description="Virtual balance for admin cuts, late fees, or emergencies", sa_column=Column(BigInteger))
     

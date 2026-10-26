@@ -102,6 +102,7 @@ class GroupDashboardSummaryService:
             select(RotatingGroupDetails).where(RotatingGroupDetails.group_id.in_(group_ids))
         ).all()
         current_cycles: Dict[str, int] = {rd.group_id: rd.current_cycle for rd in rot_details_list}
+        rot_details_by_group: Dict[str, RotatingGroupDetails] = {rd.group_id: rd for rd in rot_details_list}
 
         # -------------------------------------------------------------
         # QUERY 4: Bulk Obligations Calculation (In-memory grouping)
@@ -213,63 +214,125 @@ class GroupDashboardSummaryService:
         for group in groups:
             gid = group.group_id
             tot_members = member_counts.get(gid, 0)
+            rot_details = rot_details_by_group.get(gid)
+            max_m = group.max_members or tot_members
 
-            # Compute Rings in Memory
-            group_obs = obs_by_group.get(gid, [])
-            paid_count = 0
-            missed_count = 0
-            for ob in group_obs:
-                if ob.status == "PAID" or (ob.amount_paid >= ob.amount_due and ob.amount_due > 0):
-                    paid_count += 1
-                elif ob.due_date and now_ms > ob.due_date:
-                    missed_count += 1
-
-            ring_status = RingStatus(
-                total_expected_members=tot_members,
-                paid_on_time_count=paid_count,
-                missed_deadline_count=missed_count
-            )
-
-            # Compute Ticker Messages in Memory
-            ticker_messages: List[ActionMessage] = []
-            if group.type == "MERRY_GO_ROUND":
-                next_p = payouts_by_group.get(gid)
-                if next_p:
-                    if next_p.user_id == user_id:
+            if group.status in ["FORMING", "PENDING"]:
+                ring_status = RingStatus(
+                    total_expected_members=max_m,
+                    paid_on_time_count=tot_members,
+                    missed_deadline_count=0
+                )
+                ticker_messages: List[ActionMessage] = []
+                if tot_members < max_m:
+                    ticker_messages.append(ActionMessage(
+                        text=f"Recruiting members: {tot_members}/{max_m} spots filled",
+                        type="RECRUITING",
+                        has_blue_ticks=False,
+                        is_alert=False
+                    ))
+                else:
+                    if rot_details and rot_details.group_start_time and rot_details.group_start_time > now_ms:
+                        rem_sec = (rot_details.group_start_time - now_ms) // 1000
+                        hrs = rem_sec // 3600
+                        mins = (rem_sec % 3600) // 60
+                        time_str = f"{hrs}h {mins}m" if hrs > 0 else f"{mins}m"
                         ticker_messages.append(ActionMessage(
-                            text="Your payout turn is scheduled for this round",
-                            type="USER_TURN_REMINDER",
-                            has_blue_ticks=True,
+                            text=f"Circle full! Starts in {time_str}",
+                            type="START_COUNTDOWN",
+                            has_blue_ticks=False,
                             is_alert=False
                         ))
                     else:
                         ticker_messages.append(ActionMessage(
-                            text="A rotation turn is scheduled for this round",
-                            type="PAYOUT_TURN",
-                            has_blue_ticks=True,
+                            text="Circle full! Starting shortly",
+                            type="START_PENDING",
+                            has_blue_ticks=False,
                             is_alert=False
                         ))
-                else:
+            else:
+                # Group is ACTIVE (or COMPLETED)
+                group_obs = obs_by_group.get(gid, [])
+                paid_count = 0
+                missed_count = 0
+                user_ob = None
+                for ob in group_obs:
+                    if str(ob.user_id) == user_id_str:
+                        user_ob = ob
+                    if ob.status == "PAID" or (ob.amount_paid >= ob.amount_due and ob.amount_due > 0):
+                        paid_count += 1
+                    elif ob.due_date and now_ms > ob.due_date:
+                        missed_count += 1
+
+                ring_status = RingStatus(
+                    total_expected_members=tot_members,
+                    paid_on_time_count=paid_count,
+                    missed_deadline_count=missed_count
+                )
+
+                # Compute Ticker Messages in Memory
+                ticker_messages: List[ActionMessage] = []
+                if group.type == "MERRY_GO_ROUND":
+                    cur_cycle = current_cycles.get(gid, 1)
+                    if user_ob and user_ob.status != "PAID" and (user_ob.amount_due - user_ob.amount_paid) > 0:
+                        rem_due = user_ob.amount_due - user_ob.amount_paid
+                        if user_ob.due_date and user_ob.due_date > now_ms:
+                            diff_sec = (user_ob.due_date - now_ms) // 1000
+                            days = diff_sec // 86400
+                            hrs = (diff_sec % 86400) // 3600
+                            time_str = f"{days}d {hrs}h" if days > 0 else f"{hrs}h"
+                            ticker_messages.append(ActionMessage(
+                                text=f"Cycle {cur_cycle} due in {time_str} ({rem_due:,} {group.currency})",
+                                type="PAYMENT_DUE",
+                                has_blue_ticks=False,
+                                is_alert=True
+                            ))
+                        else:
+                            ticker_messages.append(ActionMessage(
+                                text=f"Cycle {cur_cycle} overdue ({rem_due:,} {group.currency})",
+                                type="OVERDUE",
+                                has_blue_ticks=False,
+                                is_alert=True
+                            ))
+                    else:
+                        next_p = payouts_by_group.get(gid)
+                        if next_p and next_p.user_id == user_id:
+                            ticker_messages.append(ActionMessage(
+                                text=f"Your payout turn ({next_p.amount_expected:,} {group.currency}) is scheduled this round",
+                                type="USER_TURN_REMINDER",
+                                has_blue_ticks=True,
+                                is_alert=False
+                            ))
+                        else:
+                            unpaid_count = max(0, tot_members - paid_count)
+                            if unpaid_count > 0:
+                                ticker_messages.append(ActionMessage(
+                                    text=f"Cycle {cur_cycle}: {paid_count}/{tot_members} collected ({unpaid_count} pending)",
+                                    type="CYCLE_PROGRESS",
+                                    has_blue_ticks=True,
+                                    is_alert=False
+                                ))
+                            else:
+                                ticker_messages.append(ActionMessage(
+                                    text=f"Cycle {cur_cycle} pot complete! Ready for disbursement",
+                                    type="POT_READY",
+                                    has_blue_ticks=True,
+                                    is_alert=False
+                                ))
+                elif group.type in ["EVENT_COMMITTEE", "FUNDRAISER", "GOAL_SAVINGS"]:
                     ticker_messages.append(ActionMessage(
-                        text="Active rotation cycle underway",
-                        type="SYSTEM_STATUS",
+                        text=f"Total collected: {group.total_balance:,} {group.currency}",
+                        type="GOAL_PROGRESS",
+                        has_blue_ticks=False,
+                        is_alert=False
+                    ))
+                elif group.type == "BILL_SPLIT":
+                    ticker_messages.append(ActionMessage(
+                        text="Split obligation cycle due soon",
+                        type="BILL_DUE",
                         has_blue_ticks=True,
                         is_alert=False
                     ))
-            elif group.type in ["EVENT_COMMITTEE", "FUNDRAISER", "GOAL_SAVINGS"]:
-                ticker_messages.append(ActionMessage(
-                    text=f"Total collected: {group.total_balance:,} {group.currency}",
-                    type="GOAL_PROGRESS",
-                    has_blue_ticks=False,
-                    is_alert=False
-                ))
-            elif group.type == "BILL_SPLIT":
-                ticker_messages.append(ActionMessage(
-                    text="Split obligation cycle due soon",
-                    type="BILL_DUE",
-                    has_blue_ticks=True,
-                    is_alert=False
-                ))
 
             if not ticker_messages:
                 ticker_messages.append(ActionMessage(

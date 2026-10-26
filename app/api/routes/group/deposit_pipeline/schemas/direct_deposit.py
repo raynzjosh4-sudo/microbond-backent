@@ -20,3 +20,6 @@ class DirectDepositResponse(BaseModel):
     group_total_balance: int
     ring_completion_fraction: float
     timestamp: int
+    cycle_contribution_credited: Optional[int] = None
+    advance_savings_credited: Optional[int] = None
+    member_prepaid_balance: Optional[int] = None

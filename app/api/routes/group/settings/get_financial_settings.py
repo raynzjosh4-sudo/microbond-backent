@@ -52,9 +52,6 @@ def get_financial_settings(
     
     # If the user is NOT an Admin, apply the privacy strips!
     if not is_admin:
-        if not vis_settings.vis_manage_payout_order:
-            response_data.pop("payout_selection_strategy", None)
-            
         if not vis_settings.vis_late_fee_penalties:
             response_data.pop("enable_late_fees", None)
             response_data.pop("late_fee_amount", None)

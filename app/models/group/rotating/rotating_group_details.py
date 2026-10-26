@@ -29,7 +29,6 @@ class RotatingGroupDetails(SQLModel, table=True):
     guarantor_default_action: str
     allow_partial_payments: bool
     allow_advance_deposits: bool
-    enforce_payout_holds: bool
     
     # Settlement & Automation
     auto_disburse_when_full: bool = Field(default=True, description="Automatically disburse payout when all member contributions for the cycle are received")

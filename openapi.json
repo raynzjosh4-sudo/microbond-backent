@@ -4037,13 +4037,68 @@
         }
       }
     },
+    "/api/v1/groups/rotating/{group_id}/payouts/{payout_id}/multisig-status": {
+      "get": {
+        "tags": [
+          "Rotating Groups"
+        ],
+        "summary": "Get Payout Multi-Sig Approval Status",
+        "description": "Returns live signer progress, collected signatures roster, and TLQD countdown.",
+        "operationId": "get_payout_signing_status_api_v1_groups_rotating__group_id__payouts__payout_id__multisig_status_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "payout_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Payout Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/groups/rotating/{group_id}/payouts/{payout_id}/sign": {
       "post": {
         "tags": [
           "Rotating Groups"
         ],
         "summary": "Sign / Approve Multi-Sig Payout",
-        "description": "Allows designated signers (Admin and Treasurer) to co-sign an upcoming payout.\nWhen approved, marks payout status as APPROVED_FOR_DISBURSEMENT.",
+        "description": "Allows designated signers (Admin and Treasurer) to co-sign an upcoming payout with biometric/PIN verification.\nWhen quorum is met, marks payout status as APPROVED_FOR_DISBURSEMENT.",
         "operationId": "sign_multisig_payout_api_v1_groups_rotating__group_id__payouts__payout_id__sign_post",
         "security": [
           {
@@ -4070,6 +4125,88 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SignPayoutRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Request"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/rotating/{group_id}/payouts/{payout_id}/dispute": {
+      "post": {
+        "tags": [
+          "Rotating Groups"
+        ],
+        "summary": "Freeze / Dispute Payout",
+        "description": "Allows a signer to veto and freeze an upcoming payout due to suspected discrepancy or fraud.",
+        "operationId": "dispute_multisig_payout_api_v1_groups_rotating__group_id__payouts__payout_id__dispute_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "payout_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Payout Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisputePayoutRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -11570,6 +11707,300 @@
         }
       }
     },
+    "/api/v1/groups/{group_id}/settings/rotating": {
+      "get": {
+        "tags": [
+          "Group Settings"
+        ],
+        "summary": "Get Rotating Group Settings (Direct Alias)",
+        "operationId": "get_rotating_details_direct_api_v1_groups__group_id__settings_rotating_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Group Settings"
+        ],
+        "summary": "Update Rotating Group Settings (Direct Alias)",
+        "operationId": "update_rotating_details_direct_api_v1_groups__group_id__settings_rotating_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "request",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "title": "Request"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Group Settings"
+        ],
+        "summary": "Update Rotating Group Settings (Direct Alias)",
+        "operationId": "update_rotating_details_direct_api_v1_groups__group_id__settings_rotating_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "request",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "title": "Request"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{group_id}/rotating-details": {
+      "get": {
+        "tags": [
+          "Group Settings"
+        ],
+        "summary": "Get Rotating Group Details (Direct Alias)",
+        "operationId": "get_rotating_details_direct_api_v1_groups__group_id__rotating_details_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Group Settings"
+        ],
+        "summary": "Update Rotating Group Details (Direct Alias)",
+        "operationId": "update_rotating_details_direct_api_v1_groups__group_id__rotating_details_put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "request",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "title": "Request"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Group Settings"
+        ],
+        "summary": "Update Rotating Group Details (Direct Alias)",
+        "operationId": "update_rotating_details_direct_api_v1_groups__group_id__rotating_details_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "request",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "title": "Request"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/groups/{group_id}/settings/goal-controls": {
       "get": {
         "tags": [
@@ -12398,6 +12829,174 @@
               ],
               "title": "Target Date Ms"
             }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{group_id}/reports/cycles": {
+      "get": {
+        "tags": [
+          "Rotating Group Reports"
+        ],
+        "summary": "List Rotating Group Cycle Reports",
+        "description": "Lists all official cycle completion milestone reports recorded for this group.",
+        "operationId": "list_cycle_reports_api_v1_groups__group_id__reports_cycles_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{group_id}/reports/cycle/{cycle_number}": {
+      "get": {
+        "tags": [
+          "Rotating Group Reports"
+        ],
+        "summary": "Get Detailed Rotating Cycle Milestone Report",
+        "description": "Returns the comprehensive, cryptographically sealed Cycle Milestone Statement\nconforming to the Rotating Group Reporting & Audit Ledger specification.",
+        "operationId": "get_cycle_report_api_v1_groups__group_id__reports_cycle__cycle_number__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "cycle_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Cycle Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/groups/{group_id}/reports/cycle/{cycle_number}/export": {
+      "get": {
+        "tags": [
+          "Rotating Group Reports"
+        ],
+        "summary": "Export Cycle Report (HTML / CSV / JSON)",
+        "description": "Exports the verified Cycle Milestone Statement as printable HTML (for PDF printing)\nor CSV for audit spreadsheets.",
+        "operationId": "export_cycle_report_api_v1_groups__group_id__reports_cycle__cycle_number__export_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "cycle_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Cycle Number"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "Export format: html, csv, or json",
+              "default": "html",
+              "title": "Format"
+            },
+            "description": "Export format: html, csv, or json"
           }
         ],
         "responses": {
@@ -14272,10 +14871,44 @@
             }
           }
         }
+      },
+      "head": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Read Root",
+        "operationId": "read_root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
       }
     },
     "/healthz": {
       "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Liveness probe",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "head": {
         "tags": [
           "System"
         ],
@@ -16041,6 +16674,11 @@
             "type": "string",
             "title": "Currency",
             "default": "UGX"
+          },
+          "member_prepaid_balance": {
+            "type": "integer",
+            "title": "Member Prepaid Balance",
+            "default": 0
           }
         },
         "type": "object",
@@ -16232,6 +16870,39 @@
           "timestamp": {
             "type": "integer",
             "title": "Timestamp"
+          },
+          "cycle_contribution_credited": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cycle Contribution Credited"
+          },
+          "advance_savings_credited": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advance Savings Credited"
+          },
+          "member_prepaid_balance": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Prepaid Balance"
           }
         },
         "type": "object",
@@ -16345,6 +17016,19 @@
         ],
         "title": "DiscoverableContactGroup",
         "description": "Savings group discovered through mutual phone contacts with social proof."
+      },
+      "DisputePayoutRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "title": "DisputePayoutRequest"
       },
       "DistributeDividendsRequest": {
         "properties": {
@@ -19691,6 +20375,34 @@
         ],
         "title": "SharedWalletGroupCreateRequest"
       },
+      "SignPayoutRequest": {
+        "properties": {
+          "pin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pin"
+          },
+          "device_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Fingerprint"
+          }
+        },
+        "type": "object",
+        "title": "SignPayoutRequest"
+      },
       "SmsPreferencesResponse": {
         "properties": {
           "group_id": {
@@ -22781,6 +23493,17 @@
               }
             ],
             "title": "Admins Must Approve New Members"
+          },
+          "requires_admin_approval": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requires Admin Approval"
           }
         },
         "type": "object",

@@ -112,13 +112,22 @@ def _compute_member_deposit_states(
     ).all()
 
     # 3. Fetch obligations for this day or active cycle
-    obligations = session.exec(
-        select(MemberObligation).where(
-            MemberObligation.group_id == group_id,
-            MemberObligation.due_date >= day_start_ms,
-            MemberObligation.due_date <= day_end_ms
-        )
-    ).all()
+    if rotating:
+        target_cycle = rotating.current_cycle or 1
+        obligations = session.exec(
+            select(MemberObligation).where(
+                MemberObligation.group_id == group_id,
+                MemberObligation.cycle_number == target_cycle
+            )
+        ).all()
+    else:
+        obligations = session.exec(
+            select(MemberObligation).where(
+                MemberObligation.group_id == group_id,
+                MemberObligation.due_date >= day_start_ms,
+                MemberObligation.due_date <= day_end_ms
+            )
+        ).all()
     obligations_by_user: Dict[uuid.UUID, MemberObligation] = {ob.user_id: ob for ob in obligations}
 
     # If default_target is 0, check if obligations have an amount_due

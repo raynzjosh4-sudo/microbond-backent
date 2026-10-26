@@ -21,5 +21,8 @@ class MemberObligation(SQLModel, table=True):
     # Status: PENDING, PAID, LATE, DEFAULTED
     status: str = Field(default="PENDING", index=True)
     
+    # Reminder tier tracking (48, 24, etc.) to prevent duplicate reminder spam
+    last_reminder_tier: Optional[int] = Field(default=None)
+
     created_at: int = Field(default_factory=now_epoch_ms, sa_column=Column(BigInteger))
     updated_at: int = Field(default_factory=now_epoch_ms, sa_column=Column(BigInteger))

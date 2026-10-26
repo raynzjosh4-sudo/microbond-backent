@@ -1,6 +1,6 @@
 import logging
 from sqlmodel import Session, select
-from app.models.group.group import Group
+from app.models.group.group import Group, GroupMembership
 from app.models.group.finance import GroupPayout
 from app.models.group.wallet import GroupWallet
 from app.models.group.ledger import LedgerEntry
@@ -81,12 +81,36 @@ def process_single_payout(session: Session, payout: GroupPayout, now_ms: int, fo
 
     if rotating and not force_disburse:
         # Check Multi-Sig requirement first
-        if rotating.multi_sig_payout_approval and payout.status != "APPROVED_FOR_DISBURSEMENT":
+        if rotating.multi_sig_payout_approval and payout.status not in ["APPROVED_FOR_DISBURSEMENT", "APPROVED_BY_DECAY"]:
             payout.status = "PENDING_MULTISIG_APPROVAL"
             payout.hold_reason = "Awaiting required multi-signature approvals (Admin & Treasurer)."
             session.add(payout)
             session.commit()
             logger.info(f"[PAYOUT_WORKER] Payout {payout.id} held for Multi-Sig approval.")
+
+            # Event 16: Multi-Sig Approval Requested Push to Signers
+            try:
+                signers = session.exec(
+                    select(GroupMembership).where(
+                        GroupMembership.group_id == payout.group_id,
+                        GroupMembership.status == "ACTIVE",
+                        GroupMembership.role.in_(["ADMIN", "TREASURER"])
+                    )
+                ).all()
+                signer_uids = [s.user_id for s in signers]
+                if signer_uids:
+                    signer_users = session.exec(select(User).where(User.id.in_(signer_uids))).all()
+                    for su in signer_users:
+                        if su.fcm_token:
+                            send_push_notification(
+                                token=su.fcm_token,
+                                title="✍️ Payout Signature Required",
+                                body=f"Cycle {payout.cycle_number} pot ({payout.amount_expected:,} UGX) is ready. Please review and sign with your PIN.",
+                                data={"route": "multisig_approval_screen", "payout_id": str(payout.id), "group_id": payout.group_id}
+                            )
+            except Exception as ms_err:
+                logger.warning(f"[MULTISIG NOTIF] Failed: {ms_err}")
+
             return
 
         # Check Auto-Disburse requirement
@@ -194,6 +218,30 @@ def process_single_payout(session: Session, payout: GroupPayout, now_ms: int, fo
         actor_user_id=payout.user_id
     )
 
+    # Event 15: Chat Celebration Banner
+    from app.models.group.chat import GroupChatMessage
+    import uuid
+    curr = group.currency or "UGX"
+    hold_str = f" ({hold_amount:,} {curr} retained in security escrow)" if hold_amount > 0 else ""
+    payout_msg = GroupChatMessage(
+        client_message_id=str(uuid.uuid4()),
+        group_id=payout.group_id,
+        sender_id="SYSTEM",
+        message_type="PAYOUT_COMPLETED",
+        message_text=f"🎉 Cycle {payout.cycle_number} Payout Disbursed! {user.full_name} has received {disburse_amount:,} {curr}{hold_str}.",
+        attachments=[{
+            "has_action_button": True,
+            "action_text": "View Payout Receipt",
+            "action_route": "payout_receipt_screen",
+            "payout_id": str(payout.id),
+            "amount": disburse_amount,
+            "hold_amount": hold_amount
+        }],
+        created_at=now_ms,
+        status="SENT"
+    )
+    session.add(payout_msg)
+
     session.commit()
 
     logger.info(
@@ -201,26 +249,50 @@ def process_single_payout(session: Session, payout: GroupPayout, now_ms: int, fo
         f"Amount: {disburse_amount:,} UGX sent to {chosen_account.provider_name}."
     )
 
-    # ── 7. Check Cycle Completion & Auto-Renewal ─────────────────────────────
-    if rotating and rotating.number_of_cycles and payout.cycle_number >= rotating.number_of_cycles:
-        # Check if all scheduled payouts in this cycle have COMPLETED
-        uncompleted_payouts = session.exec(
-            select(GroupPayout).where(
-                GroupPayout.group_id == payout.group_id,
-                GroupPayout.status != "COMPLETED"
+    # ── 6b. Generate Cycle Milestone Report & Post Visual Report Card ─────────
+    if rotating:
+        try:
+            from app.services.group.rotating.rotating_report_service import (
+                generate_and_save_cycle_report,
+                post_cycle_report_card_to_chat
             )
-        ).all()
+            cycle_report = generate_and_save_cycle_report(
+                session=session,
+                group_id=payout.group_id,
+                cycle_number=payout.cycle_number,
+                payout=payout
+            )
+            post_cycle_report_card_to_chat(session=session, report=cycle_report)
+        except Exception as ex:
+            logger.warning(f"[PAYOUT_WORKER] Failed generating rotating cycle report: {ex}")
 
-        if not uncompleted_payouts:
-            if rotating.auto_renew_cycle:
-                from app.services.group.rotating.cycle_renewal_service import execute_cycle_renewal
-                logger.info(f"[PAYOUT_WORKER] All payouts complete for group {group.group_id}. Triggering Auto-Renewal.")
-                execute_cycle_renewal(session, payout.group_id, rotating, now_ms=now_ms)
-            else:
-                group.status = "COMPLETED"
-                session.add(group)
-                session.commit()
-                logger.info(f"[PAYOUT_WORKER] Group {group.group_id} has reached completion of all cycles.")
+    # ── 7. Check Cycle Completion & Auto-Renewal / Intermediate Cycle Advance ──
+    if rotating and rotating.number_of_cycles:
+        if payout.cycle_number >= rotating.number_of_cycles:
+            # Check if all scheduled payouts in this cycle have COMPLETED
+            uncompleted_payouts = session.exec(
+                select(GroupPayout).where(
+                    GroupPayout.group_id == payout.group_id,
+                    GroupPayout.status != "COMPLETED"
+                )
+            ).all()
+
+            if not uncompleted_payouts:
+                if rotating.auto_renew_cycle:
+                    from app.services.group.rotating.cycle_renewal_service import execute_cycle_renewal
+                    logger.info(f"[PAYOUT_WORKER] All payouts complete for group {group.group_id}. Triggering Auto-Renewal.")
+                    execute_cycle_renewal(session, payout.group_id, rotating, now_ms=now_ms)
+                else:
+                    group.status = "COMPLETED"
+                    session.add(group)
+                    session.commit()
+                    logger.info(f"[PAYOUT_WORKER] Group {group.group_id} has reached completion of all cycles.")
+        else:
+            # Intermediate cycle completed: Advance to next cycle & auto-apply prepaid surplus
+            next_cycle = payout.cycle_number + 1
+            from app.services.group.rotating.prepaid_waterfall_service import advance_cycle_and_apply_prepaid
+            logger.info(f"[PAYOUT_WORKER] Intermediate round {payout.cycle_number} complete. Advancing to Cycle {next_cycle}.")
+            advance_cycle_and_apply_prepaid(session, payout.group_id, new_cycle=next_cycle, now_ms=now_ms)
 
     # ── 8. Dispatch Multi-Channel Notifications ──────────────────────────────
     dispatch_payout_notifications(
@@ -229,6 +301,8 @@ def process_single_payout(session: Session, payout: GroupPayout, now_ms: int, fo
         group=group,
         payout=payout,
         chosen_account=chosen_account,
-        masked_acc=masked_acc
+        masked_acc=masked_acc,
+        hold_amount=hold_amount,
+        disburse_amount=disburse_amount
     )
 

@@ -14,13 +14,21 @@ from app.communications.sms_service import send_overdue_reminder_sms
 logger = logging.getLogger(__name__)
 
 
-def _try_send_overdue_notifications(session: Session, obligation: MemberObligation):
+def _try_send_overdue_notifications(session: Session, obligation: MemberObligation, penalty_amount: int = 0):
     """
-    Notification chain for an obligation that just turned LATE:
-    1. Email first — if the member has a verified security email.
-    2. SMS after — if the group admin enabled SMS reminders AND the member opted in.
+    Notification chain for an obligation that missed deadline / entered grace period or turned LATE (Events 12, 13, 14):
+    1. Group Chat System Event notice.
+    2. Defaulter FCM push notification (Late Fee Applied).
+    3. Defaulter Carrier SMS (if opted-in).
+    4. Guarantor FCM Push & SMS alerts.
     """
     try:
+        import uuid
+        from app.models.group.chat import GroupChatMessage
+        from app.core.firebase_config import send_push_notification
+        from app.services.communication.sms.helpers.send_sms import send_sms
+        from app.models.group.finance.guarantor_pledge import GuarantorPledge
+
         # Load dependencies
         group = session.exec(select(Group).where(Group.group_id == obligation.group_id)).first()
         user = session.exec(select(User).where(User.id == obligation.user_id)).first()
@@ -37,54 +45,73 @@ def _try_send_overdue_notifications(session: Session, obligation: MemberObligati
         if not group or not user or not fin_settings or not membership:
             return
 
-        # Skip if group doesn't have SMS/call reminders enabled
-        if not fin_settings.enable_sms_call_reminders:
-            return
-
         member_name = user.full_name or "Member"
         group_name = group.name
-        currency = group.currency
+        currency = group.currency or "UGX"
+        unpaid = max(0, obligation.amount_due - obligation.amount_paid)
+        total_outstanding = unpaid + penalty_amount
 
-        # ── 1. Email first (if member opted in and has verified security email) ─
-        security_email_row = session.exec(
-            select(UserSecurityEmail).where(
-                UserSecurityEmail.user_id == obligation.user_id,
-                UserSecurityEmail.is_verified == True
+        # ── Event 13: Chat Notice in Group Thread ────────────────────────────
+        chat_msg = GroupChatMessage(
+            client_message_id=str(uuid.uuid4()),
+            group_id=obligation.group_id,
+            sender_id="SYSTEM",
+            message_type="SYSTEM_EVENT",
+            message_text=f"System notice: {member_name} missed the grace period deadline. A {penalty_amount:,} {currency} late fee has been attached to their account.",
+            status="SENT"
+        )
+        session.add(chat_msg)
+        session.commit()
+
+        # ── Event 13: Push Notification to Defaulter ─────────────────────────
+        if user.fcm_token:
+            send_push_notification(
+                token=user.fcm_token,
+                title="❌ Late Fee Applied",
+                body=f"Grace period expired. A {penalty_amount:,} {currency} penalty has been added. Total outstanding: {total_outstanding:,} {currency}.",
+                data={"route": "deposit_screen", "group_id": group.group_id, "obligation_id": str(obligation.id)}
             )
-        ).first()
 
-        if security_email_row and membership.email_reminders_opted_in:
-            try:
-                from app.services.communication.email_service import EmailNotificationService
-                from app.services.communication.email_templates import build_overdue_reminder_email
-
-                subject = f"⚠️ Overdue Payment — {group_name}"
-                html_body = build_overdue_reminder_email(
-                    member_name=member_name,
-                    group_name=group_name,
-                    amount_due=obligation.amount_due,
-                    currency=currency
-                )
-                asyncio.run(EmailNotificationService._dispatch(
-                    recipient_email=security_email_row.email,
-                    subject=subject,
-                    html_body=html_body
-                ))
-                logger.info(f"[OVERDUE EMAIL] Sent to {security_email_row.email} for obligation {obligation.id}")
-            except Exception as email_err:
-                logger.warning(f"[OVERDUE EMAIL] Failed for obligation {obligation.id}: {email_err}")
-
-        # ── 2. SMS after (only if member opted in to SMS for this group) ──────
+        # ── Event 13: Carrier SMS to Defaulter (if opted in) ─────────────────
         if membership.sms_reminders_opted_in and user.phone_number:
-            sent = send_overdue_reminder_sms(
-                phone_number=user.phone_number,
-                member_name=member_name,
-                group_name=group_name,
-                amount_due=obligation.amount_due,
-                currency=currency
+            try:
+                send_sms(
+                    user.phone_number,
+                    f"Microbond Notice: {penalty_amount:,} {currency} late fee applied for {group_name}. Total outstanding: {total_outstanding:,} {currency}."
+                )
+            except Exception as sms_err:
+                logger.warning(f"[OVERDUE SMS] Failed: {sms_err}")
+
+        # ── Event 14: Guarantor Liability Invocation ─────────────────────────
+        pledges = session.exec(
+            select(GuarantorPledge).where(
+                GuarantorPledge.group_id == obligation.group_id,
+                GuarantorPledge.borrower_user_id == obligation.user_id,
+                GuarantorPledge.status == "ACTIVE"
             )
-            if sent:
-                logger.info(f"[OVERDUE SMS] Sent to {user.phone_number} for obligation {obligation.id}")
+        ).all()
+
+        for pledge in pledges:
+            guarantor = session.get(User, pledge.guarantor_user_id)
+            if not guarantor:
+                continue
+
+            if guarantor.fcm_token:
+                send_push_notification(
+                    token=guarantor.fcm_token,
+                    title="⚠️ Guarantor Pledge Invoked",
+                    body=f"{member_name} defaulted on {unpaid:,} {currency} in {group_name}. Your guarantor pledge is being charged to protect the group pot.",
+                    data={"route": "guarantor_pledge_screen", "group_id": group.group_id}
+                )
+
+            if guarantor.phone_number:
+                try:
+                    send_sms(
+                        guarantor.phone_number,
+                        f"Microbond Default Notice: {member_name} defaulted on {unpaid:,} {currency}. As guarantor, please authorize collection to maintain group standing."
+                    )
+                except Exception as g_err:
+                    logger.warning(f"[GUARANTOR SMS] Failed: {g_err}")
 
     except Exception as e:
         logger.error(f"[OVERDUE NOTIFY] Error sending notifications for obligation {obligation.id}: {e}")
@@ -127,7 +154,42 @@ def process_daily_late_fees():
                 default_cutoff_time = cutoff_time + (48 * 3600000)
 
                 just_went_late = False
-                if obligation.status == "PENDING" and current_time_epoch > cutoff_time:
+                penalty_val = settings.late_fee_amount if settings.enable_late_fees else 0
+
+                # Event 12: Cutoff passed, grace period active alert (tier 0)
+                if obligation.status == "PENDING" and obligation.due_date < current_time_epoch <= cutoff_time:
+                    if obligation.last_reminder_tier != 0:
+                        user = session.get(User, obligation.user_id)
+                        group = session.get(Group, obligation.group_id)
+                        unpaid = max(0, obligation.amount_due - obligation.amount_paid)
+                        curr = group.currency or "UGX" if group else "UGX"
+                        if user and user.fcm_token:
+                            from app.core.firebase_config import send_push_notification
+                            send_push_notification(
+                                token=user.fcm_token,
+                                title="⚠️ Payment Deadline Missed (Grace Period Active)",
+                                body=f"Your Cycle {obligation.cycle_number} contribution has an unpaid balance of {unpaid:,} {curr}. Grace period active.",
+                                data={"route": "deposit_screen", "group_id": obligation.group_id, "obligation_id": str(obligation.id)}
+                            )
+                        membership = session.exec(
+                            select(GroupMembership).where(
+                                GroupMembership.group_id == obligation.group_id,
+                                GroupMembership.user_id == obligation.user_id
+                            )
+                        ).first()
+                        if membership and getattr(membership, "sms_reminders_opted_in", False) and user and user.phone_number:
+                            from app.services.communication.sms.helpers.send_sms import send_sms
+                            try:
+                                send_sms(
+                                    user.phone_number,
+                                    f"URGENT: Your {unpaid:,} {curr} balance for {group.name if group else 'Group'} is overdue. Pay within grace period to avoid late penalty."
+                                )
+                            except Exception as sms_err:
+                                logger.warning(f"[GRACE PERIOD SMS] Failed: {sms_err}")
+                        obligation.last_reminder_tier = 0
+                        session.add(obligation)
+
+                elif obligation.status == "PENDING" and current_time_epoch > cutoff_time:
                     obligation.status = "LATE"
                     just_went_late = True
                     logger.info(f"Obligation {obligation.id} marked LATE.")
@@ -163,7 +225,7 @@ def process_daily_late_fees():
 
                 # Send overdue notifications outside the lock window
                 if just_went_late:
-                    _try_send_overdue_notifications(session, obligation)
+                    _try_send_overdue_notifications(session, obligation, penalty_amount=penalty_val)
 
         except Exception as e:
             logger.error(f"Error processing obligation {ob_id}: {str(e)}")

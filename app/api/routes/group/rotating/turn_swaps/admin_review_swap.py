@@ -112,21 +112,43 @@ def admin_review_turn_swap(
         swap.status = "ACCEPTED"
         swap.updated_at = now_epoch_ms()
 
+        # Event 19: Insert Chat Confirmation into Group Thread
+        import uuid
+        from app.models.group.chat import GroupChatMessage
+        req_u = session.get(User, swap.requester_user_id)
+        tar_u = session.get(User, swap.target_user_id)
+        requester_name = req_u.full_name if req_u else "Requester"
+        target_name = tar_u.full_name if tar_u else "Target"
+        c1 = swap.requester_cycle_number
+        c2 = swap.target_cycle_number
+
+        chat_msg = GroupChatMessage(
+            client_message_id=str(uuid.uuid4()),
+            group_id=group_id,
+            sender_id="SYSTEM",
+            message_type="SYSTEM_EVENT",
+            message_text=f"🔄 Turn Swap Confirmed: {requester_name} (was Turn {c1}) and {target_name} (was Turn {c2}) have successfully swapped payout positions.",
+            status="SENT"
+        )
+        session.add(chat_msg)
+
         session.add(requester_payout)
         session.add(target_payout)
         session.add(swap)
         session.commit()
 
-        # Notify both members of approval
-        for u, new_cycle in [(requester_payout, swap.target_cycle_number), (target_payout, swap.requester_cycle_number)]:
-            member_user = session.get(User, u.user_id)
-            if member_user and member_user.fcm_token:
-                send_push_notification(
-                    token=member_user.fcm_token,
-                    title="Turn Swap Approved ✅",
-                    body=f"Admin approved your turn swap. Your new payout is Round {new_cycle}.",
-                    data={"type": "SWAP_APPROVED", "group_id": group_id}
-                )
+        # Event 19: Push broadcast to all group members
+        try:
+            from app.services.push_notifications import notify_all_group_members_sync
+            notify_all_group_members_sync(
+                group_id=group_id,
+                sender_id="SYSTEM",
+                title="🔄 Turn Swap Confirmed",
+                body=f"{requester_name} and {target_name} have swapped payout positions (Turn {c1} & Turn {c2}).",
+                data={"route": "rotation_schedule", "group_id": group_id}
+            )
+        except Exception as push_err:
+            pass
 
         return {
             "status": "success",

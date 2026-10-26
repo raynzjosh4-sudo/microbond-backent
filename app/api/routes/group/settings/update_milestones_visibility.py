@@ -61,7 +61,6 @@ def update_milestones_visibility_settings(
     rule_change_val = request.vis_notify_important_rule_changes if request.vis_notify_important_rule_changes is not None else request.notify_important_rule_changes
     if rule_change_val is not None:
         settings.vis_notify_important_rule_changes = rule_change_val
-        settings.notify_important_rule_changes = rule_change_val
 
     session.add(settings)
     session.commit()

@@ -86,6 +86,7 @@ def create_group(
     
     fin_settings = GroupFinancialSettings(
         group_id=new_group_id,
+        enforce_payout_holds=request.enforce_payout_holds,
         enable_late_fees=request.enable_late_fees,
         late_fee_amount=request.late_fee_amount,
         late_fee_frequency=request.late_fee_frequency,
@@ -102,8 +103,6 @@ def create_group(
     gov_settings = GroupGovernanceSettings(
         group_id=new_group_id,
         requires_admin_approval=request.requires_admin_approval,
-        allow_turn_swaps=request.allow_turn_swaps,
-        turn_swap_approval_mode=request.turn_swap_approval_mode,
         require_multi_signature=request.multi_sig_payout_approval
     )
     comm_settings = GroupCommunicationSettings(group_id=new_group_id)
@@ -173,7 +172,6 @@ def create_group(
             guarantor_default_action=request.guarantor_default_action,
             allow_partial_payments=request.allow_partial_payments,
             allow_advance_deposits=request.allow_advance_deposits,
-            enforce_payout_holds=request.enforce_payout_holds,
             auto_disburse_when_full=request.auto_disburse_when_full,
             multi_sig_payout_approval=request.multi_sig_payout_approval,
             allow_turn_swaps=request.allow_turn_swaps,
@@ -216,20 +214,38 @@ def create_group(
             detail=f"Database error during rotating group creation: {e}"
         )
     
-    # --- CHAT INTEGRATION ---
+    # --- NOTIFICATIONS: CHAT & CREATOR PUSH (Event 1) ---
     try:
         from app.api.routes.group.chat.messages import broadcast_system_message_sync
+        from app.core.firebase_config import send_push_notification
+
         creator_name = creator.full_name or "Creator"
+        max_cap = request.maximum_member_capacity or "?"
+        chat_text = (
+            f"{creator_name} created the group '{new_group.name}'. "
+            f"Target: {request.contribution_amount:,} {request.currency}/{request.collection_frequency_days}d. "
+            f"Max capacity: {max_cap} members."
+        )
+
         broadcast_system_message_sync(
             group_id=new_group_id,
-            message_text=f"{creator_name} created the group '{new_group.name}'.",
+            message_text=chat_text,
             message_type="SYSTEM_EVENT",
             sender_id=str(creator.id),
             session=session,
             background_tasks=background_tasks
         )
-    except Exception as chat_err:
-        print(f"[Warning] Failed to broadcast creation chat message: {chat_err}", flush=True)
+
+        if creator.fcm_token:
+            background_tasks.add_task(
+                send_push_notification,
+                token=creator.fcm_token,
+                title="🎉 Group Created Successfully",
+                body=f"Share your 8-character invite code ({new_group.invite_code}) to recruit members. Group will launch once full.",
+                data={"route": "group_invite_screen", "group_id": str(new_group_id)}
+            )
+    except Exception as notify_err:
+        print(f"[Warning] Failed to dispatch creation notifications: {notify_err}", flush=True)
     
     return {
         "status": "success",

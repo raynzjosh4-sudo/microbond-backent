@@ -9,7 +9,7 @@ from app.core.database import get_session
 from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.rotating import RotatingGroupDetails
-from app.models.group.settings import GroupGovernanceSettings
+from app.models.group.settings import GroupGovernanceSettings, GroupFinancialSettings
 
 
 @pytest.fixture(name="db_session")
@@ -102,9 +102,13 @@ def test_rotating_group_creation_and_settings_lifecycle(db_session: Session, mon
         select(GroupGovernanceSettings).where(GroupGovernanceSettings.group_id == group_id)
     ).first()
     assert gov is not None
-    assert gov.allow_turn_swaps is True
-    assert gov.turn_swap_approval_mode == "ADMIN_APPROVAL_REQUIRED"
     assert gov.require_multi_signature is True
+
+    fin = db_session.exec(
+        select(GroupFinancialSettings).where(GroupFinancialSettings.group_id == group_id)
+    ).first()
+    assert fin is not None
+    assert fin.enforce_payout_holds is True
 
     # 2. Get Settings endpoint (Rotating specific)
     get_resp = client.get(f"/api/v1/groups/rotating/{group_id}/settings/rotating")

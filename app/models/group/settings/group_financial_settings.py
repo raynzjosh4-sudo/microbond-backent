@@ -11,7 +11,6 @@ class GroupFinancialSettings(SQLModel, table=True):
     group_id: str = Field(foreign_key="group.group_id", index=True, unique=True)
     
     # Payout Rules
-    payout_selection_strategy: str = Field(default="Admin-Assigned")
     enforce_payout_holds: bool = Field(default=True)
     allow_substitute_members: bool = Field(default=False)
     max_pending_payouts: int = Field(default=2, description="How many payouts can be pending/queued at once")

@@ -10,3 +10,4 @@ class DepositInfoResponse(BaseModel):
     allow_partial_pay: bool
     allow_overpay: bool
     currency: str = "UGX"
+    member_prepaid_balance: int = 0

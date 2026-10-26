@@ -26,8 +26,7 @@ def request_turn_swap(
     if not rotating_details:
         raise HTTPException(status_code=400, detail="Not a rotating savings group.")
 
-    settings = session.query(GroupGovernanceSettings).filter_by(group_id=group_id).first()
-    if (settings and not settings.allow_turn_swaps) or not getattr(rotating_details, "allow_turn_swaps", True):
+    if not getattr(rotating_details, "allow_turn_swaps", True):
         raise HTTPException(status_code=403, detail="This group does not allow turn swapping.")
 
     # 2. Find pending payouts for both users
@@ -81,6 +80,7 @@ def request_turn_swap(
 
     # 4. Authoritative microbond_core Invariant Verification
     target_user = session.get(User, payload.target_user_id)
+    settings = session.query(GroupGovernanceSettings).filter_by(group_id=group_id).first()
     rules = {
         "current_active_cycle": getattr(rotating_details, "current_cycle", 1) or 1,
         "minimum_trust_score": settings.minimum_trust_score or 0 if settings else 0,
@@ -135,14 +135,14 @@ def request_turn_swap(
     session.commit()
     session.refresh(swap)
 
-    # Push: notify the target that a swap request is waiting for their response
+    # Push: notify the target that a swap request is waiting for their response (Event 18)
     target_user = session.get(User, payload.target_user_id)
     if target_user and target_user.fcm_token:
         send_push_notification(
             token=target_user.fcm_token,
-            title="Turn Swap Request 🔄",
-            body=f"{current_user.full_name} wants to swap their payout turn with yours. Tap to review.",
-            data={"type": "SWAP_REQUEST", "group_id": group_id, "swap_id": swap.swap_request_id}
+            title="🔄 Turn Swap Request",
+            body=f"{current_user.full_name} wants to swap payout positions with you (Turn {requester_payout.cycle_number} for Turn {target_payout.cycle_number}). Tap to accept or decline.",
+            data={"route": "turn_swap_review", "swap_id": str(swap.id), "group_id": group_id}
         )
 
     return swap

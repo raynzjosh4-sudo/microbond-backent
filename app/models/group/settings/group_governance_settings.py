@@ -35,11 +35,8 @@ class GroupGovernanceSettings(SQLModel, table=True):
     members_can_send_messages: bool = Field(default=True)
     members_can_invite_via_link: bool = Field(default=False)
     members_can_manage_payout_roster: bool = Field(default=False)
-    allow_turn_swaps: bool = Field(default=True)
-    turn_swap_approval_mode: str = Field(default="MUTUAL_CONSENT", description="MUTUAL_CONSENT or ADMIN_APPROVAL_REQUIRED")
     
     # Group Permissions (Admins)
-    admins_must_approve_new_members: bool = Field(default=False)
     requires_admin_approval: bool = Field(default=False)
     
     updated_at: int = Field(default_factory=now_epoch_ms, sa_column=Column(BigInteger))

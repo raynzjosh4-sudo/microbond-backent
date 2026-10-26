@@ -57,7 +57,6 @@ def test_group_permissions_endpoints(db_session: Session):
         members_can_edit_settings=True,
         members_can_send_messages=True,
         members_can_invite_via_link=False,
-        admins_must_approve_new_members=False,
         requires_admin_approval=False
     )
     db_session.add(gov_settings)
@@ -98,7 +97,6 @@ def test_group_permissions_endpoints(db_session: Session):
     assert gov_settings.members_can_edit_settings is False
     assert gov_settings.members_can_send_messages is False
     assert gov_settings.members_can_invite_via_link is True
-    assert gov_settings.admins_must_approve_new_members is True
     assert gov_settings.requires_admin_approval is True
 
     # 3. GET permissions as regular member

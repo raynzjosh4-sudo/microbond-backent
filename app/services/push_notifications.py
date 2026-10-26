@@ -65,3 +65,44 @@ async def notify_all_group_members(
             
     if sent_count > 0:
         logger.info(f"Sent {sent_count} push notifications for group {group_id} concurrently")
+
+
+def notify_all_group_members_sync(
+    group_id: str, 
+    sender_id: str, 
+    title: str, 
+    body: str, 
+    data: dict
+):
+    """
+    Synchronous wrapper to broadcast push notifications to all group members.
+    Works safely inside or outside an active asyncio event loop.
+    """
+    try:
+        loop = None
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        if loop and loop.is_running():
+            asyncio.create_task(notify_all_group_members(group_id, sender_id, title, body, data))
+        else:
+            asyncio.run(notify_all_group_members(group_id, sender_id, title, body, data))
+    except Exception as e:
+        logger.warning(f"notify_all_group_members_sync error: {e}")
+
+
+def send_push_to_user(user_id, title: str, body: str, data: dict = None):
+    """
+    Helper to look up user's FCM token and dispatch push notification.
+    """
+    import uuid
+    try:
+        uid = user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
+        with Session(engine) as session:
+            user = session.get(User, uid)
+            if user and user.fcm_token:
+                return send_push_notification(user.fcm_token, title, body, data or {})
+    except Exception as e:
+        logger.warning(f"send_push_to_user error for {user_id}: {e}")
+    return None

@@ -85,7 +85,7 @@ def get_settings_manifest(
     add_setting("financial_rules", "grace_period_hours", "ADMIN_ONLY", vis_settings.vis_grace_period_window)
     add_setting("financial_rules", "enforce_payout_holds", "ADMIN_ONLY", vis_settings.vis_enforce_payout_holds)
     add_setting("financial_rules", "reserve_fund_percentage", "ADMIN_ONLY", vis_settings.vis_liquidity_buffer_coverage)
-    add_setting("financial_rules", "payout_selection_strategy", "ADMIN_ONLY", vis_settings.vis_manage_payout_order)
+    add_setting("financial_rules", "payout_order_strategy", "ADMIN_ONLY", vis_settings.vis_manage_payout_order)
     
     # --- GOVERNANCE RULES (Admin Only) ---
     add_setting("governance_rules", "require_multi_signature", "ADMIN_ONLY", vis_settings.vis_require_multi_signature)

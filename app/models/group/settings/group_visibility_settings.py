@@ -87,6 +87,5 @@ class GroupVisibilitySettings(SQLModel, table=True):
     vis_post_group_approval_polls: bool = Field(default=True)
     vis_post_loan_approval_polls: bool = Field(default=True, description="Hide/show loan approval polls")
     vis_notify_important_rule_changes: bool = Field(default=True)
-    notify_important_rule_changes: bool = Field(default=True)
     
     updated_at: int = Field(default_factory=now_epoch_ms, sa_column=Column(BigInteger))

@@ -15,6 +15,9 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 import uuid
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/groups/join", tags=["Group Join Requests"])
 
@@ -88,7 +91,7 @@ def join_group(
             required_kyc_tier = getattr(rotating_details, "minimum_kyc_tier", 0) or 0
 
     requires_guarantor = bool(settings and settings.require_guarantors and request.guarantor_ids)
-    requires_admin_approval = bool(settings and (settings.requires_admin_approval or settings.admins_must_approve_new_members))
+    requires_admin_approval = bool(settings and settings.requires_admin_approval)
     minimum_trust = settings.minimum_trust_score if settings else None
 
     # 4. Invoke the deterministic Rust domain engine
@@ -194,8 +197,45 @@ def join_group(
         client_request_id=request.client_request_id,
         response_payload=response_payload
     )
+    if final_status == "ACTIVE":
+        from app.models.group.chat import GroupChatMessage
+        spots_str = f"{group.member_count} of {group.max_members or '?'} spots filled"
+        join_msg = GroupChatMessage(
+            client_message_id=str(uuid.uuid4()),
+            group_id=group.group_id,
+            sender_id="SYSTEM",
+            message_type="SYSTEM_EVENT",
+            message_text=f"{current_user.full_name} joined the group ({spots_str}).",
+            status="SENT"
+        )
+        session.add(join_msg)
 
     session.commit()
+
+    # If capacity is reached for a rotating group, auto-launch the schedule
+    if final_status == "ACTIVE" and group.max_members and group.member_count >= group.max_members:
+        if group.type == "MERRY_GO_ROUND":
+            from app.services.group.launcher_service import execute_group_launch
+            try:
+                execute_group_launch(session, group.group_id)
+                session.commit()
+            except Exception as e:
+                logger.warning(f"Auto-launch notice: {e}")
+
+    # Event 2: Push broadcast to all other active members
+    if final_status == "ACTIVE":
+        spots_left = max(0, (group.max_members or 0) - group.member_count) if group.max_members else "?"
+        try:
+            from app.services.push_notifications import notify_all_group_members_sync
+            notify_all_group_members_sync(
+                group_id=group.group_id,
+                sender_id=str(current_user.id),
+                title="👥 New Member Joined",
+                body=f"{current_user.full_name} joined {group.name}! {group.member_count} of {group.max_members or '?'} members confirmed. {spots_left} spots left before kickoff.",
+                data={"route": "group_dashboard", "group_id": group.group_id}
+            )
+        except Exception as push_err:
+            logger.warning(f"[JOIN PUSH BROADCAST] Failed: {push_err}")
 
     # 9. Asynchronous Push Notifications after commit
     if final_status == "PENDING_APPROVAL":
