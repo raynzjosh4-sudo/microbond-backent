@@ -10,8 +10,9 @@ class RotatingGroupDetails(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     group_id: str = Field(foreign_key="group.group_id", index=True, unique=True)
     
-    contribution_amount: float
+    contribution_amount: Optional[float] = Field(default=None, description="Per-collection-interval contribution amount (e.g. 5000 UGX daily). Null until explicitly set by admin.")
     payouts_per_cycle: int
+    saving_days_per_cycle: Optional[int] = Field(default=None, description="Number of collection intervals per cycle before payout (e.g. 9 days). Null until explicitly set.")
     number_of_cycles: Optional[int] = Field(default=None) # Automatically calculated or None if infinite
     collection_frequency_days: int
     collection_time: Optional[str] = Field(default=None)
@@ -21,7 +22,7 @@ class RotatingGroupDetails(SQLModel, table=True):
     is_payout_order_locked: bool = Field(default=False)
     
     # Calculated Rules
-    total_expected_pool_per_cycle: float
+    total_expected_pool_per_cycle: Optional[float] = Field(default=None, description="Calculated: contribution_amount * saving_days_per_cycle * member_count")
     
     # Risk Controls
     minimum_kyc_tier: int
@@ -51,4 +52,5 @@ class RotatingGroupDetails(SQLModel, table=True):
     enable_auto_debit_prompt: bool = Field(default=True, description="Trigger automatic MoMo USSD prompt at collection time")
     
     current_cycle: int = Field(default=1)
+    current_saving_day: int = Field(default=0, description="Tracks the current saving day within the active cycle (0 = not started, 1-N = active)")
     created_at: int = Field(default_factory=now_epoch_ms, sa_column=Column(BigInteger))

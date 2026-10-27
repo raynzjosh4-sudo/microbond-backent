@@ -16,7 +16,8 @@ router = APIRouter()
 
 class UpdateRotatingSettingsRequest(BaseModel):
     # Logistics
-    contribution_amount: Optional[float] = Field(default=None, description="Per-cycle contribution amount")
+    contribution_amount: Optional[float] = Field(default=None, description="Per-collection-interval contribution amount (e.g. 5000 UGX/day)")
+    saving_days_per_cycle: Optional[int] = Field(default=None, ge=1, description="Number of saving days per cycle before payout (e.g. 9 days)")
     group_start_time: Optional[int] = Field(default=None, description="Start time epoch timestamp")
     collection_time: Optional[str] = Field(default=None, description="Cutoff time of day (e.g. 18:00)")
     payout_order_strategy: Optional[str] = Field(default=None, description="Randomized by App, Fixed Roster, Admin Decided, Bidding/Auction")
@@ -92,13 +93,25 @@ def get_rotating_group_settings(
         select(GroupFinancialSettings).where(GroupFinancialSettings.group_id == group_id)
     ).first()
 
+    is_cycle_active = bool(details.is_payout_order_locked or group.status == "ACTIVE")
+    current_cycle = details.current_cycle or 1
+    edit_lock_reason = (
+        f"Financial terms cannot be modified because Cycle {current_cycle} is currently active. "
+        "The contribution amount, saving days, and rotation rules are locked to protect member deposits "
+        "and maintain payout integrity. Terms can only be adjusted between cycles before the next round begins."
+    ) if is_cycle_active else None
+
     return {
         "status": "success",
         "data": {
             "group_id": group_id,
             "group_name": group.name,
             "is_admin": membership.role == "ADMIN",
+            "is_cycle_active": is_cycle_active,
+            "is_financial_editable": not is_cycle_active,
+            "edit_lock_reason": edit_lock_reason,
             "contribution_amount": details.contribution_amount,
+            "saving_days_per_cycle": details.saving_days_per_cycle,
             "payouts_per_cycle": details.payouts_per_cycle,
             "number_of_cycles": details.number_of_cycles,
             "collection_frequency_days": details.collection_frequency_days,
@@ -124,6 +137,7 @@ def get_rotating_group_settings(
             "reminder_lead_time_hours": details.reminder_lead_time_hours,
             "enable_auto_debit_prompt": details.enable_auto_debit_prompt,
             "current_cycle": details.current_cycle,
+            "current_saving_day": details.current_saving_day,
             "maximum_member_capacity": group.max_members,
             "max_members": group.max_members,
             "payouts_per_cycle": details.payouts_per_cycle,
@@ -166,23 +180,57 @@ def update_rotating_group_settings(
     if not details:
         raise HTTPException(status_code=404, detail="Rotating group details not found.")
     
-    if request.contribution_amount is not None:
-        from app.models.group.finance import MemberObligation
-        # Only lock contribution amount if members have already deposited money for this cycle
-        already_paid = session.exec(
-            select(MemberObligation).where(
-                MemberObligation.group_id == group_id,
-                MemberObligation.amount_paid > 0
-            )
-        ).all()
-        if already_paid and details.is_payout_order_locked:
+    # 1. Active Cycle Lock Enforcement: When a cycle is on, no one can change financial terms
+    is_cycle_active = bool(details.is_payout_order_locked or group.status == "ACTIVE")
+    if is_cycle_active:
+        current_cycle = details.current_cycle or 1
+        locked_changes = []
+
+        if request.collection_frequency_days is not None and request.collection_frequency_days != details.collection_frequency_days:
+            locked_changes.append("collection_frequency_days")
+        if request.collection_time is not None and request.collection_time != details.collection_time:
+            locked_changes.append("collection_time")
+        if request.group_start_time is not None and request.group_start_time != details.group_start_time:
+            locked_changes.append("group_start_time")
+        if request.contribution_amount is not None and request.contribution_amount != details.contribution_amount:
+            locked_changes.append("contribution_amount")
+        if request.saving_days_per_cycle is not None and request.saving_days_per_cycle != details.saving_days_per_cycle:
+            locked_changes.append("saving_days_per_cycle")
+
+        cap = request.maximum_member_capacity if request.maximum_member_capacity is not None else request.max_members
+        if cap is not None and cap != group.max_members:
+            locked_changes.append("member_capacity")
+
+        payout_val = request.payouts_per_cycle if request.payouts_per_cycle is not None else request.payout_per_cycle
+        if payout_val is not None and payout_val != details.payouts_per_cycle:
+            locked_changes.append("payouts_per_cycle")
+
+        if request.payout_order_strategy is not None and request.payout_order_strategy != details.payout_order_strategy:
+            locked_changes.append("payout_order_strategy")
+        if request.early_turn_security_hold_percentage is not None and request.early_turn_security_hold_percentage != details.early_turn_security_hold_percentage:
+            locked_changes.append("early_turn_security_hold_percentage")
+        if request.auto_disburse_when_full is not None and request.auto_disburse_when_full != details.auto_disburse_when_full:
+            locked_changes.append("auto_disburse_when_full")
+        if request.multi_sig_payout_approval is not None and request.multi_sig_payout_approval != details.multi_sig_payout_approval:
+            locked_changes.append("multi_sig_payout_approval")
+
+        if locked_changes:
+            human_fields = ", ".join(f.replace("_", " ") for f in locked_changes)
             raise HTTPException(
-                status_code=400, 
-                detail="Settings are permanently locked. Members have already deposited funds into this cycle."
+                status_code=400,
+                detail=(
+                    f"Settings [{human_fields}] cannot be modified because Cycle {current_cycle} is currently active. "
+                    "Collection frequency, contribution amounts, saving days, and core rotation schedules are locked "
+                    "to protect member deposits and maintain schedule integrity. Adjustments can only be made between "
+                    "cycles before the next round begins. (Allowed mid-cycle adjustments: turn swaps, guarantors, "
+                    "KYC tier, partial payments, advance deposits, late fees, and grace period)."
+                )
             )
-        
+
+    if request.contribution_amount is not None:
         details.contribution_amount = request.contribution_amount
         # Sync all un-paid obligations so the deposit process immediately reflects the updated amount
+        from app.models.group.finance import MemberObligation
         pending_obs = session.exec(
             select(MemberObligation).where(
                 MemberObligation.group_id == group_id,
@@ -193,8 +241,17 @@ def update_rotating_group_settings(
             ob.amount_due = request.contribution_amount
             session.add(ob)
 
+        # Recalculate pool: contribution * saving_days * members
+        saving_days = details.saving_days_per_cycle or 1
         if group.max_members:
-            details.total_expected_pool_per_cycle = request.contribution_amount * group.max_members
+            details.total_expected_pool_per_cycle = request.contribution_amount * saving_days * group.max_members
+
+    if request.saving_days_per_cycle is not None:
+        details.saving_days_per_cycle = request.saving_days_per_cycle
+        # Recalculate pool with updated saving days
+        contribution = details.contribution_amount or 0
+        if group.max_members and contribution > 0:
+            details.total_expected_pool_per_cycle = contribution * request.saving_days_per_cycle * group.max_members
             
     if request.group_start_time is not None:
         start_ms = request.group_start_time
@@ -253,7 +310,8 @@ def update_rotating_group_settings(
         group.max_members = cap
         session.add(group)
         if details.contribution_amount:
-            details.total_expected_pool_per_cycle = details.contribution_amount * cap
+            saving_days = details.saving_days_per_cycle or 1
+            details.total_expected_pool_per_cycle = details.contribution_amount * saving_days * cap
         if details.payouts_per_cycle:
             import math
             details.number_of_cycles = math.ceil(cap / details.payouts_per_cycle)
@@ -285,6 +343,7 @@ def update_rotating_group_settings(
         "message": "Rotating specific settings updated successfully.",
         "data": {
             "contribution_amount": details.contribution_amount,
+            "saving_days_per_cycle": details.saving_days_per_cycle,
             "payout_order_strategy": details.payout_order_strategy,
             "is_payout_order_locked": details.is_payout_order_locked,
             "require_guarantor": details.require_guarantor,
@@ -308,7 +367,9 @@ def update_rotating_group_settings(
             "number_of_cycles": details.number_of_cycles,
             "collection_frequency_days": details.collection_frequency_days,
             "late_fee_amount": fin_settings.late_fee_amount if fin_settings else 0.0,
-            "grace_period_hours": fin_settings.grace_period_hours if fin_settings else 0
+            "grace_period_hours": fin_settings.grace_period_hours if fin_settings else 0,
+            "total_expected_pool_per_cycle": details.total_expected_pool_per_cycle,
+            "current_saving_day": details.current_saving_day
         }
     }
 

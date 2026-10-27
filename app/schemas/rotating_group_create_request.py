@@ -21,7 +21,8 @@ class RotatingGroupCreateRequest(BaseModel):
     currency: str = Field(default="UGX")
     
     # Financials & Timing
-    contribution_amount: float = Field(..., description="Exact amount e.g., 10000")
+    contribution_amount: Optional[float] = Field(default=None, description="Per-interval contribution amount (e.g. 5000 UGX/day). Must be set before launch.")
+    saving_days_per_cycle: Optional[int] = Field(default=None, ge=1, description="Number of saving days per cycle before payout (e.g. 9 days). Must be set before launch.")
     maximum_member_capacity: Optional[int] = Field(default=None, ge=2, description="Must be a whole number, e.g. 20. Optional for infinite cycles.")
     payouts_per_cycle: int = Field(..., ge=1, description="Members paid per cycle, e.g. 1")
     collection_frequency_days: int = Field(..., ge=0, description="0 means daily at specific time, 7 means weekly, etc.")

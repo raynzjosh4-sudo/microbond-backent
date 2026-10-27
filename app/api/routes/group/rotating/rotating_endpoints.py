@@ -119,10 +119,19 @@ def create_group(
         from app.models.group.rotating import RotatingGroupDetails
         
         calculated_cycles = None
-        expected_pool = request.contribution_amount
+        expected_pool = None  # Stays None until contribution_amount and saving_days are both set
+        
+        saving_days = request.saving_days_per_cycle  # e.g. 9 days
+        contribution = request.contribution_amount    # e.g. 5,000 UGX per day
+        
         if request.maximum_member_capacity:
             calculated_cycles = math.ceil(request.maximum_member_capacity / request.payouts_per_cycle)
-            expected_pool = request.contribution_amount * request.maximum_member_capacity
+        
+        # Calculate total expected pool per cycle only when all values are set:
+        # pool = contribution_per_interval * saving_days_per_cycle * member_count
+        # e.g. 5,000 * 9 * 5 = 225,000 UGX
+        if contribution is not None and saving_days is not None and request.maximum_member_capacity:
+            expected_pool = contribution * saving_days * request.maximum_member_capacity
         
         # Normalize payout order strategy
         raw_strat = request.payout_order_strategy
@@ -159,6 +168,7 @@ def create_group(
         rotating_details = RotatingGroupDetails(
             group_id=new_group_id,
             contribution_amount=request.contribution_amount,
+            saving_days_per_cycle=request.saving_days_per_cycle,
             payouts_per_cycle=request.payouts_per_cycle,
             number_of_cycles=calculated_cycles,
             collection_frequency_days=request.collection_frequency_days,
@@ -221,11 +231,28 @@ def create_group(
 
         creator_name = creator.full_name or "Creator"
         max_cap = request.maximum_member_capacity or "?"
-        chat_text = (
-            f"{creator_name} created the group '{new_group.name}'. "
-            f"Target: {request.contribution_amount:,} {request.currency}/{request.collection_frequency_days}d. "
-            f"Max capacity: {max_cap} members."
-        )
+        
+        # Handle null contribution_amount (group draft without financial terms set)
+        if request.contribution_amount is not None and request.saving_days_per_cycle is not None:
+            per_cycle = request.contribution_amount * request.saving_days_per_cycle
+            chat_text = (
+                f"{creator_name} created the group '{new_group.name}'. "
+                f"Target: {request.contribution_amount:,.0f} {request.currency}/day for {request.saving_days_per_cycle} days per cycle "
+                f"({per_cycle:,.0f} {request.currency} per member per cycle). "
+                f"Max capacity: {max_cap} members."
+            )
+        elif request.contribution_amount is not None:
+            chat_text = (
+                f"{creator_name} created the group '{new_group.name}'. "
+                f"Target: {request.contribution_amount:,.0f} {request.currency}/{request.collection_frequency_days}d. "
+                f"Max capacity: {max_cap} members."
+            )
+        else:
+            chat_text = (
+                f"{creator_name} created the group '{new_group.name}'. "
+                f"Financial terms (contribution amount & saving days) are not yet configured. "
+                f"The admin must set them before the circle can be launched."
+            )
 
         broadcast_system_message_sync(
             group_id=new_group_id,
@@ -254,6 +281,91 @@ def create_group(
             "group_id": new_group.group_id,
             "invite_code": new_group.invite_code,
             "name": new_group.name
+        }
+    }
+
+
+@router.post("/{group_id}/launch")
+def launch_rotating_group(
+    group_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Manually launches a rotating group once members have joined and settings are configured.
+    Enforces that contribution_amount and saving_days_per_cycle are explicitly set.
+    """
+    from app.models.group.rotating import RotatingGroupDetails
+    from app.services.group.launcher_service import execute_group_launch
+
+    membership = session.query(GroupMembership).filter(
+        GroupMembership.group_id == group_id,
+        GroupMembership.user_id == current_user.id
+    ).first()
+
+    if not membership or membership.role != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only group administrators can launch the circle."
+        )
+
+    group = session.query(Group).filter(Group.group_id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found.")
+
+    details = session.query(RotatingGroupDetails).filter(RotatingGroupDetails.group_id == group_id).first()
+    if not details:
+        raise HTTPException(status_code=404, detail="Rotating group details not found.")
+
+    if details.is_payout_order_locked or group.status == "ACTIVE":
+        raise HTTPException(status_code=400, detail="Circle is already launched and active.")
+
+    # Validation gates
+    if details.contribution_amount is None or details.contribution_amount <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot launch group: Contribution amount has not been configured by the admin."
+        )
+
+    if details.saving_days_per_cycle is None or details.saving_days_per_cycle < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot launch group: Saving days per cycle has not been configured by the admin."
+        )
+
+    active_members = session.query(GroupMembership).filter(
+        GroupMembership.group_id == group_id,
+        GroupMembership.status == "ACTIVE"
+    ).all()
+
+    if len(active_members) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot launch group: At least 2 active members are required to launch."
+        )
+
+    launched = execute_group_launch(session, group_id)
+    if not launched:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to launch group. Please verify member statuses and try again."
+        )
+
+    session.commit()
+    session.refresh(details)
+
+    return {
+        "status": "success",
+        "message": "Rotating circle launched successfully! Cycle 1 terms are now locked.",
+        "data": {
+            "group_id": group_id,
+            "status": group.status,
+            "contribution_amount": details.contribution_amount,
+            "saving_days_per_cycle": details.saving_days_per_cycle,
+            "total_expected_pool_per_cycle": details.total_expected_pool_per_cycle,
+            "current_cycle": details.current_cycle,
+            "current_saving_day": details.current_saving_day,
+            "is_payout_order_locked": details.is_payout_order_locked
         }
     }
 

@@ -25,6 +25,16 @@ def execute_group_launch(session: Session, group_id: str) -> bool:
     if not details or details.is_payout_order_locked:
         # Already launched
         return False
+
+    # Launch Gate: Group cannot launch if contribution_amount is null or non-positive
+    if details.contribution_amount is None or details.contribution_amount <= 0:
+        logger.warning(f"Group {group_id} failed to launch: Contribution amount is not configured.")
+        return False
+
+    # Launch Gate: Group cannot launch if saving_days_per_cycle is null or < 1
+    if details.saving_days_per_cycle is None or details.saving_days_per_cycle < 1:
+        logger.warning(f"Group {group_id} failed to launch: Saving days per cycle is not configured.")
+        return False
         
     settings = session.query(GroupFinancialSettings).filter(GroupFinancialSettings.group_id == group.group_id).first()
     
@@ -63,6 +73,9 @@ def execute_group_launch(session: Session, group_id: str) -> bool:
         
         # 4. Lock and Activate Group
         details.is_payout_order_locked = True
+        details.current_saving_day = 1
+        saving_days = details.saving_days_per_cycle or 1
+        details.total_expected_pool_per_cycle = details.contribution_amount * saving_days * len(active_members)
         group.status = "ACTIVE"
 
         from app.models.group.finance import GroupPayout, MemberObligation
@@ -85,12 +98,21 @@ def execute_group_launch(session: Session, group_id: str) -> bool:
         ).first()
         first_due_str = datetime.utcfromtimestamp(ob_r1.due_date / 1000).strftime('%A at %I:%M %p') if (ob_r1 and ob_r1.due_date) else "Cycle 1 Due Date"
 
-        # Event 3: Interactive Kickoff Chat Card
+        # Event 3: Interactive Kickoff Chat Card with Locked Cycle Terms
+        curr = group.currency or "UGX"
+        total_pool_str = f"{details.total_expected_pool_per_cycle:,.0f} {curr}"
+        daily_amount_str = f"{details.contribution_amount:,.0f} {curr}"
+
         system_msg = GroupChatMessage(
             client_message_id=str(uuid.uuid4()),
             group_id=group.group_id,
             sender_id="SYSTEM",
-            message_text=f"🚀 The circle is full! {len(active_members)}/{group.max_members or len(active_members)} members confirmed. Cycle 1 has officially kicked off! First collection cutoff: {first_due_str}. Payout will be disbursed to {recipient_name}.",
+            message_text=(
+                f"🚀 The circle is full! {len(active_members)}/{group.max_members or len(active_members)} members confirmed. "
+                f"🔒 Cycle 1 Terms Locked: {daily_amount_str}/day for {saving_days} saving days. "
+                f"Target pool: {total_pool_str}. First collection cutoff: {first_due_str}. "
+                f"Payout will be disbursed to {recipient_name}. Contributions cannot be edited while cycle is active."
+            ),
             message_type="SYSTEM_EVENT",
             attachments=[{
                 "has_action_button": True,
