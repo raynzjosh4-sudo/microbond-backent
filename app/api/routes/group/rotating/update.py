@@ -28,6 +28,7 @@ class UpdateRotatingSettingsRequest(BaseModel):
     require_guarantor: Optional[bool] = Field(default=None)
     guarantor_default_action: Optional[str] = Field(default=None)
     allow_partial_payments: Optional[bool] = Field(default=None)
+    minimum_partial_payment_amount: Optional[float] = Field(default=None, ge=0, description="Minimum UGX amount a member must pay per deposit when partial payments are on. Set to 0 to remove floor.")
     allow_advance_deposits: Optional[bool] = Field(default=None)
     enforce_payout_holds: Optional[bool] = Field(default=None)
 
@@ -93,7 +94,7 @@ def get_rotating_group_settings(
         select(GroupFinancialSettings).where(GroupFinancialSettings.group_id == group_id)
     ).first()
 
-    is_cycle_active = bool(details.is_payout_order_locked or group.status == "ACTIVE")
+    is_cycle_active = bool(details.is_payout_order_locked)
     current_cycle = details.current_cycle or 1
     edit_lock_reason = (
         f"Financial terms cannot be modified because Cycle {current_cycle} is currently active. "
@@ -124,6 +125,7 @@ def get_rotating_group_settings(
             "require_guarantor": details.require_guarantor,
             "guarantor_default_action": details.guarantor_default_action,
             "allow_partial_payments": details.allow_partial_payments,
+            "minimum_partial_payment_amount": details.minimum_partial_payment_amount,
             "allow_advance_deposits": details.allow_advance_deposits,
             "enforce_payout_holds": fin_settings.enforce_payout_holds if fin_settings else False,
             "auto_disburse_when_full": details.auto_disburse_when_full,
@@ -180,8 +182,8 @@ def update_rotating_group_settings(
     if not details:
         raise HTTPException(status_code=404, detail="Rotating group details not found.")
     
-    # 1. Active Cycle Lock Enforcement: When a cycle is on, no one can change financial terms
-    is_cycle_active = bool(details.is_payout_order_locked or group.status == "ACTIVE")
+    # 1. Active Cycle Lock Enforcement: When a cycle is on (payout order locked), no one can change financial terms
+    is_cycle_active = bool(details.is_payout_order_locked)
     if is_cycle_active:
         current_cycle = details.current_cycle or 1
         locked_changes = []
@@ -207,8 +209,6 @@ def update_rotating_group_settings(
 
         if request.payout_order_strategy is not None and request.payout_order_strategy != details.payout_order_strategy:
             locked_changes.append("payout_order_strategy")
-        if request.early_turn_security_hold_percentage is not None and request.early_turn_security_hold_percentage != details.early_turn_security_hold_percentage:
-            locked_changes.append("early_turn_security_hold_percentage")
         if request.auto_disburse_when_full is not None and request.auto_disburse_when_full != details.auto_disburse_when_full:
             locked_changes.append("auto_disburse_when_full")
         if request.multi_sig_payout_approval is not None and request.multi_sig_payout_approval != details.multi_sig_payout_approval:
@@ -273,6 +273,8 @@ def update_rotating_group_settings(
         details.guarantor_default_action = request.guarantor_default_action
     if request.allow_partial_payments is not None:
         details.allow_partial_payments = request.allow_partial_payments
+    if request.minimum_partial_payment_amount is not None:
+        details.minimum_partial_payment_amount = request.minimum_partial_payment_amount
     if request.allow_advance_deposits is not None:
         details.allow_advance_deposits = request.allow_advance_deposits
         
@@ -348,6 +350,7 @@ def update_rotating_group_settings(
             "is_payout_order_locked": details.is_payout_order_locked,
             "require_guarantor": details.require_guarantor,
             "allow_partial_payments": details.allow_partial_payments,
+            "minimum_partial_payment_amount": details.minimum_partial_payment_amount,
             "allow_advance_deposits": details.allow_advance_deposits,
             "enforce_payout_holds": fin_settings.enforce_payout_holds if fin_settings else False,
             "auto_disburse_when_full": details.auto_disburse_when_full,

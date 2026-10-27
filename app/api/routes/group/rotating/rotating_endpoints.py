@@ -317,7 +317,7 @@ def launch_rotating_group(
     if not details:
         raise HTTPException(status_code=404, detail="Rotating group details not found.")
 
-    if details.is_payout_order_locked or group.status == "ACTIVE":
+    if details.is_payout_order_locked:
         raise HTTPException(status_code=400, detail="Circle is already launched and active.")
 
     # Validation gates

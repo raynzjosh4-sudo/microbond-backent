@@ -34,6 +34,7 @@ class RotatingGroupDetails(SQLModel, table=True):
     # Settlement & Automation
     auto_disburse_when_full: bool = Field(default=True, description="Automatically disburse payout when all member contributions for the cycle are received")
     multi_sig_payout_approval: bool = Field(default=False, description="Require multi-signature approval from admin and treasurer before disbursement")
+    minimum_partial_payment_amount: Optional[float] = Field(default=None, description="Admin-set minimum amount a member must pay per deposit when partial payments are enabled. If null, defaults to 1,000 UGX.")
     
     # Turn Swaps & Queue Flexibility
     allow_turn_swaps: bool = Field(default=True, description="Allow members to swap payout turns with each other")

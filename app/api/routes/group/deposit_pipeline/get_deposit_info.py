@@ -116,10 +116,14 @@ def get_deposit_info(
 
     # Calculate minimum partial payment threshold
     if allow_partial:
-        # Standard mobile money minimum deposit floor: 1,000 UGX (or total_due if less)
-        minimum_partial_amount = min(1000, total_due) if total_due > 0 else 1000
+        # Use admin-configured minimum if set, otherwise fallback to 1,000 UGX platform default
+        admin_min = None
+        if group.type == "MERRY_GO_ROUND" and rot:
+            admin_min = rot.minimum_partial_payment_amount
+        floor = int(admin_min) if admin_min and admin_min > 0 else 1000
+        minimum_partial_amount = min(floor, total_due) if total_due > 0 else floor
     else:
-        # Partial disabled: user must enter full total_due
+        # Partial disabled: user must pay the full total_due at once
         minimum_partial_amount = total_due
 
     maximum_deposit_amount = None if allow_overpay else total_due
