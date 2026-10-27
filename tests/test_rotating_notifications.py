@@ -113,6 +113,7 @@ def test_notification_matrix_events(mock_db, monkeypatch):
         contribution_amount=100000,
         payouts_per_cycle=1,
         number_of_cycles=4,
+        saving_days_per_cycle=1,
         collection_frequency_days=7,
         group_start_time=now_epoch_ms(),
         payout_order_strategy="Standard Fixed",

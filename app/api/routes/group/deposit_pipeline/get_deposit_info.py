@@ -90,7 +90,7 @@ def get_deposit_info(
         )
     ).first()
 
-    amount_due = base_contribution
+    original_amount_due = base_contribution
     amount_paid = 0
     if obligation:
         # If no deposit was made yet and the base contribution changed in settings/DB, sync it
@@ -98,8 +98,8 @@ def get_deposit_info(
             obligation.amount_due = base_contribution
             session.add(obligation)
             session.commit()
-        amount_due = int(obligation.amount_due)
-        amount_paid = int(obligation.amount_paid)
+        original_amount_due = int(obligation.amount_due)  # The full original obligation (never changes)
+        amount_paid = int(obligation.amount_paid)         # How much has been paid so far
 
     # Calculate unpaid penalties
     penalties = session.exec(
@@ -111,7 +111,8 @@ def get_deposit_info(
     ).one() or 0
     penalties = int(penalties)
 
-    total_due = max(0, (amount_due + penalties) - amount_paid)
+    # total_due = what the user still owes (remaining balance after any partial/full payments)
+    total_due = max(0, (original_amount_due + penalties) - amount_paid)
 
     # Calculate minimum partial payment threshold
     if allow_partial:
@@ -127,11 +128,11 @@ def get_deposit_info(
         group_id=group_id,
         group_name=group.name,
         group_type=group.type,
-        required_base_amount=amount_due,
-        expected_amount=amount_due,
+        required_base_amount=original_amount_due,  # The original full contribution amount (informational)
+        expected_amount=total_due,                  # What the user actually needs to pay NOW (0 if fully paid)
         accumulated_penalties=penalties,
         amount_already_paid=amount_paid,
-        total_due=total_due,
+        total_due=total_due,                        # True remaining balance
         remaining_due=total_due,
         minimum_partial_amount=minimum_partial_amount,
         maximum_deposit_amount=maximum_deposit_amount,

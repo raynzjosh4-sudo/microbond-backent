@@ -88,6 +88,7 @@ def test_rotating_deposit_and_surplus_lifecycle(db_session: Session, monkeypatch
         contribution_amount=100000.0,
         payouts_per_cycle=1,
         number_of_cycles=4,
+        saving_days_per_cycle=1,
         collection_frequency_days=7,
         group_start_time=now_ms + 3600000,
         payout_order_strategy="Randomized by App",

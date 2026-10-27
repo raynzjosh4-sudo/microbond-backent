@@ -65,22 +65,47 @@ def process_incoming_payment(
     wallet.pooled_funds += amount
     wallet.updated_at = now_ms
 
+    obligation = None
     if obligation_id:
         obligation = session.exec(
             select(MemberObligation)
             .where(MemberObligation.id == obligation_id)
             .with_for_update()
         ).first()
+    else:
+        # Auto-resolve the active obligation for this member in this group
+        from app.models.group.rotating import RotatingGroupDetails
+        rot = session.exec(
+            select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group_id)
+        ).first()
+        target_cycle = rot.current_cycle if rot else 1
+        obligation = session.exec(
+            select(MemberObligation)
+            .where(
+                MemberObligation.group_id == group_id,
+                MemberObligation.user_id == user_id,
+                MemberObligation.cycle_number == target_cycle,
+                MemberObligation.status != "PAID"
+            )
+            .with_for_update()
+        ).first()
 
-        if obligation:
-            obligation.amount_paid += amount
-            if obligation.amount_paid >= obligation.amount_due:
-                obligation.status = "PAID"
-                logger.info(f"Obligation {obligation.id} fully PAID via ledger cache.")
-            elif obligation.amount_paid > 0 and obligation.status == "PENDING":
-                logger.info(f"Obligation {obligation.id} partially paid. Still owes {obligation.amount_due - obligation.amount_paid}.")
+    if obligation:
+        if ledger_entry and not ledger_entry.obligation_id:
+            ledger_entry.obligation_id = obligation.id
+            session.add(ledger_entry)
 
-            obligation.updated_at = now_ms
-            session.add(obligation)
+        needed = max(0, obligation.amount_due - obligation.amount_paid)
+        credit_amount = min(amount, needed) if needed > 0 else amount
+        obligation.amount_paid += credit_amount
+        if obligation.amount_paid >= obligation.amount_due:
+            obligation.status = "PAID"
+            logger.info(f"Obligation {obligation.id} fully PAID via ledger incoming payment.")
+        elif obligation.amount_paid > 0:
+            obligation.status = "PARTIAL"
+            logger.info(f"Obligation {obligation.id} partially paid. Still owes {obligation.amount_due - obligation.amount_paid}.")
+
+        obligation.updated_at = now_ms
+        session.add(obligation)
 
     return ledger_entry
