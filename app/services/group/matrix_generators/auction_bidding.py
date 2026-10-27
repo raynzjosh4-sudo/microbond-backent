@@ -29,6 +29,9 @@ def generate_auction_bidding_matrix(
     payouts_per_cycle = getattr(details, "payouts_per_cycle", 1) or 1
     collection_frequency_days = getattr(details, "collection_frequency_days", 7) or 7
     contribution_amount = int(getattr(details, "contribution_amount", 0) or 0)
+    saving_days_per_cycle = getattr(details, "saving_days_per_cycle", 1) or 1
+    cycle_contribution_amount = contribution_amount * saving_days_per_cycle
+    effective_cycle_days = collection_frequency_days * saving_days_per_cycle
     start_epoch = int(start_date.timestamp())
 
     matrix_json = generate_cycle_matrix(
@@ -37,7 +40,7 @@ def generate_auction_bidding_matrix(
         contribution_minor=contribution_amount,
         payouts_per_cycle=payouts_per_cycle,
         reserve_fund_bps=reserve_fund_bps,
-        collection_frequency_days=collection_frequency_days,
+        collection_frequency_days=effective_cycle_days,
         start_epoch_seconds=start_epoch,
         created_at_epoch_seconds=current_time_epoch,
     )

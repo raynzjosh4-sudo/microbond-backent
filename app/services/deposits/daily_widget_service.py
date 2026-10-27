@@ -229,12 +229,33 @@ def get_daily_deposit_widget_summary(
     total_collected = sum(r["amount_paid"] for r in records)
     collection_rate = round((total_collected / total_expected * 100.0), 1) if total_expected > 0 else 0.0
 
+    rotating = session.exec(
+        select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group_id)
+    ).first()
+
+    if rotating and rotating.is_payout_order_locked:
+        freq_ms = max(1, rotating.collection_frequency_days) * 86400000
+        start_ms = rotating.group_start_time or day_start_ms
+        if day_start_ms >= start_ms:
+            calculated_day = int(((day_start_ms - start_ms) // freq_ms) + 1)
+            max_days = rotating.saving_days_per_cycle or 1
+            current_day = min(max_days, max(1, calculated_day))
+            if rotating.current_saving_day != current_day:
+                rotating.current_saving_day = current_day
+                session.add(rotating)
+                session.commit()
+
     return {
         "status": "success",
         "data": {
             "group_id": group_id,
             "date": date_str,
             "target_amount_per_member": target_amount,
+            "current_cycle": rotating.current_cycle if rotating else 1,
+            "current_saving_day": rotating.current_saving_day if rotating else 0,
+            "saving_days_per_cycle": rotating.saving_days_per_cycle if rotating else None,
+            "collection_time": rotating.collection_time if rotating else None,
+            "collection_frequency_days": rotating.collection_frequency_days if rotating else 1,
             "total_members": total_members,
             "summary": {
                 "full": {
@@ -297,11 +318,19 @@ def get_daily_deposit_widget_members(
     else:
         filtered_records.sort(key=lambda x: x["full_name"])
 
+    rotating = session.exec(
+        select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group_id)
+    ).first()
+
     return {
         "status": "success",
         "data": {
             "group_id": group_id,
             "date": date_str,
+            "target_amount_per_member": target_amount,
+            "current_cycle": rotating.current_cycle if rotating else 1,
+            "current_saving_day": rotating.current_saving_day if rotating else 0,
+            "saving_days_per_cycle": rotating.saving_days_per_cycle if rotating else None,
             "filter_status": filter_upper,
             "count": len(filtered_records),
             "members": filtered_records

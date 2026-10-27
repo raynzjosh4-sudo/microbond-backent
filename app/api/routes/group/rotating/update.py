@@ -366,6 +366,8 @@ def update_rotating_group_settings(
             "payout_per_cycle": details.payouts_per_cycle,
             "number_of_cycles": details.number_of_cycles,
             "collection_frequency_days": details.collection_frequency_days,
+            "collection_time": details.collection_time,
+            "group_start_time": details.group_start_time,
             "late_fee_amount": fin_settings.late_fee_amount if fin_settings else 0.0,
             "grace_period_hours": fin_settings.grace_period_hours if fin_settings else 0,
             "total_expected_pool_per_cycle": details.total_expected_pool_per_cycle,
