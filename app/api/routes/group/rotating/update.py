@@ -52,10 +52,13 @@ class UpdateRotatingSettingsRequest(BaseModel):
 
     # Capacity, Frequency & Fees
     maximum_member_capacity: Optional[int] = Field(default=None)
+    max_members: Optional[int] = Field(default=None)
     payouts_per_cycle: Optional[int] = Field(default=None)
+    payout_per_cycle: Optional[int] = Field(default=None)
     collection_frequency_days: Optional[int] = Field(default=None)
     late_fee_amount: Optional[float] = Field(default=None)
     grace_period_hours: Optional[int] = Field(default=None)
+
 
 
 @router.get("/{group_id}/settings/rotating", summary="Get Rotating Group Settings")
@@ -122,10 +125,14 @@ def get_rotating_group_settings(
             "enable_auto_debit_prompt": details.enable_auto_debit_prompt,
             "current_cycle": details.current_cycle,
             "maximum_member_capacity": group.max_members,
+            "max_members": group.max_members,
+            "payouts_per_cycle": details.payouts_per_cycle,
+            "payout_per_cycle": details.payouts_per_cycle,
             "late_fee_amount": fin_settings.late_fee_amount if fin_settings else 0.0,
             "grace_period_hours": fin_settings.grace_period_hours if fin_settings else 0,
         }
     }
+
 
 
 @router.put("/{group_id}/settings/rotating", summary="Update Rotating Group Settings")
@@ -159,24 +166,41 @@ def update_rotating_group_settings(
     if not details:
         raise HTTPException(status_code=404, detail="Rotating group details not found.")
     
-    if group.status == "ACTIVE" or details.is_payout_order_locked:
-        # If locked or active, only allow toggling operational flags that don't alter the financial pool core
-        if request.contribution_amount is not None and request.contribution_amount != details.contribution_amount:
+    if request.contribution_amount is not None:
+        from app.models.group.finance import MemberObligation
+        # Only lock contribution amount if members have already deposited money for this cycle
+        already_paid = session.exec(
+            select(MemberObligation).where(
+                MemberObligation.group_id == group_id,
+                MemberObligation.amount_paid > 0
+            )
+        ).all()
+        if already_paid and details.is_payout_order_locked:
             raise HTTPException(
                 status_code=400, 
-                detail="Settings are permanently locked. You cannot modify contribution amounts after the cycle has launched."
+                detail="Settings are permanently locked. Members have already deposited funds into this cycle."
             )
-
-    if request.contribution_amount is not None:
+        
         details.contribution_amount = request.contribution_amount
+        # Sync all un-paid obligations so the deposit process immediately reflects the updated amount
+        pending_obs = session.exec(
+            select(MemberObligation).where(
+                MemberObligation.group_id == group_id,
+                MemberObligation.amount_paid == 0
+            )
+        ).all()
+        for ob in pending_obs:
+            ob.amount_due = request.contribution_amount
+            session.add(ob)
+
         if group.max_members:
             details.total_expected_pool_per_cycle = request.contribution_amount * group.max_members
             
     if request.group_start_time is not None:
-        current_time = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
-        if request.group_start_time <= current_time:
-            raise HTTPException(status_code=400, detail="New start time must be in the future.")
-        details.group_start_time = request.group_start_time
+        start_ms = request.group_start_time
+        if start_ms < 100000000000:
+            start_ms = start_ms * 1000
+        details.group_start_time = start_ms
         
     if request.collection_time is not None:
         details.collection_time = request.collection_time
@@ -223,14 +247,24 @@ def update_rotating_group_settings(
     if request.enable_auto_debit_prompt is not None:
         details.enable_auto_debit_prompt = request.enable_auto_debit_prompt
 
-    if request.maximum_member_capacity is not None:
-        group.max_members = request.maximum_member_capacity
+    # Capacity & Member Limits
+    cap = request.maximum_member_capacity if request.maximum_member_capacity is not None else request.max_members
+    if cap is not None:
+        group.max_members = cap
         session.add(group)
         if details.contribution_amount:
-            details.total_expected_pool_per_cycle = details.contribution_amount * request.maximum_member_capacity
+            details.total_expected_pool_per_cycle = details.contribution_amount * cap
+        if details.payouts_per_cycle:
+            import math
+            details.number_of_cycles = math.ceil(cap / details.payouts_per_cycle)
 
-    if request.payouts_per_cycle is not None:
-        details.payouts_per_cycle = request.payouts_per_cycle
+    # Payouts per cycle
+    payout_val = request.payouts_per_cycle if request.payouts_per_cycle is not None else request.payout_per_cycle
+    if payout_val is not None:
+        details.payouts_per_cycle = payout_val
+        if group.max_members:
+            import math
+            details.number_of_cycles = math.ceil(group.max_members / payout_val)
 
     if request.collection_frequency_days is not None:
         details.collection_frequency_days = request.collection_frequency_days
@@ -268,10 +302,14 @@ def update_rotating_group_settings(
             "reminder_lead_time_hours": details.reminder_lead_time_hours,
             "enable_auto_debit_prompt": details.enable_auto_debit_prompt,
             "maximum_member_capacity": group.max_members,
+            "max_members": group.max_members,
             "payouts_per_cycle": details.payouts_per_cycle,
+            "payout_per_cycle": details.payouts_per_cycle,
+            "number_of_cycles": details.number_of_cycles,
             "collection_frequency_days": details.collection_frequency_days,
             "late_fee_amount": fin_settings.late_fee_amount if fin_settings else 0.0,
             "grace_period_hours": fin_settings.grace_period_hours if fin_settings else 0
         }
     }
+
 

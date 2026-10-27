@@ -29,7 +29,46 @@ class AdminPayoutOrderRequest(BaseModel):
         description="Optionally update payout_order_strategy at the same time"
     )
 
+@router.get("/{group_id}/rotating/admin-payout-order", summary="Get Payout Order Roster")
+@router.get("/{group_id}/admin-payout-order", summary="Get Payout Order Roster (Alias)")
+def get_payout_order_roster(
+    group_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    rotating_details = session.query(RotatingGroupDetails).filter_by(group_id=group_id).first()
+    if not rotating_details:
+        raise HTTPException(status_code=404, detail="This is not a rotating savings group.")
+
+    members = session.query(GroupMembership).filter_by(group_id=group_id, status="ACTIVE").all()
+    sorted_members = sorted(members, key=lambda m: (m.payout_position or 999))
+    
+    roster = []
+    for m in sorted_members:
+        user = session.query(User).filter_by(id=m.user_id).first()
+        roster.append({
+            "user_id": str(m.user_id),
+            "name": user.full_name if user else "Member",
+            "phone_number": user.phone_number if user else "",
+            "role": m.role,
+            "payout_position": m.payout_position
+        })
+
+    return {
+        "status": "success",
+        "data": {
+            "group_id": group_id,
+            "strategy": rotating_details.payout_order_strategy,
+            "is_locked": rotating_details.is_payout_order_locked,
+            "roster": roster
+        }
+    }
+
+
 @router.patch("/{group_id}/rotating/admin-payout-order", summary="Admin: Assign Payout Order")
+@router.patch("/{group_id}/admin-payout-order", summary="Admin: Assign Payout Order (Alias)")
+@router.post("/{group_id}/rotating/admin-payout-order", summary="Admin: Assign Payout Order (POST Alias)")
+@router.post("/{group_id}/admin-payout-order", summary="Admin: Assign Payout Order (POST Alias)")
 def assign_payout_order(
     group_id: str,
     request: AdminPayoutOrderRequest,
@@ -55,7 +94,7 @@ def assign_payout_order(
     if rotating_details.is_payout_order_locked:
         raise HTTPException(status_code=400, detail="The payout order is locked and cannot be changed.")
 
-    # Optional: Update strategy if passed in request
+    # Auto-switch strategy to Admin-Assigned if not already set
     if request.strategy:
         strat_norm = request.strategy.strip()
         strat_upper = strat_norm.upper().replace("-", "_").replace(" ", "_")
@@ -63,13 +102,12 @@ def assign_payout_order(
             rotating_details.payout_order_strategy = "Admin-Assigned"
         else:
             rotating_details.payout_order_strategy = strat_norm
+    else:
+        strat_clean = (rotating_details.payout_order_strategy or "").replace("-", " ").strip().lower()
+        if strat_clean != "admin assigned":
+            rotating_details.payout_order_strategy = "Admin-Assigned"
+            session.add(rotating_details)
 
-    strat_clean = (rotating_details.payout_order_strategy or "").replace("-", " ").strip().lower()
-    if strat_clean != "admin assigned":
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Cannot manually assign positions. The strategy is set to: '{rotating_details.payout_order_strategy}'. Change strategy to 'Admin-Assigned' first."
-        )
 
     # 3. Resolve user positions from either map or ordered list
     positions_map: Dict[str, int] = {}

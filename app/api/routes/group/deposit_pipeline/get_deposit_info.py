@@ -71,6 +71,15 @@ def get_deposit_info(
             allow_partial = rot.allow_partial_payments
             allow_overpay = rot.allow_advance_deposits
             current_cycle = rot.current_cycle
+    elif group.type == "GOAL_SAVINGS":
+        from app.models.group.target_savings.target_savings_group_details import TargetSavingsGroupDetails
+        target = session.exec(
+            select(TargetSavingsGroupDetails).where(TargetSavingsGroupDetails.group_id == group_id)
+        ).first()
+        if target:
+            base_contribution = int(target.contribution_amount) if target.contribution_amount else int(target.target_amount or 0)
+            allow_partial = True
+            allow_overpay = True
 
     # Fetch active MemberObligation for current cycle
     obligation = session.exec(
@@ -84,8 +93,13 @@ def get_deposit_info(
     amount_due = base_contribution
     amount_paid = 0
     if obligation:
-        amount_due = obligation.amount_due
-        amount_paid = obligation.amount_paid
+        # If no deposit was made yet and the base contribution changed in settings/DB, sync it
+        if obligation.amount_paid == 0 and base_contribution > 0 and obligation.amount_due != base_contribution:
+            obligation.amount_due = base_contribution
+            session.add(obligation)
+            session.commit()
+        amount_due = int(obligation.amount_due)
+        amount_paid = int(obligation.amount_paid)
 
     # Calculate unpaid penalties
     penalties = session.exec(
@@ -95,18 +109,37 @@ def get_deposit_info(
             GroupPenalty.is_paid == False
         )
     ).one() or 0
+    penalties = int(penalties)
 
     total_due = max(0, (amount_due + penalties) - amount_paid)
+
+    # Calculate minimum partial payment threshold
+    if allow_partial:
+        # Standard mobile money minimum deposit floor: 1,000 UGX (or total_due if less)
+        minimum_partial_amount = min(1000, total_due) if total_due > 0 else 1000
+    else:
+        # Partial disabled: user must enter full total_due
+        minimum_partial_amount = total_due
+
+    maximum_deposit_amount = None if allow_overpay else total_due
 
     return DepositInfoResponse(
         group_id=group_id,
         group_name=group.name,
+        group_type=group.type,
         required_base_amount=amount_due,
+        expected_amount=amount_due,
         accumulated_penalties=penalties,
         amount_already_paid=amount_paid,
         total_due=total_due,
+        remaining_due=total_due,
+        minimum_partial_amount=minimum_partial_amount,
+        maximum_deposit_amount=maximum_deposit_amount,
         allow_partial_pay=allow_partial,
         allow_overpay=allow_overpay,
+        cycle_number=current_cycle,
+        due_date=obligation.due_date if obligation else None,
         currency=group.currency or "UGX",
-        member_prepaid_balance=membership.credit_balance_ugx or 0
+        member_prepaid_balance=int(membership.credit_balance_ugx or 0)
     )
+
