@@ -112,6 +112,9 @@ def _ensure_critical_columns():
             'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "reminder_lead_time_hours" INTEGER NOT NULL DEFAULT 24;',
             'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "enable_auto_debit_prompt" BOOLEAN NOT NULL DEFAULT TRUE;',
             'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "current_cycle" INTEGER NOT NULL DEFAULT 1;',
+            'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "saving_days_per_cycle" INTEGER;',
+            'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "current_saving_day" INTEGER NOT NULL DEFAULT 0;',
+            'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "minimum_partial_payment_amount" DOUBLE PRECISION;',
             'ALTER TABLE "memberobligation" ADD COLUMN IF NOT EXISTS "last_reminder_tier" INTEGER;',
             '''CREATE TABLE IF NOT EXISTS "rotatingcyclereport" (
                 id SERIAL PRIMARY KEY,
