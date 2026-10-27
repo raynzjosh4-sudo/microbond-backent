@@ -23,7 +23,7 @@ class UpdateRotatingSettingsRequest(BaseModel):
     is_payout_order_locked: Optional[bool] = Field(default=None, description="Freeze payout order schedule")
     
     # Risk controls
-    minimum_kyc_tier: Optional[int] = Field(default=None, ge=1, le=3)
+    minimum_kyc_tier: Optional[int] = Field(default=None, ge=0, le=3)
     require_guarantor: Optional[bool] = Field(default=None)
     guarantor_default_action: Optional[str] = Field(default=None)
     allow_partial_payments: Optional[bool] = Field(default=None)
@@ -49,6 +49,13 @@ class UpdateRotatingSettingsRequest(BaseModel):
     # Reminders & Automated Collection
     reminder_lead_time_hours: Optional[int] = Field(default=None)
     enable_auto_debit_prompt: Optional[bool] = Field(default=None)
+
+    # Capacity, Frequency & Fees
+    maximum_member_capacity: Optional[int] = Field(default=None)
+    payouts_per_cycle: Optional[int] = Field(default=None)
+    collection_frequency_days: Optional[int] = Field(default=None)
+    late_fee_amount: Optional[float] = Field(default=None)
+    grace_period_hours: Optional[int] = Field(default=None)
 
 
 @router.get("/{group_id}/settings/rotating", summary="Get Rotating Group Settings")
@@ -114,6 +121,9 @@ def get_rotating_group_settings(
             "reminder_lead_time_hours": details.reminder_lead_time_hours,
             "enable_auto_debit_prompt": details.enable_auto_debit_prompt,
             "current_cycle": details.current_cycle,
+            "maximum_member_capacity": group.max_members,
+            "late_fee_amount": fin_settings.late_fee_amount if fin_settings else 0.0,
+            "grace_period_hours": fin_settings.grace_period_hours if fin_settings else 0,
         }
     }
 
@@ -213,6 +223,26 @@ def update_rotating_group_settings(
     if request.enable_auto_debit_prompt is not None:
         details.enable_auto_debit_prompt = request.enable_auto_debit_prompt
 
+    if request.maximum_member_capacity is not None:
+        group.max_members = request.maximum_member_capacity
+        session.add(group)
+        if details.contribution_amount:
+            details.total_expected_pool_per_cycle = details.contribution_amount * request.maximum_member_capacity
+
+    if request.payouts_per_cycle is not None:
+        details.payouts_per_cycle = request.payouts_per_cycle
+
+    if request.collection_frequency_days is not None:
+        details.collection_frequency_days = request.collection_frequency_days
+
+    if fin_settings:
+        if request.late_fee_amount is not None:
+            fin_settings.late_fee_amount = request.late_fee_amount
+            session.add(fin_settings)
+        if request.grace_period_hours is not None:
+            fin_settings.grace_period_hours = request.grace_period_hours
+            session.add(fin_settings)
+
     session.add(details)
     session.commit()
     session.refresh(details)
@@ -236,7 +266,12 @@ def update_rotating_group_settings(
             "auto_renew_cycle": details.auto_renew_cycle,
             "reverse_payout_order_on_renew": details.reverse_payout_order_on_renew,
             "reminder_lead_time_hours": details.reminder_lead_time_hours,
-            "enable_auto_debit_prompt": details.enable_auto_debit_prompt
+            "enable_auto_debit_prompt": details.enable_auto_debit_prompt,
+            "maximum_member_capacity": group.max_members,
+            "payouts_per_cycle": details.payouts_per_cycle,
+            "collection_frequency_days": details.collection_frequency_days,
+            "late_fee_amount": fin_settings.late_fee_amount if fin_settings else 0.0,
+            "grace_period_hours": fin_settings.grace_period_hours if fin_settings else 0
         }
     }
 

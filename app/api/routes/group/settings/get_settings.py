@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlmodel import Session, select
 from typing import Optional, Dict, Any
 
@@ -363,7 +363,7 @@ def get_rotating_details_direct(
 @router.put("/{group_id}/settings/rotating", summary="Update Rotating Group Settings (Direct Alias)")
 def update_rotating_details_direct(
     group_id: str,
-    request: Any = None,
+    request: Any = Body(default_factory=dict),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):

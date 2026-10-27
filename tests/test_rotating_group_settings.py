@@ -142,6 +142,24 @@ def test_rotating_group_creation_and_settings_lifecycle(db_session: Session, mon
     assert patch_data["turn_swap_approval_mode"] == "MUTUAL_CONSENT"
     assert patch_data["reminder_lead_time_hours"] == 12
 
+    # 4. Update Settings via the alias endpoints used by Mobile Client:
+    # PATCH /api/v1/groups/{group_id}/rotating-details
+    alias_patch_resp = client.patch(
+        f"/api/v1/groups/{group_id}/rotating-details",
+        json={
+            "allow_partial_payments": True,
+            "allow_advance_deposits": False,
+            "enable_auto_debit_prompt": False,
+            "collection_frequency_days": 9,
+        }
+    )
+    assert alias_patch_resp.status_code == 200, alias_patch_resp.text
+    alias_data = alias_patch_resp.json()["data"]
+    assert alias_data["allow_partial_payments"] is True
+    assert alias_data["allow_advance_deposits"] is False
+    assert alias_data["enable_auto_debit_prompt"] is False
+    assert alias_data["collection_frequency_days"] == 9
+
     app.dependency_overrides.clear()
 
 
