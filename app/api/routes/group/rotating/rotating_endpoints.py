@@ -4,6 +4,9 @@ from typing import Optional, Dict, Any
 from sqlmodel import Session
 import uuid
 import time
+import logging
+
+logger = logging.getLogger("uvicorn.error")
 
 from app.utils.time.now_epoch_ms import now_epoch_ms
 from app.core.database import get_session
@@ -218,7 +221,12 @@ def create_group(
         session.rollback()
         import traceback
         err_tb = traceback.format_exc()
-        print(f"[ERROR creating rotating group]: {e}\n{err_tb}", flush=True)
+        logger.error(f"[ERROR creating rotating group]: {e}\n{err_tb}")
+        try:
+            import sentry_sdk
+            sentry_sdk.capture_exception(e)
+        except Exception:
+            pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error during rotating group creation: {e}"

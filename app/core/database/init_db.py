@@ -115,6 +115,8 @@ def _ensure_critical_columns():
             'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "saving_days_per_cycle" INTEGER;',
             'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "current_saving_day" INTEGER NOT NULL DEFAULT 0;',
             'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "minimum_partial_payment_amount" DOUBLE PRECISION;',
+            'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "total_expected_pool_per_cycle" DOUBLE PRECISION;',
+            'ALTER TABLE "rotatinggroupdetails" ALTER COLUMN "total_expected_pool_per_cycle" DROP NOT NULL;',
             'ALTER TABLE "memberobligation" ADD COLUMN IF NOT EXISTS "last_reminder_tier" INTEGER;',
             '''CREATE TABLE IF NOT EXISTS "rotatingcyclereport" (
                 id SERIAL PRIMARY KEY,

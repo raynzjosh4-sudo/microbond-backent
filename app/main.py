@@ -29,16 +29,21 @@ import traceback
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+import logging
+main_logger = logging.getLogger("uvicorn.error")
+
 @app.middleware("http")
 async def log_requests_and_errors(request: Request, call_next):
     try:
         response = await call_next(request)
-        if response.status_code >= 400:
-            print(f"[HTTP {response.status_code}] {request.method} {request.url.path}", flush=True)
+        if response.status_code >= 500:
+            main_logger.error(f"[HTTP {response.status_code}] {request.method} {request.url.path}")
+        elif response.status_code >= 400:
+            main_logger.warning(f"[HTTP {response.status_code}] {request.method} {request.url.path}")
         return response
     except Exception as exc:
         err_msg = traceback.format_exc()
-        print(f"[CRITICAL 500 ERROR] {request.method} {request.url.path} - Exception: {exc}\n{err_msg}", flush=True)
+        main_logger.error(f"[CRITICAL 500 ERROR] {request.method} {request.url.path} - Exception: {exc}\n{err_msg}")
         return JSONResponse(
             status_code=500,
             content={
