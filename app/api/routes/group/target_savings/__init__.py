@@ -15,12 +15,14 @@ from .request_early_payout import (
     router as early_payout_router,
     request_early_payout,
 )
+from .payout_destinations import router as payout_destinations_router
 
 router = APIRouter(prefix="/api/v1/groups/target-savings", tags=["Target Savings Groups"])
 router.include_router(create_router)
 router.include_router(get_router)
 router.include_router(update_router)
 router.include_router(early_payout_router)
+router.include_router(payout_destinations_router)
 router.router = router
 
 __all__ = [

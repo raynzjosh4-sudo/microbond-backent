@@ -29,6 +29,7 @@ class GroupGovernanceSettings(SQLModel, table=True):
     require_guarantors: bool = Field(default=False)
     guarantor_count: int = Field(default=2)
     minimum_trust_score: Optional[int] = Field(default=None)
+    minimum_kyc_tier: int = Field(default=1, ge=0, le=3)
     
     # Group Permissions (Members)
     members_can_edit_settings: bool = Field(default=True)

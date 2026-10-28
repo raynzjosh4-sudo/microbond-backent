@@ -124,40 +124,46 @@ mod tests {
 
     #[test]
     fn test_capacity_rejection() {
-        let decision = evaluate_join_rules(10, Some(10), false, false, 80, Some(50), 2, 1, false, false);
+        let decision =
+            evaluate_join_rules(10, Some(10), false, false, 80, Some(50), 2, 1, false, false);
         assert_eq!(decision.status, JoinStatus::Rejected);
         assert_eq!(decision.reason_code.as_deref(), Some("GROUP_FULL"));
     }
 
     #[test]
     fn test_arrears_rejection() {
-        let decision = evaluate_join_rules(5, Some(10), false, true, 80, Some(50), 2, 1, false, false);
+        let decision =
+            evaluate_join_rules(5, Some(10), false, true, 80, Some(50), 2, 1, false, false);
         assert_eq!(decision.status, JoinStatus::Rejected);
         assert_eq!(decision.reason_code.as_deref(), Some("ARREARS"));
     }
 
     #[test]
     fn test_kyc_rejection() {
-        let decision = evaluate_join_rules(5, Some(10), false, false, 80, Some(50), 1, 2, false, false);
+        let decision =
+            evaluate_join_rules(5, Some(10), false, false, 80, Some(50), 1, 2, false, false);
         assert_eq!(decision.status, JoinStatus::Rejected);
         assert_eq!(decision.reason_code.as_deref(), Some("KYC_TIER"));
     }
 
     #[test]
     fn test_guarantor_required() {
-        let decision = evaluate_join_rules(5, Some(10), false, false, 80, Some(50), 2, 1, true, false);
+        let decision =
+            evaluate_join_rules(5, Some(10), false, false, 80, Some(50), 2, 1, true, false);
         assert_eq!(decision.status, JoinStatus::PendingGuarantor);
     }
 
     #[test]
     fn test_admin_approval_required() {
-        let decision = evaluate_join_rules(5, Some(10), false, false, 80, Some(50), 2, 1, false, true);
+        let decision =
+            evaluate_join_rules(5, Some(10), false, false, 80, Some(50), 2, 1, false, true);
         assert_eq!(decision.status, JoinStatus::PendingApproval);
     }
 
     #[test]
     fn test_active_direct_join() {
-        let decision = evaluate_join_rules(5, Some(10), false, false, 80, Some(50), 2, 1, false, false);
+        let decision =
+            evaluate_join_rules(5, Some(10), false, false, 80, Some(50), 2, 1, false, false);
         assert_eq!(decision.status, JoinStatus::Active);
     }
 }

@@ -41,6 +41,7 @@ def create_bill_split_group(
         savings_term="SHORT_TERM",
         visibility=request.visibility,
         currency=request.currency,
+        start_date=request.start_date,
         created_by_user_id=current_user.id,
         invite_code=invite_code,
         member_count=1,
@@ -96,7 +97,12 @@ def create_bill_split_group(
         grace_period_hours=request.grace_period_hours,
     )
     db.add(fin_settings)
-    db.add(GroupGovernanceSettings(group_id=group_id))
+    db.add(
+        GroupGovernanceSettings(
+            group_id=group_id,
+            minimum_kyc_tier=request.minimum_kyc_tier,
+        )
+    )
     db.add(GroupCommunicationSettings(group_id=group_id))
     db.add(GroupVisibilitySettings(group_id=group_id))
 

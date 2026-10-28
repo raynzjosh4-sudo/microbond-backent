@@ -9,7 +9,8 @@ from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.settings import GroupFinancialSettings
 from app.models.group.rotating import RotatingGroupDetails
-from app.models.group.long_term import TargetSavingsGroupDetails, SharedWalletOperationalSettings
+from app.models.group.target_savings import TargetSavingsGroupDetails
+from app.models.group.long_term import SharedWalletOperationalSettings
 from app.models.group.welfare_event import WelfareFundOperationalSettings
 from app.models.group.investment_association import (
     InvestmentClubOperationalSettings,
@@ -195,12 +196,38 @@ def update_financial_settings(
             select(TargetSavingsGroupDetails).where(TargetSavingsGroupDetails.group_id == group_id)
         ).first()
         if target:
+            effective_enable_late_fees = (
+                request.enable_late_fees
+                if request.enable_late_fees is not None
+                else target.enable_late_fees
+            )
+            effective_late_fee_amount = (
+                request.late_fee_amount
+                if request.late_fee_amount is not None
+                else target.late_fee_amount
+            )
+            if effective_enable_late_fees and not target.allow_collection_frequency:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Goal-savings late fees require an enabled contribution frequency.",
+                )
+            if effective_enable_late_fees and effective_late_fee_amount <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Set a positive late fee amount before enabling late fees.",
+                )
             if request.enable_late_fees is not None:
                 target.enable_late_fees = request.enable_late_fees
             if request.late_fee_amount is not None:
                 target.late_fee_amount = int(request.late_fee_amount)
             if request.grace_period_hours is not None:
                 target.grace_period_hours = request.grace_period_hours
+            if request.enable_late_fees is False:
+                target.late_fee_amount = 0
+            settings.enable_late_fees = target.enable_late_fees
+            settings.late_fee_amount = float(target.late_fee_amount)
+            settings.grace_period_hours = target.grace_period_hours
+            session.add(settings)
             session.add(target)
 
     # WELFARE_FUND: enable_late_fees in WelfareFundOperationalSettings

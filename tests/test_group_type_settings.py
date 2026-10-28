@@ -1,4 +1,5 @@
 import uuid
+import time
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
@@ -230,14 +231,56 @@ def test_all_group_type_settings_endpoints(db_session: Session):
     gid_ts = "group_ts_01"
     db_session.add(make_group(gid_ts, "GOAL_SAVINGS", admin_id))
     db_session.add(GroupMembership(membership_id=str(uuid.uuid4()), group_id=gid_ts, user_id=admin_id, role="ADMIN", status="ACTIVE"))
-    db_session.add(TargetSavingsGroupDetails(group_id=gid_ts, target_amount=2000000, target_date=1760000000000))
+    db_session.add(TargetSavingsGroupDetails(
+        group_id=gid_ts,
+        allow_target_amount=False,
+        allow_target_date=False,
+        allow_contribution_schedule=False,
+        allow_multi_payout=False,
+        target_amount=None,
+        target_date=None,
+        nominated_account_id="acc_123",
+        payout_destination_type="SINGLE_NOMINATED_ACCOUNT",
+    ))
     db_session.commit()
 
     resp = client.get(f"/api/v1/groups/target-savings/{gid_ts}/settings")
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["status"] == "success"
-    assert data["data"]["target_amount"] == 2000000
+    assert data["data"]["allow_target_amount"] is False
+    assert data["data"]["allow_target_date"] is False
+    assert data["data"]["allow_contribution_schedule"] is False
+    assert data["data"]["allow_multi_payout"] is False
+    assert data["data"]["payout_destination_type"] == "SINGLE_NOMINATED_ACCOUNT"
+
+    patch_ts = client.patch(
+        f"/api/v1/groups/target-savings/{gid_ts}/settings",
+        json={
+            "allow_target_amount": True,
+            "allow_target_date": True,
+            "allow_contribution_schedule": True,
+            "allow_collection_frequency": True,
+            "allow_multi_payout": True,
+            "allow_max_members": True,
+            "max_members": 8,
+            "target_amount": 2500000,
+            "target_date": int(time.time() * 1000) + 86400000,
+            "contribution_amount": 1000,
+            "collection_frequency_days": 7,
+        },
+    )
+    assert patch_ts.status_code == 200, patch_ts.text
+    payload = patch_ts.json()["data"]
+    assert payload["allow_target_amount"] is True
+    assert payload["allow_target_date"] is True
+    assert payload["allow_contribution_schedule"] is True
+    assert payload["allow_collection_frequency"] is True
+    assert payload["collection_frequency_days"] == 7
+    assert payload["allow_max_members"] is True
+    assert payload["max_members"] == 8
+    assert payload["allow_multi_payout"] is True
+    assert payload["target_amount"] == 2500000
 
     # Clean overrides
     app.dependency_overrides.clear()

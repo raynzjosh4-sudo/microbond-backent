@@ -1,8 +1,10 @@
 from typing import Optional, List
 from pydantic import BaseModel, Field
 from .member_split_allocation import MemberSplitAllocation
+from app.schemas.group_creation_request import GroupCreationRequest
 
-class BillSplitCreateRequest(BaseModel):
+
+class BillSplitCreateRequest(GroupCreationRequest):
     # Core group identity
     name: str = Field(..., min_length=2, max_length=100)
     description: Optional[str] = Field(default="")

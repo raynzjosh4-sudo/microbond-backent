@@ -1,41 +1,75 @@
-from pydantic import BaseModel, Field
-from typing import Optional
+import time
+from typing import Literal, Optional
 
-class TargetSavingsGroupCreateRequest(BaseModel):
-    name: str = Field(..., min_length=2, max_length=100, description="Name of the savings group")
-    description: str = Field(default="", max_length=500, description="Optional description")
-    group_image_url: str = Field(..., description="URL of the uploaded group image")
-    type: str = Field(default="GOAL_SAVINGS", description="Group type")
-    payment_mode: str = Field(default="OBLIGATION")
-    visibility: str = Field(default="PRIVATE")
-    currency: str = Field(default="UGX")
-    
-    # 1. Savings Goal & Schedule (Whole Numbers Only)
-    target_date: int = Field(..., description="Target end date as a Unix timestamp in milliseconds")
-    target_amount: int = Field(default=0, ge=0, description="Total monetary goal in whole currency (UGX). 0 means save until date.")
-    contribution_amount: int = Field(default=0, ge=0, description="Amount each member must save per cycle. 0 means flexible.")
-    collection_frequency_days: int = Field(default=0, ge=0, description="0=Flexible/Daily, 7=Weekly, 14=Bi-weekly, 30=Monthly")
-    collection_time: Optional[int] = Field(default=None, description="Optional cutoff time of day in milliseconds")
-    
-    # 2. Where the Money Goes at the End
-    payout_destination_type: str = Field(
-        default="PROPORTIONAL_RETURN", 
-        description="PROPORTIONAL_RETURN (back to each member) or SINGLE_NOMINATED_ACCOUNT (for group project/purchase)"
-    )
-    nominated_account_id: Optional[str] = Field(
-        default=None, 
-        description="UUID of verified payment destination if SINGLE_NOMINATED_ACCOUNT is selected"
-    )
-    
-    # 3. Group Agreement & Voting Rules
-    require_consensus_at_end: bool = Field(default=False, description="Require members to vote to release money at the target date")
-    allow_early_payout_by_vote: bool = Field(default=True, description="Allow members to vote to end savings early")
-    vote_approval_percentage: int = Field(default=100, ge=51, le=100, description="Percentage of members who must agree (51-100%)")
-    
-    # 4. Late Fees & Rules
-    enable_late_fees: bool = Field(default=False, description="Charge a small fee if a member pays late")
-    late_fee_amount: int = Field(default=0, ge=0, description="Flat late fee in whole currency units")
-    grace_period_hours: int = Field(default=24, ge=0, description="Hours of grace before late fee applies")
-    missed_payment_action: str = Field(default="RECORD_STRIKE", description="RECORD_STRIKE or REMOVE_AND_REFUND")
-    minimum_kyc_tier: int = Field(default=1, ge=0, le=3, description="Minimum verification tier required to join (0-3)")
-    hide_leaderboard: bool = Field(default=False, description="Hide member contribution rankings")
+from pydantic import Field, model_validator
+
+from app.schemas.group_creation_request import GroupCreationRequest
+
+
+class TargetSavingsGroupCreateRequest(GroupCreationRequest):
+    name: str = Field(..., min_length=2, max_length=100)
+    description: str = Field(default="", max_length=500)
+    group_image_url: str
+    visibility: str = "PRIVATE"
+    currency: str = "UGX"
+    allow_max_members: bool = False
+    max_members: Optional[int] = Field(default=None, ge=2)
+
+    allow_target_amount: bool = False
+    target_amount: Optional[int] = Field(default=None, gt=0)
+    allow_target_date: bool = False
+    target_date: Optional[int] = Field(default=None, ge=0)
+    allow_contribution_schedule: bool = False
+    contribution_amount: int = Field(default=0, ge=0)
+    allow_collection_frequency: bool = False
+    collection_frequency_days: int = Field(default=0, ge=0)
+    collection_time: Optional[int] = Field(default=None, ge=0)
+
+    allow_multi_payout: bool = True
+    require_consensus_at_end: bool = False
+    allow_early_payout_by_vote: bool = False
+    vote_approval_percentage: int = Field(default=100, ge=51, le=100)
+
+    enable_late_fees: bool = False
+    late_fee_amount: int = Field(default=0, ge=0)
+    grace_period_hours: int = Field(default=24, ge=0)
+    missed_payment_action: Literal["RECORD_STRIKE", "REMOVE_AND_REFUND"] = "RECORD_STRIKE"
+    minimum_kyc_tier: int = Field(default=1, ge=0, le=3)
+    hide_leaderboard: bool = False
+
+    @model_validator(mode="after")
+    def validate_enabled_settings(self):
+        now_ms = int(time.time() * 1000)
+        if self.allow_max_members != (self.max_members is not None):
+            raise ValueError("Set max_members only when allow_max_members is enabled.")
+        if self.allow_target_amount and self.target_amount is None:
+            raise ValueError("target_amount is required when allow_target_amount is enabled.")
+        if not self.allow_target_amount and self.target_amount is not None:
+            raise ValueError("target_amount must be omitted when allow_target_amount is disabled.")
+        if self.allow_target_date:
+            if self.target_date is None:
+                raise ValueError("target_date is required when allow_target_date is enabled.")
+            if self.target_date <= now_ms:
+                raise ValueError("target_date must be in the future.")
+        elif self.target_date is not None:
+            raise ValueError("target_date must be omitted when allow_target_date is disabled.")
+        if self.allow_contribution_schedule and self.contribution_amount <= 0:
+            raise ValueError("contribution_amount must be positive when the schedule is enabled.")
+        if not self.allow_contribution_schedule and self.contribution_amount != 0:
+            raise ValueError("contribution_amount must be zero when the schedule is disabled.")
+        if self.allow_collection_frequency:
+            if not self.allow_contribution_schedule:
+                raise ValueError("Collection frequency requires a contribution schedule.")
+            if self.collection_frequency_days <= 0:
+                raise ValueError("collection_frequency_days must be positive when enabled.")
+        elif self.collection_frequency_days != 0:
+            raise ValueError("collection_frequency_days must be zero when frequency is disabled.")
+        if self.enable_late_fees:
+            if not self.allow_collection_frequency:
+                raise ValueError("Late fees require an enabled contribution frequency.")
+            if self.late_fee_amount <= 0:
+                raise ValueError("late_fee_amount must be positive when late fees are enabled.")
+        elif self.late_fee_amount != 0:
+            raise ValueError("late_fee_amount must be zero when late fees are disabled.")
+
+        return self

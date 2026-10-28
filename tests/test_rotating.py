@@ -35,6 +35,7 @@ def test_create_rotating():
         "name": "Weekly Hustlers ROSCA",
         "description": "Strict 10k weekly savings",
         "group_image_url": "https://example.com/image.png",
+        "start_date": int(time.time() * 1000),
         "type": "MERRY_GO_ROUND",
         "payment_mode": "OBLIGATION",
         "visibility": "PRIVATE",

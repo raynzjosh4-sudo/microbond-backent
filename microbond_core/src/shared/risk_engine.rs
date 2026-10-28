@@ -1,4 +1,4 @@
-﻿use pyo3::prelude::*;
+use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -76,7 +76,9 @@ pub fn evaluate_cross_group_exposure_pure(
         return CrossGroupRiskDecision {
             is_eligible: false,
             risk_tier: "REJECTED_CYCLE_LOCKED".to_string(),
-            rejection_reason: Some("The payout cycle has already started. You cannot join mid-way.".to_string()),
+            rejection_reason: Some(
+                "The payout cycle has already started. You cannot join mid-way.".to_string(),
+            ),
         };
     }
 
@@ -106,7 +108,8 @@ pub fn evaluate_cross_group_exposure_pure(
             is_eligible: false,
             risk_tier: "REJECTED_ARREARS".to_string(),
             rejection_reason: Some(
-                "You currently have an unpaid missed payment or arrears in another group.".to_string(),
+                "You currently have an unpaid missed payment or arrears in another group."
+                    .to_string(),
             ),
         };
     }
@@ -170,7 +173,8 @@ pub fn evaluate_guarantor_capacity_pure(
             total_projected_liability_minor: current_active_liability_minor + new_pledge_minor,
             remaining_capacity_minor: 0,
             rejection_reason: Some(
-                "Guarantor currently has overdue or defaulted payments and cannot take on risk.".to_string(),
+                "Guarantor currently has overdue or defaulted payments and cannot take on risk."
+                    .to_string(),
             ),
         };
     }
@@ -321,30 +325,24 @@ mod tests {
 
     #[test]
     fn test_cross_group_exposure() {
-        let ok = evaluate_cross_group_exposure_pure(
-            2, 10, false, 0, 0, 3, 80, Some(70), 2, 1, false,
-        );
+        let ok =
+            evaluate_cross_group_exposure_pure(2, 10, false, 0, 0, 3, 80, Some(70), 2, 1, false);
         assert!(ok.is_eligible);
 
-        let hit_and_run = evaluate_cross_group_exposure_pure(
-            2, 10, true, 0, 0, 3, 80, Some(70), 2, 1, false,
-        );
+        let hit_and_run =
+            evaluate_cross_group_exposure_pure(2, 10, true, 0, 0, 3, 80, Some(70), 2, 1, false);
         assert!(!hit_and_run.is_eligible);
         assert_eq!(hit_and_run.risk_tier, "REJECTED_HIT_AND_RUN");
     }
 
     #[test]
     fn test_guarantor_capacity() {
-        let res = evaluate_guarantor_capacity_pure(
-            80, 70, 0, 100_000, 200_000, 250_000, 500_000,
-        );
+        let res = evaluate_guarantor_capacity_pure(80, 70, 0, 100_000, 200_000, 250_000, 500_000);
         assert!(res.is_approved);
         assert_eq!(res.dynamic_max_liability_minor, 500_000);
         assert_eq!(res.remaining_capacity_minor, 50_000);
 
-        let over = evaluate_guarantor_capacity_pure(
-            80, 70, 0, 100_000, 300_000, 250_000, 500_000,
-        );
+        let over = evaluate_guarantor_capacity_pure(80, 70, 0, 100_000, 300_000, 250_000, 500_000);
         assert!(!over.is_approved);
     }
 }

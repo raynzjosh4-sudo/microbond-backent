@@ -14,7 +14,7 @@ from app.models.group.settings import (
     GroupCommunicationSettings,
     GroupVisibilitySettings,
 )
-from app.models.group.long_term import TargetSavingsGroupDetails
+from app.models.group.target_savings import TargetSavingsGroupDetails
 from app.api.routes.group.chat.messages import broadcast_system_message_sync
 from .schemas import TargetSavingsGroupCreateRequest
 
@@ -36,21 +36,7 @@ def create_target_savings_group(
     creator = current_user
     now_ms = int(time.time() * 1000)
 
-    # 1. Validation: target_date must be in the future
-    if request.target_date <= now_ms:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Target date must be in the future."
-        )
-
-    # 2. Validation: SINGLE_NOMINATED_ACCOUNT requires nominated_account_id
-    if request.payout_destination_type == "SINGLE_NOMINATED_ACCOUNT" and not request.nominated_account_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="A nominated account ID is required when payout destination is set to SINGLE_NOMINATED_ACCOUNT."
-        )
-
-    # 3. Validation: Creator must have KYC Tier 2 (National ID verified)
+    # Creator must have KYC Tier 2 (National ID verified).
     from app.services.group.group_auth_service import is_unrestricted_group_creator
     if not is_unrestricted_group_creator(creator):
         if creator.kyc_tier < 2 or getattr(creator, "is_dependent_account", False):
@@ -70,9 +56,13 @@ def create_target_savings_group(
         description=request.description,
         group_image_url=request.group_image_url,
         type="GOAL_SAVINGS",
-        payment_mode=request.payment_mode,
+        payment_mode=(
+            "OBLIGATION" if request.allow_contribution_schedule else "VOLUNTARY"
+        ),
         visibility=request.visibility,
         currency=request.currency,
+        start_date=request.start_date,
+        max_members=request.max_members if request.allow_max_members else None,
         created_by_user_id=creator.id,
         invite_code=invite_code,
         member_count=1
@@ -80,21 +70,39 @@ def create_target_savings_group(
     session.add(new_group)
 
     # 6. Create Base Settings
-    session.add(GroupFinancialSettings(group_id=new_group_id))
-    session.add(GroupGovernanceSettings(group_id=new_group_id))
+    session.add(
+        GroupFinancialSettings(
+            group_id=new_group_id,
+            enable_late_fees=request.enable_late_fees,
+            late_fee_amount=float(request.late_fee_amount),
+            grace_period_hours=request.grace_period_hours,
+        )
+    )
+    session.add(
+        GroupGovernanceSettings(
+            group_id=new_group_id,
+            minimum_kyc_tier=request.minimum_kyc_tier,
+        )
+    )
     session.add(GroupCommunicationSettings(group_id=new_group_id))
     session.add(GroupVisibilitySettings(group_id=new_group_id))
 
     # 7. Create Target Savings Details
     target_details = TargetSavingsGroupDetails(
         group_id=new_group_id,
-        target_amount=request.target_amount,
-        target_date=request.target_date,
+        allow_target_amount=request.allow_target_amount,
+        allow_target_date=request.allow_target_date,
+        allow_contribution_schedule=request.allow_contribution_schedule,
+        allow_collection_frequency=request.allow_collection_frequency,
+        target_amount=request.target_amount if request.allow_target_amount else None,
+        target_date=request.target_date if request.allow_target_date else None,
         contribution_amount=request.contribution_amount,
         collection_frequency_days=request.collection_frequency_days,
         collection_time=request.collection_time,
-        payout_destination_type=request.payout_destination_type,
-        nominated_account_id=request.nominated_account_id,
+        allow_multi_payout=request.allow_multi_payout,
+        payout_destination_type=(
+            "PROPORTIONAL_RETURN" if request.allow_multi_payout else "SINGLE_NOMINATED_ACCOUNT"
+        ),
         require_consensus_at_end=request.require_consensus_at_end,
         allow_early_payout_by_vote=request.allow_early_payout_by_vote,
         vote_approval_percentage=request.vote_approval_percentage,
@@ -104,7 +112,7 @@ def create_target_savings_group(
         missed_payment_action=request.missed_payment_action,
         minimum_kyc_tier=request.minimum_kyc_tier,
         hide_leaderboard=request.hide_leaderboard,
-        is_locked=True,
+        is_locked=False,
         is_ended=False,
         is_paid_out=False,
         total_saved_amount=0,
@@ -149,9 +157,12 @@ def create_target_savings_group(
             "group_id": new_group.group_id,
             "invite_code": new_group.invite_code,
             "name": new_group.name,
+            "start_date": new_group.start_date,
+            "max_members": new_group.max_members,
             "target_amount": target_details.target_amount,
             "target_date": target_details.target_date,
             "contribution_amount": target_details.contribution_amount,
+            "allow_collection_frequency": target_details.allow_collection_frequency,
             "payout_destination_type": target_details.payout_destination_type
         }
     }

@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
+from pydantic import Field
 from typing import Optional, List, Dict, Any
 from enum import Enum
+from app.schemas.group_creation_request import GroupCreationRequest
 
 class PayoutOrderStrategy(str, Enum):
     ADMIN_ASSIGNED = "Admin Assigned"
@@ -8,7 +9,7 @@ class PayoutOrderStrategy(str, Enum):
     TRUST_SCORE = "Trust Score Ranked"
     FIRST_COME_FIRST_SERVE = "First Come First Serve"
 
-class RotatingGroupCreateRequest(BaseModel):
+class RotatingGroupCreateRequest(GroupCreationRequest):
     name: str = Field(..., description="Name of the savings group")
     description: str = Field(default="", description="Optional description")
     group_image_url: str = Field(

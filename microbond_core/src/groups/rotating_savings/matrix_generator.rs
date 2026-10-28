@@ -196,7 +196,8 @@ mod tests {
             7,
             1_700_000_000,
             1_700_000_000,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(result.num_cycles, 10);
         assert_eq!(result.member_count, 10);
@@ -221,7 +222,8 @@ mod tests {
             7,
             1_700_000_000,
             1_700_000_000,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(result.num_cycles, 5);
         for payout in result.payouts {

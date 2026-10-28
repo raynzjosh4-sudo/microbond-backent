@@ -207,6 +207,7 @@ def get_settings_summary(
         "currency": group.currency,
         "visibility": group.visibility,
         "max_members": group.max_members,
+        "start_date": group.start_date,
         "member_count": group.member_count,
         "financial": fin.dict(exclude={"id", "group_id"}) if fin else {},
         "governance": gov.dict(exclude={"id", "group_id"}) if gov else {},

@@ -60,7 +60,8 @@ pub fn calculate_decayed_quorum_pure(
     }
 
     let decayed_quorum = if intervals > 0 {
-        (params.initial_required_approvals - intervals as i32).max(params.minimum_decay_floor_approvals)
+        (params.initial_required_approvals - intervals as i32)
+            .max(params.minimum_decay_floor_approvals)
     } else {
         params.initial_required_approvals
     };
@@ -102,10 +103,16 @@ pub fn calculate_decayed_quorum(
     current_time_ms: i64,
     current_approvals: i32,
 ) -> PyResult<String> {
-    let params: QuorumDecayParams = serde_json::from_str(params_json)
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid params JSON: {}", e)))?;
+    let params: QuorumDecayParams = serde_json::from_str(params_json).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Invalid params JSON: {}", e))
+    })?;
 
-    let res = calculate_decayed_quorum_pure(&params, request_created_at_ms, current_time_ms, current_approvals);
+    let res = calculate_decayed_quorum_pure(
+        &params,
+        request_created_at_ms,
+        current_time_ms,
+        current_approvals,
+    );
     serde_json::to_string(&res)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Serialization error: {}", e)))
 }

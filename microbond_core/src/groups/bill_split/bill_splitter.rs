@@ -20,7 +20,10 @@ pub struct CustomSplitValidationResult {
     pub error_message: Option<String>,
 }
 
-pub fn calculate_equal_split_pure(total_bill: i64, member_count: usize) -> Result<EqualBillSplitResult, String> {
+pub fn calculate_equal_split_pure(
+    total_bill: i64,
+    member_count: usize,
+) -> Result<EqualBillSplitResult, String> {
     if total_bill <= 0 {
         return Err("total_bill must be positive".to_string());
     }

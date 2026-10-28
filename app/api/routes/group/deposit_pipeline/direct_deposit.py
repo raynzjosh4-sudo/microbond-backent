@@ -11,6 +11,8 @@ from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.rotating import RotatingGroupDetails
+from app.models.group.target_savings import TargetSavingsGroupDetails
+from sqlalchemy import func
 from app.models.group.finance import MemberObligation
 from app.models.group.wallet import GroupWallet
 from app.models.group.ledger import LedgerEntry
@@ -67,6 +69,12 @@ async def direct_deposit(
 
     now_ms = now_epoch_ms()
 
+    if group.start_date and now_ms < group.start_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This group's start date has not arrived yet.",
+        )
+
     # Rule 1: Group must not be forming
     if group.status in ["FORMING", "PENDING"]:
         raise HTTPException(
@@ -74,8 +82,21 @@ async def direct_deposit(
             detail=f"Group is still forming ({group.member_count}/{group.max_members or '?'} members). Deposits open once the circle is full."
         )
 
+    if group.type == "GOAL_SAVINGS":
+        target = session.exec(
+            select(TargetSavingsGroupDetails).where(
+                TargetSavingsGroupDetails.group_id == group_id
+            )
+        ).first()
+        if target and target.is_locked:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Deposits are locked for this goal-savings group.",
+            )
+
     # 3. Determine cycle number & handle Rotating specifics
     rot = None
+    target_details = None
     current_cycle = 1
     base_due = payload.amount
     if group.type == "MERRY_GO_ROUND":
@@ -90,6 +111,50 @@ async def direct_deposit(
                 )
             current_cycle = rot.current_cycle or 1
             base_due = int(rot.contribution_amount)
+    elif group.type == "GOAL_SAVINGS":
+        target_details = session.exec(
+            select(TargetSavingsGroupDetails).where(
+                TargetSavingsGroupDetails.group_id == group_id
+            )
+        ).first()
+        if not target_details:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Target savings settings are missing for this group.",
+            )
+        if target_details.allow_contribution_schedule:
+            base_due = int(target_details.contribution_amount)
+            if target_details.allow_collection_frequency:
+                if target_details.collection_frequency_days <= 0:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail="Goal-savings frequency is enabled without a valid interval.",
+                    )
+                frequency_ms = target_details.collection_frequency_days * 86400000
+                elapsed_ms = max(0, now_ms - group.start_date)
+                current_cycle = elapsed_ms // frequency_ms + 1
+            else:
+                latest_obligation = session.exec(
+                    select(MemberObligation)
+                    .where(
+                        MemberObligation.group_id == group_id,
+                        MemberObligation.user_id == current_user.id,
+                    )
+                    .order_by(MemberObligation.cycle_number.desc())
+                ).first()
+                current_cycle = (
+                    latest_obligation.cycle_number + 1
+                    if latest_obligation and latest_obligation.status == "PAID"
+                    else latest_obligation.cycle_number if latest_obligation else 1
+                )
+        elif target_details:
+            obligation_count = session.exec(
+                select(func.count()).select_from(MemberObligation).where(
+                    MemberObligation.group_id == group_id,
+                    MemberObligation.user_id == current_user.id,
+                )
+            ).one()
+            current_cycle = int(obligation_count) + 1
 
     amount = payload.amount
     currency = group.currency or "UGX"
@@ -114,7 +179,11 @@ async def direct_deposit(
             amount_due=base_due,
             amount_paid=0,
             status="PENDING",
-            due_date=now_ms + (7 * 86400000)
+            due_date=(
+                group.start_date + current_cycle * target_details.collection_frequency_days * 86400000
+                if target_details and target_details.allow_collection_frequency
+                else now_ms + (7 * 86400000) if group.type == "MERRY_GO_ROUND" else None
+            )
         )
         session.add(obligation)
         session.flush()
@@ -201,6 +270,9 @@ async def direct_deposit(
     if surplus > 0:
         membership.credit_balance_ugx = (membership.credit_balance_ugx or 0) + surplus
     session.add(membership)
+    if target_details:
+        target_details.total_saved_amount = (target_details.total_saved_amount or 0) + amount
+        session.add(target_details)
 
     # 8. Announce verified deposit into group thread via System Event Message
     depositor_name = current_user.full_name or "A member"
@@ -266,11 +338,12 @@ async def direct_deposit(
                     "message": system_msg.model_dump(mode="json")
                 }
             )
-        await broadcast_group_ring_update(
-            group_id=group_id,
-            depositor_name=depositor_name,
-            amount=amount
-        )
+        if not target_details or target_details.allow_collection_frequency:
+            await broadcast_group_ring_update(
+                group_id=group_id,
+                depositor_name=depositor_name,
+                amount=amount
+            )
     except Exception as ws_err:
         logger.warning(f"[DIRECT_DEPOSIT] WebSocket broadcast warning: {ws_err}")
 
@@ -290,12 +363,15 @@ async def direct_deposit(
 
     # Calculate group ring completion fraction
     from app.services.group.dashboard_summary_service import GroupDashboardSummaryService
-    try:
-        ring = GroupDashboardSummaryService.calculate_group_ring(session, group_id)
-        fraction = ring.ring_fraction if hasattr(ring, "ring_fraction") else 0.0
-    except Exception as ring_err:
-        logger.warning(f"[DIRECT_DEPOSIT] Ring calculation warning: {ring_err}")
+    if target_details and not target_details.allow_collection_frequency:
         fraction = 0.0
+    else:
+        try:
+            ring = GroupDashboardSummaryService.calculate_group_ring(session, group_id)
+            fraction = ring.ring_fraction if hasattr(ring, "ring_fraction") else 0.0
+        except Exception as ring_err:
+            logger.warning(f"[DIRECT_DEPOSIT] Ring calculation warning: {ring_err}")
+            fraction = 0.0
 
     return DirectDepositResponse(
         status="SUCCESS",

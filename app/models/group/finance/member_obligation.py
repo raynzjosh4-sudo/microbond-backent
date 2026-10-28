@@ -16,7 +16,7 @@ class MemberObligation(SQLModel, table=True):
     
     amount_due: int = Field(sa_column=Column(BigInteger))
     amount_paid: int = Field(default=0, sa_column=Column(BigInteger))
-    due_date: int = Field(sa_column=Column(BigInteger)) # Epoch ms
+    due_date: Optional[int] = Field(default=None, sa_column=Column(BigInteger, nullable=True)) # Epoch ms
     
     # Status: PENDING, PAID, LATE, DEFAULTED
     status: str = Field(default="PENDING", index=True)

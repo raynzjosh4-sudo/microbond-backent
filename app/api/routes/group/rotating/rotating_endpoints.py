@@ -77,6 +77,7 @@ def create_group(
         payment_mode=request.payment_mode,
         visibility=request.visibility,
         currency=request.currency,
+        start_date=request.start_date,
         created_by_user_id=creator.id,
         invite_code=invite_code,
         member_count=1, # Creator is the first member
@@ -106,7 +107,8 @@ def create_group(
     gov_settings = GroupGovernanceSettings(
         group_id=new_group_id,
         requires_admin_approval=request.requires_admin_approval,
-        require_multi_signature=request.multi_sig_payout_approval
+        require_multi_signature=request.multi_sig_payout_approval,
+        minimum_kyc_tier=request.minimum_kyc_tier,
     )
     comm_settings = GroupCommunicationSettings(group_id=new_group_id)
     vis_settings = GroupVisibilitySettings(group_id=new_group_id)
@@ -376,4 +378,3 @@ def launch_rotating_group(
             "is_payout_order_locked": details.is_payout_order_locked
         }
     }
-

@@ -8,7 +8,7 @@ from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.settings import GroupFinancialSettings
-from app.models.group.long_term import TargetSavingsGroupDetails
+from app.models.group.target_savings import TargetSavingsGroupDetails
 from app.models.group.welfare_event import WelfareFundOperationalSettings
 from app.models.group.investment_association import (
     InvestmentClubOperationalSettings,
@@ -23,6 +23,7 @@ class UpdateGeneralSettingsRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     maximum_member_capacity: Optional[int] = None
+    start_date: Optional[int] = None
 
     # Financial rules — shared across group types
     enable_late_fees: Optional[bool] = None
@@ -63,8 +64,13 @@ def update_group_settings(
     if request.description is not None:
         group.description = request.description
     if request.maximum_member_capacity is not None:
+        if request.maximum_member_capacity < 1:
+            raise HTTPException(status_code=400, detail="Maximum member capacity must be positive.")
         current_members = session.exec(
-            select(GroupMembership).where(GroupMembership.group_id == group_id)
+            select(GroupMembership).where(
+                GroupMembership.group_id == group_id,
+                GroupMembership.status == "ACTIVE",
+            )
         ).all()
         if request.maximum_member_capacity < len(current_members):
             raise HTTPException(
@@ -72,6 +78,8 @@ def update_group_settings(
                 detail="Cannot lower capacity below the current number of joined members."
             )
         group.max_members = request.maximum_member_capacity
+    if request.start_date is not None:
+        group.start_date = request.start_date
     session.add(group)
 
     # ── 2. Base financial settings (applies to ALL group types) ──────────────
@@ -97,12 +105,41 @@ def update_group_settings(
             select(TargetSavingsGroupDetails).where(TargetSavingsGroupDetails.group_id == group_id)
         ).first()
         if target:
+            effective_enable_late_fees = (
+                request.enable_late_fees
+                if request.enable_late_fees is not None
+                else target.enable_late_fees
+            )
+            effective_late_fee_amount = (
+                request.late_fee_amount
+                if request.late_fee_amount is not None
+                else target.late_fee_amount
+            )
+            if effective_enable_late_fees and not target.allow_collection_frequency:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Goal-savings late fees require an enabled contribution frequency.",
+                )
+            if effective_enable_late_fees and effective_late_fee_amount <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Set a positive late fee amount before enabling late fees.",
+                )
             if request.enable_late_fees is not None:
                 target.enable_late_fees = request.enable_late_fees
             if request.late_fee_amount is not None:
                 target.late_fee_amount = request.late_fee_amount
             if request.grace_period_hours is not None:
                 target.grace_period_hours = request.grace_period_hours
+            if request.enable_late_fees is False:
+                target.late_fee_amount = 0
+                if fin:
+                    fin.late_fee_amount = 0
+            if fin:
+                fin.enable_late_fees = target.enable_late_fees
+                fin.late_fee_amount = float(target.late_fee_amount)
+                fin.grace_period_hours = target.grace_period_hours
+                session.add(fin)
             session.add(target)
 
     elif group.type == "WELFARE_FUND":

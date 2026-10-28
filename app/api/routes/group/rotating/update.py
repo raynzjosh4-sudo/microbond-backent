@@ -9,7 +9,7 @@ from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.rotating import RotatingGroupDetails
-from app.models.group.settings import GroupFinancialSettings
+from app.models.group.settings import GroupFinancialSettings, GroupGovernanceSettings
 from app.api.routes.group.chat.messages import broadcast_system_message_sync
 from app.services.websocket_manager import ws_manager
 
@@ -336,6 +336,14 @@ def update_rotating_group_settings(
 
     if request.minimum_kyc_tier is not None and request.minimum_kyc_tier != details.minimum_kyc_tier:
         details.minimum_kyc_tier = request.minimum_kyc_tier
+        governance_settings = session.exec(
+            select(GroupGovernanceSettings)
+            .where(GroupGovernanceSettings.group_id == group_id)
+            .with_for_update()
+        ).first()
+        if governance_settings:
+            governance_settings.minimum_kyc_tier = request.minimum_kyc_tier
+            session.add(governance_settings)
         change_notices.append(f"Identity verification requirement set to Tier {request.minimum_kyc_tier}.")
 
     if request.early_turn_security_hold_percentage is not None and request.early_turn_security_hold_percentage != details.early_turn_security_hold_percentage:
@@ -484,5 +492,4 @@ def update_rotating_group_settings(
             "current_saving_day": details.current_saving_day
         }
     }
-
 

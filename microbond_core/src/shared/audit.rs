@@ -20,8 +20,14 @@ mod tests {
 
     #[test]
     fn test_audit_hash_deterministic() {
-        let hash1 = compute_canonical_audit_hash("0000000000000000000000000000000000000000000000000000000000000000", r#"{"action":"TEST"}"#);
-        let hash2 = compute_canonical_audit_hash("0000000000000000000000000000000000000000000000000000000000000000", r#"{"action":"TEST"}"#);
+        let hash1 = compute_canonical_audit_hash(
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            r#"{"action":"TEST"}"#,
+        );
+        let hash2 = compute_canonical_audit_hash(
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            r#"{"action":"TEST"}"#,
+        );
         assert_eq!(hash1, hash2);
         assert_eq!(hash1.len(), 64);
     }

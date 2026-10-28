@@ -26,6 +26,7 @@ class Group(SQLModel, table=True):
     # Financials & Timing
     currency: str = Field(default="UGX")
     total_balance: int = Field(default=0, sa_column=Column(BigInteger)) # Storing as BigInteger
+    start_date: int = Field(default_factory=now_epoch_ms, sa_column=Column(BigInteger))
     
     # Membership
     member_count: int = Field(default=0)

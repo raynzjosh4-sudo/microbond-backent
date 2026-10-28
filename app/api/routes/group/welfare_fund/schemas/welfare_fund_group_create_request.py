@@ -1,7 +1,9 @@
 from typing import Optional
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
+from app.schemas.group_creation_request import GroupCreationRequest
 
-class WelfareFundGroupCreateRequest(BaseModel):
+
+class WelfareFundGroupCreateRequest(GroupCreationRequest):
     # Group identity
     name: str = Field(..., min_length=2, max_length=100)
     description: str = Field(default="", max_length=500)

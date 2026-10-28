@@ -1,6 +1,8 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
+from app.schemas.group_creation_request import GroupCreationRequest
 
-class SharedWalletGroupCreateRequest(BaseModel):
+
+class SharedWalletGroupCreateRequest(GroupCreationRequest):
     # Basic group info
     name: str = Field(..., min_length=2, max_length=100, description="Name of the shared wallet group")
     description: str = Field(default="", max_length=500, description="Short purpose or description of the wallet")

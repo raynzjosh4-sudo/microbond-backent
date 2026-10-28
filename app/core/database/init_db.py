@@ -39,6 +39,7 @@ def _run_create_all():
         import app.models.group.settings
         import app.models.group.rotating
         import app.models.group.long_term
+        import app.models.group.target_savings
         import app.models.group.welfare_event
         import app.models.group.investment_association
         import app.models.group.bill_split
@@ -99,6 +100,15 @@ def _ensure_critical_columns():
             'ALTER TABLE "groupreport" ADD COLUMN IF NOT EXISTS "reported_user_id" UUID;',
             'ALTER TABLE "groupmembership" ADD COLUMN IF NOT EXISTS "credit_balance_ugx" BIGINT NOT NULL DEFAULT 0;',
             'ALTER TABLE "groupwallet" ADD COLUMN IF NOT EXISTS "prepaid_funds" BIGINT NOT NULL DEFAULT 0;',
+
+            # targetsavingsgroupdetails
+            'ALTER TABLE "targetsavingsgroupdetails" ADD COLUMN IF NOT EXISTS "allow_target_amount" BOOLEAN NOT NULL DEFAULT TRUE;',
+            'ALTER TABLE "targetsavingsgroupdetails" ADD COLUMN IF NOT EXISTS "allow_target_date" BOOLEAN NOT NULL DEFAULT TRUE;',
+            'ALTER TABLE "targetsavingsgroupdetails" ADD COLUMN IF NOT EXISTS "allow_contribution_schedule" BOOLEAN NOT NULL DEFAULT TRUE;',
+            'ALTER TABLE "targetsavingsgroupdetails" ADD COLUMN IF NOT EXISTS "allow_collection_frequency" BOOLEAN NOT NULL DEFAULT FALSE;',
+            'ALTER TABLE "targetsavingsgroupdetails" ADD COLUMN IF NOT EXISTS "allow_multi_payout" BOOLEAN NOT NULL DEFAULT TRUE;',
+            'ALTER TABLE "targetsavingsgroupdetails" ALTER COLUMN "target_amount" DROP NOT NULL;',
+            'ALTER TABLE "targetsavingsgroupdetails" ALTER COLUMN "target_date" DROP NOT NULL;',
 
             # rotatinggroupdetails
             'ALTER TABLE "rotatinggroupdetails" ADD COLUMN IF NOT EXISTS "auto_disburse_when_full" BOOLEAN NOT NULL DEFAULT TRUE;',

@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
 import time
+from app.schemas.group_creation_request import GroupCreationRequest
 
-class EventCommitteeGroupCreateRequest(BaseModel):
+
+class EventCommitteeGroupCreateRequest(GroupCreationRequest):
     # Group identity
     name: str = Field(..., min_length=2, max_length=100, description="Name of the committee or event")
     description: str = Field(default="", max_length=500)

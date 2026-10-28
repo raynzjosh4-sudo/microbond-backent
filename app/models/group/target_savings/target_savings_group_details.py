@@ -12,21 +12,26 @@ class TargetSavingsGroupDetails(SQLModel, table=True):
 
     id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4, primary_key=True)
     group_id: str = Field(foreign_key="group.group_id", index=True, unique=True)
-    
+
     # 1. Savings Goal & Schedule (Whole Numbers Only)
-    target_amount: int = Field(default=0, sa_column=Column(BigInteger))
-    target_date: int = Field(sa_column=Column(BigInteger))
+    allow_target_amount: bool = Field(default=False)
+    allow_target_date: bool = Field(default=False)
+    allow_contribution_schedule: bool = Field(default=False)
+    allow_collection_frequency: bool = Field(default=False)
+    target_amount: Optional[int] = Field(default=None, sa_column=Column(BigInteger))
+    target_date: Optional[int] = Field(default=None, sa_column=Column(BigInteger))
     contribution_amount: int = Field(default=0, sa_column=Column(BigInteger))
     collection_frequency_days: int = Field(default=0)
     collection_time: Optional[int] = Field(default=None, sa_column=Column(BigInteger))
-    
+
     # 2. Where the Money Goes at the End
+    allow_multi_payout: bool = Field(default=True)
     payout_destination_type: str = Field(default="PROPORTIONAL_RETURN")
     nominated_account_id: Optional[str] = Field(default=None)
     
     # 3. Group Agreement & Voting Rules
     require_consensus_at_end: bool = Field(default=False)
-    allow_early_payout_by_vote: bool = Field(default=True)
+    allow_early_payout_by_vote: bool = Field(default=False)
     vote_approval_percentage: int = Field(default=100)
     
     # 4. Late Fees & Rules
@@ -38,7 +43,7 @@ class TargetSavingsGroupDetails(SQLModel, table=True):
     hide_leaderboard: bool = Field(default=False)
     
     # 5. Savings Status
-    is_locked: bool = Field(default=True)
+    is_locked: bool = Field(default=False)
     is_ended: bool = Field(default=False)
     is_paid_out: bool = Field(default=False)
     total_saved_amount: int = Field(default=0, sa_column=Column(BigInteger))

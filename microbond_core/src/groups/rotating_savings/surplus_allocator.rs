@@ -97,7 +97,10 @@ pub fn allocate_surplus_pure(
     let summary = if fully_covered.is_empty() && partial_cycle.is_some() {
         format!("Surplus partially covers Round {}.", target_cycle)
     } else if !fully_covered.is_empty() && partial_cycle.is_none() {
-        format!("Surplus fully covers {} upcoming rounds.", fully_covered.len())
+        format!(
+            "Surplus fully covers {} upcoming rounds.",
+            fully_covered.len()
+        )
     } else if !fully_covered.is_empty() && partial_cycle.is_some() {
         format!(
             "Surplus fully covers {} rounds and partially covers Round {}.",

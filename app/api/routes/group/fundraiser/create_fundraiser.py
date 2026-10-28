@@ -64,6 +64,7 @@ def create_fundraiser(
         payment_mode="VOLUNTARY",
         visibility=request.visibility,
         currency=request.currency,
+        start_date=request.start_date,
         created_by_user_id=creator.id,
         invite_code=invite_code,
         member_count=1
@@ -72,7 +73,12 @@ def create_fundraiser(
 
     # 5. Create base settings (reuse shared tables)
     session.add(GroupFinancialSettings(group_id=new_group_id))
-    session.add(GroupGovernanceSettings(group_id=new_group_id))
+    session.add(
+        GroupGovernanceSettings(
+            group_id=new_group_id,
+            minimum_kyc_tier=request.minimum_kyc_tier,
+        )
+    )
     session.add(GroupCommunicationSettings(group_id=new_group_id))
     session.add(GroupVisibilitySettings(group_id=new_group_id))
 

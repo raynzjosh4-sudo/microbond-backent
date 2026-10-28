@@ -43,6 +43,12 @@ def get_deposit_info(
     from app.utils.time.now_epoch_ms import now_epoch_ms
     now_ms = now_epoch_ms()
 
+    if group.start_date and now_ms < group.start_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This group's start date has not arrived yet.",
+        )
+
     # Rule: Group must not be forming
     if group.status in ["FORMING", "PENDING"]:
         raise HTTPException(
@@ -72,14 +78,57 @@ def get_deposit_info(
             allow_overpay = rot.allow_advance_deposits
             current_cycle = rot.current_cycle
     elif group.type == "GOAL_SAVINGS":
-        from app.models.group.target_savings.target_savings_group_details import TargetSavingsGroupDetails
+        from app.models.group.target_savings import TargetSavingsGroupDetails
         target = session.exec(
             select(TargetSavingsGroupDetails).where(TargetSavingsGroupDetails.group_id == group_id)
         ).first()
-        if target:
-            base_contribution = int(target.contribution_amount) if target.contribution_amount else int(target.target_amount or 0)
-            allow_partial = True
-            allow_overpay = True
+        if not target:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Target savings settings are missing for this group.",
+            )
+        if target.is_locked:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Deposits are locked for this goal-savings group.",
+            )
+        base_contribution = (
+            int(target.contribution_amount)
+            if target.allow_contribution_schedule
+            else 0
+        )
+        allow_partial = True
+        allow_overpay = True
+        if target.allow_collection_frequency:
+            if target.collection_frequency_days <= 0:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Goal-savings frequency is enabled without a valid interval.",
+                )
+            interval_ms = target.collection_frequency_days * 86400000
+            current_cycle = max(1, (now_ms - group.start_date) // interval_ms + 1)
+        elif target.allow_contribution_schedule:
+            latest_obligation = session.exec(
+                select(MemberObligation)
+                .where(
+                    MemberObligation.group_id == group_id,
+                    MemberObligation.user_id == current_user.id,
+                )
+                .order_by(MemberObligation.cycle_number.desc())
+            ).first()
+            current_cycle = (
+                latest_obligation.cycle_number + 1
+                if latest_obligation and latest_obligation.status == "PAID"
+                else latest_obligation.cycle_number if latest_obligation else 1
+            )
+        else:
+            obligation_count = session.exec(
+                select(func.count()).select_from(MemberObligation).where(
+                    MemberObligation.group_id == group_id,
+                    MemberObligation.user_id == current_user.id,
+                )
+            ).one()
+            current_cycle = int(obligation_count) + 1
 
     # Fetch active MemberObligation for current cycle
     obligation = session.exec(
@@ -147,4 +196,3 @@ def get_deposit_info(
         currency=group.currency or "UGX",
         member_prepaid_balance=int(membership.credit_balance_ugx or 0)
     )
-

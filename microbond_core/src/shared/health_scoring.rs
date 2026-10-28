@@ -20,7 +20,7 @@ pub struct GroupHealthScoreResult {
     pub default_rate_pct: f64,
     pub arrears_member_ratio_pct: f64,
     pub composite_score: i32,
-    pub grade: String, // "A+" | "A" | "B" | "C" | "D" | "F"
+    pub grade: String,     // "A+" | "A" | "B" | "C" | "D" | "F"
     pub risk_tier: String, // "LOW" | "MODERATE" | "HIGH" | "CRITICAL"
 }
 
@@ -73,7 +73,10 @@ pub fn calculate_single_health_grade_pure(input: &GroupHealthInput) -> GroupHeal
 pub fn calculate_batch_health_grades_pure(
     groups: &[GroupHealthInput],
 ) -> Vec<GroupHealthScoreResult> {
-    groups.iter().map(calculate_single_health_grade_pure).collect()
+    groups
+        .iter()
+        .map(calculate_single_health_grade_pure)
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -81,11 +84,10 @@ pub fn calculate_batch_health_grades_pure(
 // ---------------------------------------------------------------------------
 
 #[pyfunction]
-pub fn calculate_batch_health_grades(
-    groups_json: &str,
-) -> PyResult<String> {
-    let inputs: Vec<GroupHealthInput> = serde_json::from_str(groups_json)
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Invalid batch JSON: {}", e)))?;
+pub fn calculate_batch_health_grades(groups_json: &str) -> PyResult<String> {
+    let inputs: Vec<GroupHealthInput> = serde_json::from_str(groups_json).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Invalid batch JSON: {}", e))
+    })?;
 
     let results = calculate_batch_health_grades_pure(&inputs);
     serde_json::to_string(&results)
@@ -197,4 +199,3 @@ pub fn evaluate_benefit_eligibility(
     serde_json::to_string(&result)
         .map_err(|e| pyo3::exceptions::PyValueError::new_err(format!("Serialization error: {}", e)))
 }
-

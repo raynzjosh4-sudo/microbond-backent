@@ -1,4 +1,5 @@
 import uuid
+import time
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
@@ -88,11 +89,13 @@ def test_unrestricted_user_evaluation_and_creation(db_session: Session, monkeypa
     app.dependency_overrides[get_session] = lambda: db_session
     app.dependency_overrides[get_current_user] = lambda: super_user
     client = TestClient(app)
+    start_date = int(time.time() * 1000)
 
     # Can create MERRY_GO_ROUND (normally requires KYC Tier 3, high trust, health grades)
     resp = client.post("/api/v1/groups/create", json={
         "name": "Super Boss Rotating Circle",
         "description": "Unlimited creation circle",
+        "start_date": start_date,
         "type": "MERRY_GO_ROUND",
         "payment_mode": "OBLIGATION",
         "visibility": "PUBLIC",
@@ -104,6 +107,7 @@ def test_unrestricted_user_evaluation_and_creation(db_session: Session, monkeypa
     resp_ad = client.post("/api/v1/groups/create", json={
         "name": "Super Boss Association",
         "description": "Alumni and dues",
+        "start_date": start_date,
         "type": "ASSOCIATION_DUES",
         "payment_mode": "OBLIGATION",
         "visibility": "PRIVATE",
@@ -115,6 +119,7 @@ def test_unrestricted_user_evaluation_and_creation(db_session: Session, monkeypa
     resp_bs = client.post("/api/v1/groups/create", json={
         "name": "Dinner Split Unlimited",
         "description": "Super bill split",
+        "start_date": start_date,
         "type": "BILL_SPLIT",
         "payment_mode": "OBLIGATION",
     })
@@ -125,6 +130,7 @@ def test_unrestricted_user_evaluation_and_creation(db_session: Session, monkeypa
     resp_rot_direct = client.post("/api/v1/groups/rotating/create", json={
         "name": "Direct Rotating Super Circle",
         "description": "Weekly pot",
+        "start_date": start_date,
         "group_image_url": "https://example.com/pot.jpg",
         "type": "MERRY_GO_ROUND",
         "payment_mode": "OBLIGATION",

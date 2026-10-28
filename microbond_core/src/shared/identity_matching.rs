@@ -10,10 +10,7 @@ pub struct NameSimilarityResult {
 }
 
 fn normalize_and_sort_tokens(name: &str) -> String {
-    let mut tokens: Vec<&str> = name
-        .split_whitespace()
-        .filter(|t| !t.is_empty())
-        .collect();
+    let mut tokens: Vec<&str> = name.split_whitespace().filter(|t| !t.is_empty()).collect();
     tokens.sort_unstable();
     tokens.join(" ")
 }

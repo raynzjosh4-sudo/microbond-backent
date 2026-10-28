@@ -21,6 +21,7 @@ class UpdateGovernanceSettingsRequest(BaseModel):
     guarantor_count: Optional[int] = None
     group_charter_url: Optional[str] = None
     is_audit_active: Optional[bool] = None
+    minimum_kyc_tier: Optional[int] = None
 
 @router.patch("/{group_id}/settings/governance", summary="Admin: Update Governance & Multi-Sig Settings")
 def update_governance_settings(
@@ -48,6 +49,11 @@ def update_governance_settings(
     
     if not settings:
         raise HTTPException(status_code=404, detail="Governance settings not found.")
+
+    if request.minimum_kyc_tier is not None:
+        if not 0 <= request.minimum_kyc_tier <= 3:
+            raise HTTPException(status_code=400, detail="minimum_kyc_tier must be between 0 and 3.")
+        settings.minimum_kyc_tier = request.minimum_kyc_tier
 
     if request.require_multi_signature is not None:
         settings.require_multi_signature = request.require_multi_signature

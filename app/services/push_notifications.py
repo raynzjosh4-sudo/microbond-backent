@@ -25,13 +25,13 @@ async def notify_all_group_members(
         # Connect to DB synchronously inside threadpool
         with Session(engine) as session:
             # 1. Get all active members except sender
-            members = session.exec(
-                select(GroupMembership).where(
-                    GroupMembership.group_id == group_id,
-                    GroupMembership.status == "ACTIVE",
-                    GroupMembership.user_id != sender_id
-                )
-            ).all()
+            member_query = select(GroupMembership).where(
+                GroupMembership.group_id == group_id,
+                GroupMembership.status == "ACTIVE",
+            )
+            if sender_id != "SYSTEM":
+                member_query = member_query.where(GroupMembership.user_id != sender_id)
+            members = session.exec(member_query).all()
             
             user_ids = [m.user_id for m in members]
             if not user_ids:

@@ -32,6 +32,7 @@ import app.models.group.group
 import app.models.group.settings
 import app.models.group.rotating
 import app.models.group.long_term
+import app.models.group.target_savings
 import app.models.group.welfare_event
 import app.models.group.investment_association
 import app.models.group.bill_split

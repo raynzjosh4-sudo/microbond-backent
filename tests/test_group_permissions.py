@@ -9,7 +9,7 @@ from app.core.database import get_session
 from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
-from app.models.group.settings import GroupGovernanceSettings
+from app.models.group.settings import GroupGovernanceSettings, GroupVisibilitySettings
 
 @pytest.fixture(name="db_session")
 def db_session_fixture():
@@ -110,5 +110,43 @@ def test_group_permissions_endpoints(db_session: Session):
     # 4. PATCH permissions as regular member (should be 403 Forbidden)
     forbidden_res = client.patch(f"/api/v1/groups/{group_id}/settings/permissions", json={"members_can_send_messages": True})
     assert forbidden_res.status_code == 403
+
+    low_kyc_user = User(
+        id=uuid.uuid4(),
+        phone_number="+256700000003",
+        full_name="Low KYC Member",
+        kyc_tier=1,
+    )
+    kyc_group_id = f"group_{uuid.uuid4().hex[:8]}"
+    db_session.add(low_kyc_user)
+    db_session.add(
+        Group(
+            group_id=kyc_group_id,
+            name="KYC protected group",
+            group_image_url="",
+            type="STANDARD",
+            payment_mode="VOLUNTARY",
+            created_by_user_id=admin_id,
+            invite_code="KYCJOIN1",
+            visibility="PUBLIC",
+            member_count=1,
+        )
+    )
+    db_session.add(
+        GroupGovernanceSettings(
+            group_id=kyc_group_id,
+            minimum_kyc_tier=2,
+        )
+    )
+    db_session.add(GroupVisibilitySettings(group_id=kyc_group_id))
+    db_session.commit()
+    app.dependency_overrides[get_current_user] = lambda: low_kyc_user
+
+    join_response = client.post(
+        "/api/v1/groups/join/",
+        json={"invite_code": "KYCJOIN1"},
+    )
+    assert join_response.status_code == 400, join_response.text
+    assert "KYC" in join_response.json()["detail"]
 
     app.dependency_overrides.clear()

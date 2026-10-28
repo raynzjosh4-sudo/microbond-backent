@@ -79,7 +79,9 @@ pub fn get_psychological_offset_pure(amount: i64) -> i64 {
     }
 }
 
-pub fn calculate_base_deposit_fee_pure(group_target_amount: i64) -> Result<BaseFeeBreakdown, String> {
+pub fn calculate_base_deposit_fee_pure(
+    group_target_amount: i64,
+) -> Result<BaseFeeBreakdown, String> {
     if group_target_amount <= 0 {
         return Err("group_target_amount must be a positive integer".to_string());
     }
@@ -118,7 +120,8 @@ pub fn calculate_target_deposit_fee_pure(
 
     let base = calculate_base_deposit_fee_pure(deposit_amount)?;
     let new_cumulative = current_saved_amount + deposit_amount;
-    let threshold_amount = ((target_goal_amount as f64) * assigned_milestone_threshold).round() as i64;
+    let threshold_amount =
+        ((target_goal_amount as f64) * assigned_milestone_threshold).round() as i64;
 
     let should_charge_milestone = !fee_already_collected
         && (new_cumulative >= threshold_amount || new_cumulative >= target_goal_amount);
@@ -156,7 +159,8 @@ pub fn calculate_investment_deposit_fee_pure(
     let base = calculate_base_deposit_fee_pure(deposit_amount)?;
     let this_deposit_number = current_annual_deposit_count + 1;
 
-    let should_charge_milestone = !fee_collected_this_year && (this_deposit_number >= assigned_milestone_count);
+    let should_charge_milestone =
+        !fee_collected_this_year && (this_deposit_number >= assigned_milestone_count);
     let payout_fee = if should_charge_milestone {
         target_payout_fee
     } else {
@@ -237,11 +241,7 @@ pub fn calculate_flexible_rotate_deposit_pure(
 
     let should_trigger = !fee_already_collected && new_cumulative >= assigned_value_milestone;
 
-    let payout_fee = if should_trigger {
-        target_payout_fee
-    } else {
-        0
-    };
+    let payout_fee = if should_trigger { target_payout_fee } else { 0 };
 
     let final_charge = base_charge
         .checked_add(payout_fee)
@@ -396,15 +396,9 @@ mod tests {
 
     #[test]
     fn test_milestone_trigger() {
-        let res = calculate_flexible_rotate_deposit_pure(
-            25_000,
-            30_000,
-            50_000,
-            false,
-            1_500,
-            500,
-            100,
-        ).unwrap();
+        let res =
+            calculate_flexible_rotate_deposit_pure(25_000, 30_000, 50_000, false, 1_500, 500, 100)
+                .unwrap();
 
         assert_eq!(res.milestone_triggered_now, true);
         assert_eq!(res.microbond_base_fee, 250);
@@ -424,14 +418,8 @@ mod tests {
 
     #[test]
     fn test_target_deposit_fee() {
-        let res = calculate_target_deposit_fee_pure(
-            20_000,
-            35_000,
-            100_000,
-            0.50,
-            false,
-            979,
-        ).unwrap();
+        let res =
+            calculate_target_deposit_fee_pure(20_000, 35_000, 100_000, 0.50, false, 979).unwrap();
         // new_cumulative = 55_000 >= 50_000 -> triggers
         assert_eq!(res.is_fee_milestone, true);
         assert_eq!(res.hidden_payout_fee, 979);
@@ -441,12 +429,10 @@ mod tests {
     #[test]
     fn test_investment_deposit_fee() {
         let res = calculate_investment_deposit_fee_pure(
-            50_000,
-            3, // this is deposit #4
-            4,
-            false,
-            979,
-        ).unwrap();
+            50_000, 3, // this is deposit #4
+            4, false, 979,
+        )
+        .unwrap();
         assert_eq!(res.this_deposit_number, 4);
         assert_eq!(res.is_fee_milestone, true);
         assert_eq!(res.hidden_payout_fee, 979);
@@ -455,10 +441,10 @@ mod tests {
     #[test]
     fn test_emergency_deposit_fee() {
         let res = calculate_emergency_deposit_fee_pure(
-            20_000,
-            2, // 2 queued emergency fees
+            20_000, 2, // 2 queued emergency fees
             979,
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(res.cleared_pending_fee, true);
         assert_eq!(res.fees_cleared, 2);
         assert_eq!(res.hidden_payout_fee, 2 * 979);

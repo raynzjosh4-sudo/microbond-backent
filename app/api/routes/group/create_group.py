@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from sqlmodel import Session, select
 import uuid
+import time
 
 from app.core.database import get_session
 from app.models.group.group import Group, GroupMembership
@@ -19,7 +20,10 @@ from app.api.routes.group.chat.messages import broadcast_system_message_sync
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Core"])
 
-class UnifiedGroupCreateRequest(BaseModel):
+from app.schemas.group_creation_request import GroupCreationRequest
+
+
+class UnifiedGroupCreateRequest(GroupCreationRequest):
     # Step 1: Basics
     name: str = Field(..., max_length=100)
     description: str = Field(default="")
@@ -140,6 +144,7 @@ def create_unified_group(
         payment_mode=request.payment_mode,
         visibility=request.visibility,
         currency=request.currency,
+        start_date=request.start_date if request.start_date is not None else int(time.time() * 1000),
         created_by_user_id=current_user.id,
         invite_code=invite_code,
         member_count=1,
@@ -153,7 +158,13 @@ def create_unified_group(
     
     # 4. Setup Distributed Settings Tables
     session.add(GroupFinancialSettings(group_id=new_group_id, enable_late_fees=request.enable_late_fees))
-    session.add(GroupGovernanceSettings(group_id=new_group_id, requires_admin_approval=request.requires_admin_approval))
+    session.add(
+        GroupGovernanceSettings(
+            group_id=new_group_id,
+            requires_admin_approval=request.requires_admin_approval,
+            minimum_kyc_tier=request.minimum_kyc_tier,
+        )
+    )
     session.add(GroupCommunicationSettings(group_id=new_group_id))
     session.add(GroupVisibilitySettings(group_id=new_group_id))
     

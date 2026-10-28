@@ -74,9 +74,7 @@ pub fn evaluate_penalty(
         .map(|val| val / 10_000)
         .unwrap_or(0);
 
-    let variable_penalty = daily_penalty
-        .checked_mul(overdue_days)
-        .unwrap_or(0);
+    let variable_penalty = daily_penalty.checked_mul(overdue_days).unwrap_or(0);
 
     let total_penalty = penalty_fixed_minor
         .checked_add(variable_penalty)
@@ -211,8 +209,7 @@ pub fn evaluate_liquidity_reserve(
         buffer_percentage,
         requested_disbursal_minor,
     );
-    serde_json::to_string(&res)
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    serde_json::to_string(&res).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -289,11 +286,8 @@ pub fn calculate_escalated_late_fee(
         grace_period_days,
         escalation_enabled,
     );
-    serde_json::to_string(&res)
-        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
+    serde_json::to_string(&res).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))
 }
-
-
 
 #[cfg(test)]
 mod tests {

@@ -1,4 +1,4 @@
-﻿use pyo3::prelude::*;
+use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,7 +22,10 @@ pub fn evaluate_escrow_release_pure(
         return EscrowDecision {
             release_permitted: false,
             status: "DISPUTED".to_string(),
-            rejection_reason: Some("Escrow payout is locked due to an active dispute or arbitration filing.".to_string()),
+            rejection_reason: Some(
+                "Escrow payout is locked due to an active dispute or arbitration filing."
+                    .to_string(),
+            ),
         };
     }
 
@@ -194,7 +197,8 @@ mod tests {
         assert!(pass.release_permitted);
         assert_eq!(pass.status, "PERMITTED");
 
-        let fail_timelock = evaluate_escrow_release_pure(false, 3, 3, 2, 2, false, "ALL_CONDITIONS");
+        let fail_timelock =
+            evaluate_escrow_release_pure(false, 3, 3, 2, 2, false, "ALL_CONDITIONS");
         assert!(!fail_timelock.release_permitted);
         assert_eq!(fail_timelock.status, "LOCKED_TIMELOCK");
     }

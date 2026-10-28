@@ -82,13 +82,16 @@ def join_group(
         select(GroupGovernanceSettings).where(GroupGovernanceSettings.group_id == group.group_id)
     ).first()
 
-    required_kyc_tier = 0
+    required_kyc_tier = settings.minimum_kyc_tier if settings else 1
     if group.type == "MERRY_GO_ROUND":
         rotating_details = session.exec(
             select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group.group_id)
         ).first()
         if rotating_details and hasattr(rotating_details, "minimum_kyc_tier"):
-            required_kyc_tier = getattr(rotating_details, "minimum_kyc_tier", 0) or 0
+            required_kyc_tier = max(
+                required_kyc_tier,
+                getattr(rotating_details, "minimum_kyc_tier", 0) or 0,
+            )
 
     requires_guarantor = bool(settings and settings.require_guarantors and request.guarantor_ids)
     requires_admin_approval = bool(settings and settings.requires_admin_approval)

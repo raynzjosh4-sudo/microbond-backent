@@ -1,103 +1,240 @@
+import time
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
-from app.core.database import get_session
 from app.api.dependencies import get_current_user
-from app.models.group.group import GroupMembership
+from app.core.database import get_session
+from app.models.group.core.group import Group
+from app.models.group.core.group_membership import GroupMembership
+from app.models.group.settings import (
+    GroupFinancialSettings,
+    GroupGovernanceSettings,
+    GroupVisibilitySettings,
+)
+from app.models.group.target_savings import TargetSavingsGroupDetails
 from app.models.user.user import User
-from app.models.group.long_term import TargetSavingsGroupDetails
-from app.models.group.settings import GroupVisibilitySettings
 from .schemas import UpdateTargetSavingsSettingsRequest
 
 router = APIRouter()
+
 
 @router.patch("/{group_id}/settings", summary="Update Target Savings Group Settings")
 def update_target_savings_settings(
     group_id: str,
     request: UpdateTargetSavingsSettingsRequest,
     session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
-    """
-    Allows the group Admin to update non-locked settings.
-    Settings like target_date and payout_destination_type are locked to protect member funds.
-    """
-    # 1. Verify Admin
     membership = session.exec(
         select(GroupMembership).where(
             GroupMembership.group_id == group_id,
             GroupMembership.user_id == current_user.id,
             GroupMembership.role == "ADMIN",
-            GroupMembership.status == "ACTIVE"
+            GroupMembership.status == "ACTIVE",
         )
     ).first()
     if not membership:
-        raise HTTPException(status_code=403, detail="Only the Group Admin can update group settings.")
+        raise HTTPException(status_code=403, detail="Only an active group admin can update settings.")
+
+    group = session.exec(
+        select(Group).where(Group.group_id == group_id).with_for_update()
+    ).first()
+    if not group or group.type != "GOAL_SAVINGS":
+        raise HTTPException(status_code=404, detail="Target savings group not found.")
 
     details = session.exec(
-        select(TargetSavingsGroupDetails).where(TargetSavingsGroupDetails.group_id == group_id).with_for_update()
+        select(TargetSavingsGroupDetails)
+        .where(TargetSavingsGroupDetails.group_id == group_id)
+        .with_for_update()
     ).first()
     if not details:
         raise HTTPException(status_code=404, detail="Target savings details not found.")
 
-    if details.is_ended or details.is_paid_out:
-        raise HTTPException(status_code=400, detail="Cannot modify settings for an ended savings group.")
+    update = request.model_dump(exclude_unset=True)
+    if not update:
+        return {"status": "success", "message": "No settings changed.", "data": details.model_dump(mode="json")}
 
-    # 2. Apply updates
-    if request.contribution_amount is not None:
-        details.contribution_amount = request.contribution_amount
-    if request.collection_frequency_days is not None:
-        details.collection_frequency_days = request.collection_frequency_days
-    if request.collection_time is not None:
-        details.collection_time = request.collection_time
-    if request.require_consensus_at_end is not None:
-        details.require_consensus_at_end = request.require_consensus_at_end
-    if request.allow_early_payout_by_vote is not None:
-        details.allow_early_payout_by_vote = request.allow_early_payout_by_vote
-    if request.vote_approval_percentage is not None:
-        details.vote_approval_percentage = request.vote_approval_percentage
-    if request.enable_late_fees is not None:
-        details.enable_late_fees = request.enable_late_fees
-    if request.late_fee_amount is not None:
-        details.late_fee_amount = request.late_fee_amount
-    if request.grace_period_hours is not None:
-        details.grace_period_hours = request.grace_period_hours
-    if request.missed_payment_action is not None:
-        details.missed_payment_action = request.missed_payment_action
-    if request.minimum_kyc_tier is not None:
-        details.minimum_kyc_tier = request.minimum_kyc_tier
-    if request.hide_leaderboard is not None:
-        details.hide_leaderboard = request.hide_leaderboard
+    allow_max_members = update.get("allow_max_members", group.max_members is not None)
+    max_members = update.get("max_members", group.max_members)
+    if allow_max_members and (max_members is None or max_members < 2):
+        raise HTTPException(
+            status_code=400,
+            detail="A maximum member count of at least 2 is required when the member limit is enabled.",
+        )
+    if allow_max_members and max_members < group.member_count:
+        raise HTTPException(
+            status_code=400,
+            detail="The member limit cannot be lower than the current group member count.",
+        )
+    group.max_members = max_members if allow_max_members else None
 
-    # Goal Controls: Lock funds
-    locked_val = request.lock_funds if request.lock_funds is not None else request.is_locked
-    if locked_val is not None:
-        details.is_locked = locked_val
+    allow_amount = update.get("allow_target_amount", details.allow_target_amount)
+    amount = update.get("target_amount", details.target_amount)
+    if allow_amount:
+        if amount is None or amount <= 0:
+            raise HTTPException(status_code=400, detail="A positive target amount is required when enabled.")
+    else:
+        amount = None
 
-    # Goal Controls: Member total savings visibility
-    vis_val = request.let_members_view_total_saved if request.let_members_view_total_saved is not None else request.vis_member_total_savings
-    vis = session.exec(
-        select(GroupVisibilitySettings).where(GroupVisibilitySettings.group_id == group_id)
+    allow_date = update.get("allow_target_date", details.allow_target_date)
+    target_date = update.get("target_date", details.target_date)
+    if allow_date:
+        if target_date is None or target_date <= int(time.time() * 1000):
+            raise HTTPException(status_code=400, detail="A future target date is required when enabled.")
+    else:
+        target_date = None
+
+    allow_schedule = update.get(
+        "allow_contribution_schedule", details.allow_contribution_schedule
+    )
+    contribution_amount = update.get("contribution_amount", details.contribution_amount)
+    if allow_schedule:
+        if contribution_amount is None or contribution_amount <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="A positive contribution amount is required when the schedule is enabled.",
+            )
+    else:
+        contribution_amount = 0
+
+    allow_frequency = update.get(
+        "allow_collection_frequency", details.allow_collection_frequency
+    )
+    frequency_days = update.get(
+        "collection_frequency_days", details.collection_frequency_days
+    )
+    if allow_frequency:
+        if not allow_schedule:
+            raise HTTPException(
+                status_code=400,
+                detail="Collection frequency requires an enabled contribution schedule.",
+            )
+        if frequency_days is None or frequency_days <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="A positive collection frequency is required when enabled.",
+            )
+    else:
+        frequency_days = 0
+
+    enable_late_fees = update.get("enable_late_fees", details.enable_late_fees)
+    late_fee_amount = update.get("late_fee_amount", details.late_fee_amount)
+    if enable_late_fees:
+        if not allow_frequency:
+            raise HTTPException(
+                status_code=400,
+                detail="Late fees require an enabled contribution frequency.",
+            )
+        if late_fee_amount is None or late_fee_amount <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="A positive late fee amount is required when late fees are enabled.",
+            )
+    else:
+        late_fee_amount = 0
+
+    if "allow_multi_payout" in update and update["allow_multi_payout"] != details.allow_multi_payout:
+        if group.total_balance:
+            raise HTTPException(
+                status_code=409,
+                detail="Payout mode cannot change while the group holds contributed funds.",
+            )
+        details.allow_multi_payout = update["allow_multi_payout"]
+        details.payout_destination_type = (
+            "PROPORTIONAL_RETURN"
+            if details.allow_multi_payout
+            else "SINGLE_NOMINATED_ACCOUNT"
+        )
+        details.nominated_account_id = None
+
+    details.allow_target_amount = allow_amount
+    details.target_amount = amount
+    details.allow_target_date = allow_date
+    details.target_date = target_date
+    details.allow_contribution_schedule = allow_schedule
+    details.contribution_amount = contribution_amount
+    details.allow_collection_frequency = allow_frequency
+    details.collection_frequency_days = frequency_days
+    if "collection_time" in update:
+        details.collection_time = update["collection_time"]
+    if not allow_frequency:
+        details.collection_time = None
+
+    details.enable_late_fees = enable_late_fees
+    details.late_fee_amount = late_fee_amount
+    financial_settings = session.exec(
+        select(GroupFinancialSettings)
+        .where(GroupFinancialSettings.group_id == group_id)
+        .with_for_update()
     ).first()
-    if vis_val is not None:
-        if not vis:
-            vis = GroupVisibilitySettings(group_id=group_id)
-        vis.vis_member_total_savings = vis_val
-        session.add(vis)
+    if financial_settings:
+        financial_settings.enable_late_fees = enable_late_fees
+        financial_settings.late_fee_amount = float(late_fee_amount)
+        financial_settings.grace_period_hours = update.get(
+            "grace_period_hours",
+            details.grace_period_hours,
+        )
+        session.add(financial_settings)
+    for field in (
+        "require_consensus_at_end",
+        "allow_early_payout_by_vote",
+        "vote_approval_percentage",
+        "grace_period_hours",
+        "missed_payment_action",
+        "minimum_kyc_tier",
+        "hide_leaderboard",
+    ):
+        if field in update:
+            setattr(details, field, update[field])
+
+    if "minimum_kyc_tier" in update:
+        governance_settings = session.exec(
+            select(GroupGovernanceSettings)
+            .where(GroupGovernanceSettings.group_id == group_id)
+            .with_for_update()
+        ).first()
+        if governance_settings:
+            governance_settings.minimum_kyc_tier = update["minimum_kyc_tier"]
+            session.add(governance_settings)
+
+    lock_value = update.get("lock_funds", update.get("is_locked"))
+    if lock_value is not None:
+        details.is_locked = lock_value
+
+    visibility_value = update.get(
+        "let_members_view_total_saved",
+        update.get("vis_member_total_savings"),
+    )
+    visibility = session.exec(
+        select(GroupVisibilitySettings)
+        .where(GroupVisibilitySettings.group_id == group_id)
+        .with_for_update()
+    ).first()
+    if visibility_value is not None:
+        if not visibility:
+            visibility = GroupVisibilitySettings(group_id=group_id)
+        visibility.vis_member_total_savings = visibility_value
+        session.add(visibility)
 
     session.add(details)
     session.commit()
     session.refresh(details)
-    if vis:
-        session.refresh(vis)
+    if visibility:
+        session.refresh(visibility)
 
-    data = details.model_dump(mode="json")
-    data["lock_funds"] = details.is_locked
-    data["vis_member_total_savings"] = getattr(vis, "vis_member_total_savings", True) if vis else True
-    data["let_members_view_total_saved"] = data["vis_member_total_savings"]
+    response_data = details.model_dump(mode="json")
+    response_data["lock_funds"] = details.is_locked
+    response_data["vis_member_total_savings"] = (
+        visibility.vis_member_total_savings if visibility else True
+    )
+    response_data["let_members_view_total_saved"] = response_data["vis_member_total_savings"]
+    response_data["allow_max_members"] = group.max_members is not None
+    response_data["max_members"] = group.max_members
+    response_data["start_date"] = group.start_date
 
     return {
         "status": "success",
-        "message": "Target savings settings updated successfully",
-        "data": data
+        "message": "Target savings settings updated successfully.",
+        "data": response_data,
     }

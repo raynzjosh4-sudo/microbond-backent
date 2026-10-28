@@ -1,4 +1,5 @@
 import uuid
+import time
 import pytest
 from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
@@ -48,6 +49,7 @@ def test_rotating_group_creation_and_settings_lifecycle(db_session: Session, mon
         "name": "Alpha Chama 2026",
         "description": "Weekly rotating pool with advanced security",
         "group_image_url": "https://example.com/chama.png",
+        "start_date": int(time.time() * 1000),
         "type": "MERRY_GO_ROUND",
         "payment_mode": "OBLIGATION",
         "visibility": "PRIVATE",
@@ -185,6 +187,7 @@ def test_rotating_group_creation_minimal_and_string_enums(db_session: Session, m
     # Minimal payload without optional fields or nested risk controls
     minimal_payload = {
         "name": "Minimal Rotating",
+        "start_date": int(time.time() * 1000),
         "type": "MERRY_GO_ROUND",
         "contribution_amount": 25000.0,
         "payouts_per_cycle": 1,
@@ -206,4 +209,3 @@ def test_rotating_group_creation_minimal_and_string_enums(db_session: Session, m
     assert details.collection_time == "1740000000000"
 
     app.dependency_overrides.clear()
-

@@ -3,9 +3,10 @@ from sqlmodel import Session, select
 
 from app.core.database import get_session
 from app.api.dependencies import get_current_user
-from app.models.group.group import GroupMembership
+from app.models.group.core.group import Group
+from app.models.group.core.group_membership import GroupMembership
 from app.models.user.user import User
-from app.models.group.long_term import TargetSavingsGroupDetails
+from app.models.group.target_savings import TargetSavingsGroupDetails
 from app.models.group.settings import GroupVisibilitySettings
 
 router = APIRouter()
@@ -29,6 +30,10 @@ def get_target_savings_settings(
     if not membership:
         raise HTTPException(status_code=403, detail="You must be an active member of this group.")
 
+    group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+    if not group or group.type != "GOAL_SAVINGS":
+        raise HTTPException(status_code=404, detail="Target savings group not found.")
+
     details = session.exec(
         select(TargetSavingsGroupDetails).where(TargetSavingsGroupDetails.group_id == group_id)
     ).first()
@@ -41,9 +46,11 @@ def get_target_savings_settings(
 
     data = details.model_dump(mode="json")
     data["lock_funds"] = details.is_locked
+    data["start_date"] = group.start_date
+    data["allow_max_members"] = group.max_members is not None
+    data["max_members"] = group.max_members
     data["vis_member_total_savings"] = getattr(vis, "vis_member_total_savings", True) if vis else True
     data["let_members_view_total_saved"] = data["vis_member_total_savings"]
-
     return {
         "status": "success",
         "data": data

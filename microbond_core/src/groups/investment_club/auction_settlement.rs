@@ -191,7 +191,8 @@ mod tests {
     fn test_anti_sniping_popcorn_extension() {
         let now = 1_000_000;
         let end = now + 30_000; // 30s left (< 60s)
-        let res = validate_auction_bid_pure("ACTIVE", now, end, 50_000, Some(40_000), 60_000, 60_000);
+        let res =
+            validate_auction_bid_pure("ACTIVE", now, end, 50_000, Some(40_000), 60_000, 60_000);
         assert!(res.is_valid);
         assert!(res.clock_extended);
         assert_eq!(res.new_end_time, now + 60_000);
