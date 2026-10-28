@@ -50,6 +50,7 @@ def admin_add_member(
         logger.warning(f"Unauthorized add member attempt by user {current_user.id} in group {group_id}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
+    
             detail="Only a Group Admin can add members directly."
         )
 

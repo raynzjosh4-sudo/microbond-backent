@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlmodel import Session, select
 from typing import Optional
 from pydantic import BaseModel
@@ -16,6 +16,8 @@ from app.models.group.investment_association import (
     AssociationDuesOperationalSettings
 )
 from app.models.group.bill_split import BillSplitOperationalSettings
+from app.api.routes.group.chat.messages import broadcast_system_message_sync
+from app.services.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Settings"])
 
@@ -42,6 +44,7 @@ class UpdateFinancialSettingsRequest(BaseModel):
 def update_financial_settings(
     group_id: str,
     request: UpdateFinancialSettingsRequest,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
@@ -73,47 +76,95 @@ def update_financial_settings(
         raise HTTPException(status_code=404, detail="Financial settings not found.")
 
     # ── 1. Apply to base GroupFinancialSettings ──────────────────────────────
-    if request.enable_late_fees is not None:
+    admin_name = current_user.full_name or "Admin"
+    change_notices = []
+
+    if request.enable_late_fees is not None and request.enable_late_fees != settings.enable_late_fees:
         settings.enable_late_fees = request.enable_late_fees
-    if request.late_fee_amount is not None:
+        if request.enable_late_fees:
+            fee = int(request.late_fee_amount or settings.late_fee_amount or 0)
+            change_notices.append(f"Late Fees: Enabled (UGX {fee:,}). Members who fail to contribute within the grace window will incur late penalties.")
+        else:
+            change_notices.append("Late Fees: Disabled. No penalty charges will apply for late contributions.")
+
+    if request.late_fee_amount is not None and request.late_fee_amount != settings.late_fee_amount:
         if request.late_fee_amount < 0:
             raise HTTPException(status_code=400, detail="Late fee amount cannot be negative.")
         settings.late_fee_amount = request.late_fee_amount
-    if request.late_fee_frequency is not None:
-        settings.late_fee_frequency = request.late_fee_frequency
+        change_notices.append(f"Late Fee Amount: Set to UGX {int(request.late_fee_amount):,}.")
 
-    if request.enable_grace_period is not None:
+    if request.late_fee_frequency is not None and request.late_fee_frequency != settings.late_fee_frequency:
+        settings.late_fee_frequency = request.late_fee_frequency
+        change_notices.append(f"Late Fee Frequency: Set to {request.late_fee_frequency}.")
+
+    if request.enable_grace_period is not None and request.enable_grace_period != settings.enable_grace_period:
         settings.enable_grace_period = request.enable_grace_period
-    if request.grace_period_hours is not None:
+        hrs = request.grace_period_hours or settings.grace_period_hours or 0
+        if request.enable_grace_period:
+            change_notices.append(f"Grace Period: Enabled ({hrs} hours). Members have {hrs} hours after the deadline before late fees or arrears apply.")
+        else:
+            change_notices.append("Grace Period: Disabled. Contributions are due strictly at the collection deadline.")
+
+    if request.grace_period_hours is not None and request.grace_period_hours != settings.grace_period_hours:
         if request.grace_period_hours < 0:
             raise HTTPException(status_code=400, detail="Grace period hours cannot be negative.")
         settings.grace_period_hours = request.grace_period_hours
+        change_notices.append(f"Grace Period Duration: Set to {request.grace_period_hours} hours.")
 
-    if request.arrears_policy is not None:
+    if request.arrears_policy is not None and request.arrears_policy != settings.arrears_policy:
         settings.arrears_policy = request.arrears_policy
-    if request.reserve_fund_percentage is not None:
+        change_notices.append(f"Arrears Policy: Updated to '{request.arrears_policy}'.")
+
+    if request.reserve_fund_percentage is not None and request.reserve_fund_percentage != settings.reserve_fund_percentage:
         if request.reserve_fund_percentage < 0 or request.reserve_fund_percentage > 100:
             raise HTTPException(status_code=400, detail="Reserve fund percentage must be between 0 and 100.")
         settings.reserve_fund_percentage = request.reserve_fund_percentage
-    if request.allow_substitute_members is not None:
+        change_notices.append(f"Reserve Fund: Set to {request.reserve_fund_percentage}% retained for group emergency buffer.")
+
+    if request.allow_substitute_members is not None and request.allow_substitute_members != settings.allow_substitute_members:
         settings.allow_substitute_members = request.allow_substitute_members
-    if request.enforce_payout_holds is not None:
+        if request.allow_substitute_members:
+            change_notices.append("Substitute Members: Enabled. Members facing hardship may nominate a vetted substitute.")
+        else:
+            change_notices.append("Substitute Members: Disabled.")
+
+    if request.enforce_payout_holds is not None and request.enforce_payout_holds != settings.enforce_payout_holds:
         settings.enforce_payout_holds = request.enforce_payout_holds
-    if request.max_pending_payouts is not None:
+        if request.enforce_payout_holds:
+            change_notices.append("Payout Holds: Enabled. Defaulters will have payouts paused until arrears are fully cleared.")
+        else:
+            change_notices.append("Payout Holds: Disabled.")
+
+    if request.max_pending_payouts is not None and request.max_pending_payouts != settings.max_pending_payouts:
         if request.max_pending_payouts < 1:
             raise HTTPException(status_code=400, detail="Max pending payouts must be at least 1.")
         settings.max_pending_payouts = request.max_pending_payouts
+        change_notices.append(f"Max Pending Payouts: Set to {request.max_pending_payouts}.")
 
-    if request.enable_escrow is not None:
+    if request.enable_escrow is not None and request.enable_escrow != settings.enable_escrow:
         settings.enable_escrow = request.enable_escrow
-    if request.escrow_release_condition is not None:
+        if request.enable_escrow:
+            change_notices.append("Escrow Protection: Enabled. Pool disbursements require escrow conditions to be satisfied.")
+        else:
+            change_notices.append("Escrow Protection: Disabled.")
+
+    if request.escrow_release_condition is not None and request.escrow_release_condition != settings.escrow_release_condition:
         settings.escrow_release_condition = request.escrow_release_condition
-    if request.enable_timelock is not None:
+        change_notices.append(f"Escrow Release Condition: Updated to '{request.escrow_release_condition}'.")
+
+    if request.enable_timelock is not None and request.enable_timelock != settings.enable_timelock:
         settings.enable_timelock = request.enable_timelock
-    if request.timelock_duration_hours is not None:
+        hrs = request.timelock_duration_hours or settings.timelock_duration_hours or 0
+        if request.enable_timelock:
+            change_notices.append(f"Timelock Security: Enabled ({hrs} hours). Disbursals are subject to a {hrs}-hour delay before release.")
+        else:
+            change_notices.append("Timelock Security: Disabled.")
+
+    if request.timelock_duration_hours is not None and request.timelock_duration_hours != settings.timelock_duration_hours:
         if request.timelock_duration_hours < 0:
             raise HTTPException(status_code=400, detail="Timelock duration hours cannot be negative.")
         settings.timelock_duration_hours = request.timelock_duration_hours
+        change_notices.append(f"Timelock Duration: Set to {request.timelock_duration_hours} hours.")
 
     session.add(settings)
 
@@ -202,6 +253,40 @@ def update_financial_settings(
             session.add(bill)
 
     session.commit()
+
+    if change_notices:
+        bullet_points = "\n".join(f"• {c}" for c in change_notices)
+        system_text = f"💰 Financial Settings Updated by {admin_name}:\n{bullet_points}"
+        system_msg = broadcast_system_message_sync(
+            group_id=group_id,
+            message_text=system_text,
+            message_type="SYSTEM_EVENT",
+            sender_id="SYSTEM",
+            session=session,
+            background_tasks=background_tasks,
+            attachments=[{
+                "category": "SETTINGS_UPDATE",
+                "setting_type": "FINANCIAL",
+                "admin_id": str(current_user.id),
+                "admin_name": admin_name,
+                "changes_count": len(change_notices)
+            }]
+        )
+        if background_tasks is None and system_msg:
+            try:
+                import asyncio
+                asyncio.create_task(
+                    ws_manager.broadcast_to_group(
+                        group_id,
+                        {
+                            "event_type": "NEW_MESSAGE",
+                            "message": system_msg.model_dump(mode="json")
+                        }
+                    )
+                )
+            except Exception:
+                pass
+
     return {
         "status": "success",
         "message": "Financial settings updated.",

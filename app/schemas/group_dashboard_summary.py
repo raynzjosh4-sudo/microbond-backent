@@ -4,12 +4,14 @@ from pydantic import BaseModel, Field
 class RingStatus(BaseModel):
     """
     Drives the segmented progress arc around the group's avatar in Jetpack Compose:
-    - paid_on_time_count: Green arc
-    - missed_deadline_count: Red arc
-    - (total - paid - missed): Pending neutral arc
+    - paid_on_time_count: Green arc (SAVED / FULL)
+    - partial_paid_count: Amber / Yellow arc (PARTIAL / HALF)
+    - missed_deadline_count: Red arc (MISSED / LATE)
+    - (total - paid - partial - missed): Pending neutral dark gray arc
     """
     total_expected_members: int = Field(default=0, ge=0)
     paid_on_time_count: int = Field(default=0, ge=0)
+    partial_paid_count: int = Field(default=0, ge=0)
     missed_deadline_count: int = Field(default=0, ge=0)
 
     @property

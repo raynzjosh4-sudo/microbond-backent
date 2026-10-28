@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlmodel import Session, select
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
@@ -10,6 +10,8 @@ from app.models.group.group import Group, GroupMembership
 from app.models.group.settings import GroupVisibilitySettings
 from app.models.group.long_term import TargetSavingsGroupDetails
 from app.services.audit_service import AuditService
+from app.api.routes.group.chat.messages import broadcast_system_message_sync
+from app.services.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Settings"])
 
@@ -210,6 +212,7 @@ def get_member_visibility_screen(
 def update_member_visibility_screen(
     group_id: str,
     request: UpdateMemberVisibilityScreenRequest,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
@@ -342,6 +345,36 @@ def update_member_visibility_screen(
 
     session.commit()
     session.refresh(settings)
+
+    admin_name = current_user.full_name or "Admin"
+    system_msg = broadcast_system_message_sync(
+        group_id=group_id,
+        message_text=f"👁️ Group Visibility Settings updated by {admin_name}. Information and report transparency rules have been refreshed for this group.",
+        message_type="SYSTEM_EVENT",
+        sender_id="SYSTEM",
+        session=session,
+        background_tasks=background_tasks,
+        attachments=[{
+            "category": "SETTINGS_UPDATE",
+            "setting_type": "VISIBILITY",
+            "admin_id": str(current_user.id),
+            "admin_name": admin_name
+        }]
+    )
+    if background_tasks is None and system_msg:
+        try:
+            import asyncio
+            asyncio.create_task(
+                ws_manager.broadcast_to_group(
+                    group_id,
+                    {
+                        "event_type": "NEW_MESSAGE",
+                        "message": system_msg.model_dump(mode="json")
+                    }
+                )
+            )
+        except Exception:
+            pass
 
     return {
         "status": "success",

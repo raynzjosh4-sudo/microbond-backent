@@ -254,6 +254,7 @@ class GroupDashboardSummaryService:
                 # Group is ACTIVE (or COMPLETED)
                 group_obs = obs_by_group.get(gid, [])
                 paid_count = 0
+                partial_count = 0
                 missed_count = 0
                 user_ob = None
                 for ob in group_obs:
@@ -261,12 +262,15 @@ class GroupDashboardSummaryService:
                         user_ob = ob
                     if ob.status == "PAID" or (ob.amount_paid >= ob.amount_due and ob.amount_due > 0):
                         paid_count += 1
-                    elif ob.due_date and now_ms > ob.due_date:
+                    elif ob.status == "PARTIAL" or (ob.amount_paid > 0 and ob.amount_paid < ob.amount_due):
+                        partial_count += 1
+                    elif ob.due_date and now_ms > ob.due_date and ob.amount_paid == 0:
                         missed_count += 1
 
                 ring_status = RingStatus(
                     total_expected_members=tot_members,
                     paid_on_time_count=paid_count,
+                    partial_paid_count=partial_count,
                     missed_deadline_count=missed_count
                 )
 
@@ -465,16 +469,20 @@ class GroupDashboardSummaryService:
         ).all()
 
         paid_count = 0
+        partial_count = 0
         missed_count = 0
         for ob in obligations:
             if ob.status == "PAID" or (ob.amount_paid >= ob.amount_due and ob.amount_due > 0):
                 paid_count += 1
-            elif ob.due_date and now_ms > ob.due_date:
+            elif ob.status == "PARTIAL" or (ob.amount_paid > 0 and ob.amount_paid < ob.amount_due):
+                partial_count += 1
+            elif ob.due_date and now_ms > ob.due_date and ob.amount_paid == 0:
                 missed_count += 1
 
         return RingStatus(
             total_expected_members=total_members,
             paid_on_time_count=paid_count,
+            partial_paid_count=partial_count,
             missed_deadline_count=missed_count
         )
 
