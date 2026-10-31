@@ -34,10 +34,14 @@ def admin_add_member(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Directly adds a user to a group without requiring them to accept an invite.
+    Directly adds a user to a group (or approves a PENDING join request) without requiring them to accept an invite.
     Only users with the 'ADMIN' role in the specified group can perform this action.
     """
     # 1. Authorize: Check if current user is an admin of the group
+    group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
+
     admin_membership = session.exec(
         select(GroupMembership).where(
             GroupMembership.group_id == group_id,
@@ -46,19 +50,13 @@ def admin_add_member(
         )
     ).first()
 
-    if not admin_membership:
+    if not admin_membership and group.created_by_user_id != current_user.id:
         logger.warning(f"Unauthorized add member attempt by user {current_user.id} in group {group_id}")
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, 
-    
+            status_code=status.HTTP_403_FORBIDDEN,
             detail="Only a Group Admin can add members directly."
         )
 
-    # 2. Validate: Check if group exists
-    group = session.exec(select(Group).where(Group.group_id == group_id)).first()
-    if not group:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found.")
-        
     # 3. Validate: Check if target user exists and parse UUID
     try:
         target_user_uuid = uuid.UUID(request.user_id)
@@ -69,16 +67,7 @@ def admin_add_member(
     if not target_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User to add not found in the system.")
 
-    # 3b. Privacy Enforcement: Check who can add this user to groups
-    from app.services.privacy import can_add_to_group
-    allowed, rejection_reason = can_add_to_group(target_user, current_user, session)
-    if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=rejection_reason or "This user's privacy settings prevent them from being added to groups.",
-        )
-
-    # 4. Process: Check if user is already a member
+    # 4. Process: Check if user already has a membership record (e.g. PENDING join request or previously left)
     existing_membership = session.exec(
         select(GroupMembership).where(
             GroupMembership.group_id == group_id,
@@ -90,7 +79,16 @@ def admin_add_member(
         if existing_membership.status == "ACTIVE":
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is already an active member of this group.")
         else:
-            # Re-activate them if they had previously left
+            was_pending = existing_membership.status == "PENDING"
+            if not was_pending:
+                from app.services.privacy import can_add_to_group
+                allowed, rejection_reason = can_add_to_group(target_user, current_user, session)
+                if not allowed:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=rejection_reason or "This user's privacy settings prevent them from being added to groups.",
+                    )
+
             if group.max_members and group.member_count >= group.max_members:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -101,20 +99,33 @@ def admin_add_member(
             existing_membership.joined_at = int(time.time() * 1000)
             existing_membership.left_at = None
             existing_membership.invited_by_user_id = current_user.id
-            
+
             # Update group member count
             group.member_count += 1
-            
+
             session.add(existing_membership)
             session.add(group)
             try:
                 session.commit()
                 session.refresh(existing_membership)
-                
-                # Chat integration
+
+                if group.max_members and group.member_count >= group.max_members:
+                    if group.type == "MERRY_GO_ROUND":
+                        from app.services.group.launcher_service import execute_group_launch
+                        try:
+                            execute_group_launch(session, group_id)
+                            session.commit()
+                        except Exception as launch_err:
+                            logger.warning(f"Auto-launch error on group fill {group_id}: {launch_err}")
+
+                notice_text = (
+                    f"{current_user.full_name} approved {target_user.full_name or 'a new member'} to join the group."
+                    if was_pending
+                    else f"{current_user.full_name} re-added {target_user.full_name or 'a user'} to the group."
+                )
                 broadcast_system_message_sync(
                     group_id=group_id,
-                    message_text=f"{current_user.full_name} re-added {target_user.full_name or 'a user'} to the group.",
+                    message_text=notice_text,
                     message_type="SYSTEM_EVENT",
                     sender_id=str(current_user.id),
                     session=session,
@@ -126,8 +137,8 @@ def admin_add_member(
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to add user to the group.")
 
             return {
-                "status": "success", 
-                "message": "User re-added to the group successfully.",
+                "status": "success",
+                "message": "Join request approved successfully." if was_pending else "User re-added to the group successfully.",
                 "data": {
                     "membership_id": existing_membership.membership_id,
                     "user_id": str(existing_membership.user_id),
@@ -135,6 +146,15 @@ def admin_add_member(
                     "joined_at": existing_membership.joined_at
                 }
             }
+
+    # 3b. Privacy Enforcement: Check who can add this user to groups directly
+    from app.services.privacy import can_add_to_group
+    allowed, rejection_reason = can_add_to_group(target_user, current_user, session)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=rejection_reason or "This user's privacy settings prevent them from being added to groups.",
+        )
 
     # 5. Process: Verify capacity limits
     if group.max_members and group.member_count >= group.max_members:
@@ -155,11 +175,11 @@ def admin_add_member(
 
     session.add(new_membership)
     session.add(group)
-    
+
     try:
         session.commit()
         session.refresh(new_membership)
-        
+
         # If capacity reached for rotating group, auto-launch
         if group.max_members and group.member_count >= group.max_members:
             if group.type == "MERRY_GO_ROUND":
@@ -185,7 +205,7 @@ def admin_add_member(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to add user to the group due to an internal error.")
 
     return {
-        "status": "success", 
+        "status": "success",
         "message": "User added to the group successfully.",
         "data": {
             "membership_id": new_membership.membership_id,

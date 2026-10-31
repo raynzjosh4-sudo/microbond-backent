@@ -37,20 +37,48 @@ from app.services.analytics.registry import (
 router = APIRouter(prefix="/api/v1/groups", tags=["Chart Builder Analytics"])
 
 
+METRIC_ALIASES: Dict[str, str] = {
+    "successful_days": "successful_save_days",
+    "partial_save": "partial_save_days",
+    "saving_streak": "average_saving_streak",
+    "missed_rate": "missed_saving_rate",
+    "total_accum": "total_accumulation",
+    "wow_change": "week_over_week_change",
+    "busiest_day": "busiest_saving_day",
+    "target_met": "target_met_rate",
+    "group_activity": "total_group_activity",
+    "members_balance": "members_with_balance",
+    "members_cleared": "members_cleared_balance",
+    "members_paid": "members_paid_out",
+    "payouts_done": "payouts_completed",
+    "next_payout": "next_payout_date",
+    "avg_deposit": "average_deposit_size",
+}
+
+
 def _authorize(session: Session, group_id: str, user: User):
+    from app.models.group.group import Group
+    group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+
     membership = session.exec(
         select(GroupMembership).where(
             GroupMembership.group_id == group_id,
             GroupMembership.user_id == user.id,
         )
     ).first()
-    if not membership or (membership.status or "").upper() != "ACTIVE":
+
+    is_creator = group is not None and group.created_by_user_id == user.id
+    is_active_member = membership is not None and (membership.status or "").upper() == "ACTIVE"
+
+    if not is_creator and not is_active_member:
         raise HTTPException(status_code=403, detail="Access denied. You must be an active member of this group.")
 
     vis = session.exec(
         select(GroupVisibilitySettings).where(GroupVisibilitySettings.group_id == group_id)
     ).first()
-    return membership.role == "ADMIN", vis
+
+    is_admin = is_creator or (membership is not None and (membership.role or "").upper() == "ADMIN")
+    return is_admin, vis
 
 
 def _round(value: Optional[float]) -> Optional[float]:
@@ -72,12 +100,14 @@ def get_analytics_catalog(
         available = is_available(m, vis, is_admin)
         entry: Dict[str, Any] = {
             "id": m.id,
+            "name": m.label,
             "label": m.label,
             "category": m.category,
             "icon": m.icon,
             "unit": m.unit,
             "kind": m.kind,
             "allowed_charts": list(m.allowed_charts),
+            "allowed_granularities": ["DAILY", "WEEKLY", "MONTHLY"],
             "recommended_chart": m.recommended_chart,
             "description": m.description,
             "available": available,
@@ -91,6 +121,7 @@ def get_analytics_catalog(
 
     return {
         "status": "success",
+        "count": len(metrics),
         "limits": {"max_range_days": MAX_RANGE_DAYS, "max_buckets": MAX_BUCKETS},
         "timezone": TIMEZONE_NAME,
         "metrics": metrics,
@@ -98,7 +129,8 @@ def get_analytics_catalog(
 
 
 def _resolve_metric(metric_id: str, param: str, vis, is_admin: bool) -> MetricDef:
-    metric = REGISTRY.get(metric_id)
+    canonical_id = METRIC_ALIASES.get(metric_id, metric_id)
+    metric = REGISTRY.get(canonical_id)
     if metric is None:
         raise HTTPException(status_code=400, detail=f"Unknown metric '{metric_id}' for '{param}'.")
     if not is_available(metric, vis, is_admin):
@@ -121,6 +153,7 @@ def get_analytics_series(
     end_ms: Optional[int] = Query(None, description="Explicit range end (epoch ms); use with start_ms"),
     bucket_days: Optional[int] = Query(None, ge=1, description="Bucket width in days. Omit to auto-pick (~30 points)."),
     calendar_bucket: Optional[Literal["month", "year"]] = Query(None, description="Calendar-aligned buckets"),
+    calendar_unit: Optional[Literal["month", "year"]] = Query(None, description="Alias for calendar_bucket"),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
@@ -129,9 +162,11 @@ def get_analytics_series(
     y_metric = _resolve_metric(y, "y", vis, is_admin)
     x_metric = None if x == "time" else _resolve_metric(x, "x", vis, is_admin)
 
+    resolved_calendar_bucket = calendar_bucket or calendar_unit
+
     now_ms = int(time.time() * 1000)
     try:
-        plan = build_plan(now_ms, days, start_ms, end_ms, bucket_days, calendar_bucket)
+        plan = build_plan(now_ms, days, start_ms, end_ms, bucket_days, resolved_calendar_bucket)
     except BucketError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -154,6 +189,14 @@ def get_analytics_series(
             point["x_text"] = x_metric.value_labels[int(x_values[k])]
         points.append(point)
 
+    valid_ys = [v for v in y_values if v is not None]
+    summary_data = {
+        "min": _round(min(valid_ys)) if valid_ys else 0.0,
+        "max": _round(max(valid_ys)) if valid_ys else 0.0,
+        "avg": _round(sum(valid_ys) / len(valid_ys)) if valid_ys else 0.0,
+        "total": _round(sum(valid_ys)) if valid_ys else 0.0,
+    }
+
     return {
         "status": "success",
         "meta": {
@@ -162,14 +205,17 @@ def get_analytics_series(
             "x_label": "Time" if x_metric is None else x_metric.label,
             "y_label": y_metric.label,
             "y_unit": y_metric.unit,
+            "unit": y_metric.unit,
             "x_unit": None if x_metric is None else x_metric.unit,
             "range": {"start_ms": plan.start_ms, "end_ms": plan.end_ms},
             "bucket_days": plan.bucket_days,
             "calendar_bucket": plan.calendar_bucket,
+            "calendar_unit": plan.calendar_bucket,
             "bucket_count": len(plan),
             "timezone": TIMEZONE_NAME,
             "recommended_chart": y_metric.recommended_chart,
             "allowed_charts": list(y_metric.allowed_charts),
+            "summary": summary_data,
         },
         "points": points,
     }

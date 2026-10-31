@@ -228,6 +228,23 @@ def set_single_payout_destination_approval(
     session.add(proposal)
     session.commit()
 
+    broadcast_system_message_sync(
+        group_id=group_id,
+        message_text=(
+            "A member updated the single payout destination approval. "
+            f"{summary['approved_count']} of {summary['required_count']} members have approved."
+        ),
+        message_type="SYSTEM_EVENT",
+        sender_id="SYSTEM",
+        session=session,
+        attachments=[{
+            "category": "GOAL_PAYOUT_DESTINATION_APPROVAL",
+            "proposal_id": str(proposal_id),
+            "approved_count": summary["approved_count"],
+            "required_count": summary["required_count"],
+        }],
+    )
+
     return {
         "status": "success",
         "message": "Payout destination approval recorded.",
@@ -295,6 +312,11 @@ def set_my_payout_destination(
     ).first()
     if not destination:
         raise HTTPException(status_code=400, detail="Payout destination does not belong to you.")
+    if not destination.is_verified:
+        raise HTTPException(
+            status_code=400,
+            detail="Your payout destination must be verified before it can be used for this group.",
+        )
 
     membership.payout_destination_id = destination.id
     session.add(membership)

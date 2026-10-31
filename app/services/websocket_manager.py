@@ -210,3 +210,5 @@ class ConnectionManager:
 
 # Global singleton to be imported by the API endpoints
 ws_manager = ConnectionManager()
+manager = ws_manager
+

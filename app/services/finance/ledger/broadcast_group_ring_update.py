@@ -7,7 +7,7 @@ async def broadcast_group_ring_update(group_id: str, depositor_name: str, amount
     Advances the green arc and pushes the new action ticker message in 0ms.
     """
     from app.core.database import engine
-    from app.services.websocket_manager import manager
+    from app.services.websocket_manager import ws_manager as manager
     from app.services.group.dashboard_summary_service import GroupDashboardSummaryService
 
     with Session(engine) as session:

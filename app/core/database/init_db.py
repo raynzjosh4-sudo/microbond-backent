@@ -96,6 +96,8 @@ def _ensure_critical_columns():
             'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_send_dues_due_prompts" BOOLEAN NOT NULL DEFAULT TRUE;',
             'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_send_loan_due_prompts" BOOLEAN NOT NULL DEFAULT TRUE;',
             'ALTER TABLE "groupvisibilitysettings" ADD COLUMN IF NOT EXISTS "vis_post_loan_approval_polls" BOOLEAN NOT NULL DEFAULT TRUE;',
+            'ALTER TABLE "group" ADD COLUMN IF NOT EXISTS "start_date" BIGINT NOT NULL DEFAULT 0;',
+            'ALTER TABLE "groupgovernancesettings" ADD COLUMN IF NOT EXISTS "minimum_kyc_tier" INTEGER NOT NULL DEFAULT 1;',
             'ALTER TABLE "groupfinancialsettings" ADD COLUMN IF NOT EXISTS "enforce_payout_holds" BOOLEAN NOT NULL DEFAULT FALSE;',
             'ALTER TABLE "groupreport" ADD COLUMN IF NOT EXISTS "reported_user_id" UUID;',
             'ALTER TABLE "groupmembership" ADD COLUMN IF NOT EXISTS "credit_balance_ugx" BIGINT NOT NULL DEFAULT 0;',

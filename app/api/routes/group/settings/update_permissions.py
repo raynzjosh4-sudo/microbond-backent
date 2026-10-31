@@ -41,14 +41,17 @@ def get_group_permissions_settings(
             GroupMembership.user_id == current_user.id
         )
     ).first()
-    if not membership:
+    if not membership and group.created_by_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="You must be a member to view group permissions.")
         
     gov_settings = session.exec(
         select(GroupGovernanceSettings).where(GroupGovernanceSettings.group_id == group.group_id)
     ).first()
     if not gov_settings:
-        raise HTTPException(status_code=404, detail="Governance settings not found.")
+        gov_settings = GroupGovernanceSettings(group_id=group.group_id)
+        session.add(gov_settings)
+        session.commit()
+        session.refresh(gov_settings)
 
     rotating_details = session.exec(
         select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group.group_id)
@@ -88,14 +91,15 @@ def update_group_permissions_settings(
         )
     ).first()
     
-    if not admin_membership:
+    if not admin_membership and group.created_by_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the Group Admin can update permissions settings.")
 
     gov_settings = session.exec(
         select(GroupGovernanceSettings).where(GroupGovernanceSettings.group_id == group.group_id)
     ).first()
     if not gov_settings:
-        raise HTTPException(status_code=404, detail="Governance settings not found.")
+        gov_settings = GroupGovernanceSettings(group_id=group.group_id)
+        session.add(gov_settings)
 
     rotating_details = session.exec(
         select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group.group_id)

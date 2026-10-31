@@ -1,4 +1,4 @@
-﻿from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
 from app.core.database import get_session
 from app.api.dependencies import get_current_user
@@ -40,11 +40,13 @@ def get_investment_club_dashboard(
         equity_pct = round((shares_owned / settings.total_shares_issued) * 100, 2)
 
     net_asset_value = settings.current_balance + settings.total_invested_capital
+    cfg_dict = config.model_dump(mode="json")
 
     return {
         "status": "success",
         "data": {
-            "club_config": config.model_dump(mode="json"),
+            "club_config": cfg_dict,
+            "investment_config": cfg_dict,
             "operational_settings": settings.model_dump(mode="json"),
             "net_asset_value": net_asset_value,
             "uninvested_vault_cash": settings.current_balance,

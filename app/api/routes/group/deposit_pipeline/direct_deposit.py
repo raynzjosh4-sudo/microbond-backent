@@ -2,8 +2,8 @@ import uuid
 import time
 import secrets
 import logging
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from typing import Optional, Any
+from fastapi import APIRouter, Body, Depends, HTTPException, status, BackgroundTasks
 from sqlmodel import Session, select
 
 from app.core.database import get_session
@@ -277,7 +277,18 @@ async def direct_deposit(
     # 8. Announce verified deposit into group thread via System Event Message
     depositor_name = current_user.full_name or "A member"
     remaining_due = max(0, obligation.amount_due - obligation.amount_paid)
-    if surplus > 0:
+    if group.type == "GOAL_SAVINGS":
+        if target_details and target_details.allow_contribution_schedule:
+            msg_text = (
+                f"💰 Goal contribution: {depositor_name} saved {amount:,} {currency}. "
+                f"Scheduled contribution remaining: {remaining_due:,} {currency}."
+            )
+        else:
+            msg_text = (
+                f"💰 Goal contribution: {depositor_name} saved {amount:,} {currency} "
+                "toward the group goal."
+            )
+    elif surplus > 0:
         msg_text = (
             f"💰 Verified Deposit: {depositor_name} deposited {amount:,} {currency}! "
             f"{cycle_deposit:,} {currency} settled for Cycle {current_cycle} obligation, and "
@@ -338,7 +349,10 @@ async def direct_deposit(
                     "message": system_msg.model_dump(mode="json")
                 }
             )
-        if not target_details or target_details.allow_collection_frequency:
+        if not target_details or (
+            target_details.allow_contribution_schedule
+            and target_details.allow_collection_frequency
+        ):
             await broadcast_group_ring_update(
                 group_id=group_id,
                 depositor_name=depositor_name,
@@ -363,7 +377,10 @@ async def direct_deposit(
 
     # Calculate group ring completion fraction
     from app.services.group.dashboard_summary_service import GroupDashboardSummaryService
-    if target_details and not target_details.allow_collection_frequency:
+    if target_details and not (
+        target_details.allow_contribution_schedule
+        and target_details.allow_collection_frequency
+    ):
         fraction = 0.0
     else:
         try:
@@ -390,3 +407,26 @@ async def direct_deposit(
         advance_savings_credited=surplus,
         member_prepaid_balance=membership.credit_balance_ugx
     )
+
+
+@router.post("/obligations/{obligation_id}/pay", summary="Pay a specific MemberObligation")
+@router.post("/obligations/{obligation_id}/cover-default", summary="Cover a defaulted MemberObligation")
+def pay_member_obligation(
+    obligation_id: str,
+    payload: Any = Body(default=None),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    from app.api.routes.group.association_dues.pay_dues import (
+        _parse_body_dict,
+        execute_obligation_payment,
+    )
+
+    body_dict = _parse_body_dict(payload)
+    return execute_obligation_payment(
+        session=session,
+        current_user=current_user,
+        obligation_id=obligation_id,
+        body_data=body_dict,
+    )
+

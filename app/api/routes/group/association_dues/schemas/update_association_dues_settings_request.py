@@ -16,4 +16,6 @@ class UpdateAssociationDuesSettingsRequest(BaseModel):
     send_arrears_reminders: Optional[bool] = Field(default=None)
     arrears_reminder_days_before: Optional[int] = Field(default=None, ge=1)
     restrict_voting_on_arrears: Optional[bool] = Field(default=None)
+    suspend_voting_rights_on_arrears: Optional[bool] = Field(default=None)
+    restrict_voting_rights_on_arrears: Optional[bool] = Field(default=None)
     restrict_welfare_claims_on_arrears: Optional[bool] = Field(default=None)

@@ -15,6 +15,7 @@ from app.models.group.settings import GroupVisibilitySettings
 from app.models.group.finance.member_obligation import MemberObligation
 from app.models.group.ledger.ledger_entry import LedgerEntry
 from app.models.group.rotating.rotating_group_details import RotatingGroupDetails
+from app.models.group.target_savings.target_savings_group_details import TargetSavingsGroupDetails
 from app.services.analytics.buckets import LOCAL_TZ
 
 def get_day_window(date_ms: Optional[int] = None) -> Tuple[int, int, str]:
@@ -95,11 +96,32 @@ def _compute_member_deposit_states(
     Calculates deposit state (FULL, PARTIAL, NOT_DEPOSITED) for each active member.
     Returns (target_amount_per_member, member_records).
     """
+    group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+    goal_details = session.exec(
+        select(TargetSavingsGroupDetails).where(
+            TargetSavingsGroupDetails.group_id == group_id
+        )
+    ).first() if group and group.type == "GOAL_SAVINGS" else None
+    is_scheduled_goal = bool(
+        goal_details
+        and goal_details.allow_contribution_schedule
+        and goal_details.allow_collection_frequency
+        and goal_details.collection_frequency_days > 0
+    )
+    if group and group.type == "GOAL_SAVINGS" and not is_scheduled_goal:
+        return 0, []
+
     # 1. Fetch group details to find default contribution target
     rotating = session.exec(
         select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group_id)
     ).first()
-    default_target = int(rotating.contribution_amount) if rotating and rotating.contribution_amount else 0
+    default_target = (
+        int(goal_details.contribution_amount)
+        if is_scheduled_goal and goal_details
+        else int(rotating.contribution_amount)
+        if rotating and rotating.contribution_amount
+        else 0
+    )
 
     # 2. Fetch all active memberships joined with User
     members_data = session.exec(
@@ -112,7 +134,19 @@ def _compute_member_deposit_states(
     ).all()
 
     # 3. Fetch obligations for this day or active cycle
-    if rotating:
+    if is_scheduled_goal and goal_details and group and group.start_date:
+        current_cycle = max(
+            1,
+            ((max(0, day_end_ms - group.start_date))
+             // (goal_details.collection_frequency_days * 86400000)) + 1,
+        )
+        obligations = session.exec(
+            select(MemberObligation).where(
+                MemberObligation.group_id == group_id,
+                MemberObligation.cycle_number == current_cycle
+            )
+        ).all()
+    elif rotating:
         target_cycle = rotating.current_cycle or 1
         obligations = session.exec(
             select(MemberObligation).where(
@@ -157,14 +191,18 @@ def _compute_member_deposit_states(
         ob = obligations_by_user.get(user.id)
         amount_required = ob.amount_due if ob else default_target
         
-        user_deps = user_deposits_today.get(user.id, [])
-        ledger_paid = sum(d.amount for d in user_deps)
-        
-        # Consider amount_paid on obligation if recorded directly
-        ob_paid = ob.amount_paid if ob else 0
-        amount_paid = max(ledger_paid, ob_paid)
+        if is_scheduled_goal:
+            amount_paid = ob.amount_paid if ob else 0
+            user_deps = []
+        else:
+            user_deps = user_deposits_today.get(user.id, [])
+            ledger_paid = sum(d.amount for d in user_deps)
+            ob_paid = ob.amount_paid if ob else 0
+            amount_paid = max(ledger_paid, ob_paid)
         
         latest_settled_at = max((d.settled_at for d in user_deps if d.settled_at), default=None)
+        if is_scheduled_goal and ob and ob.amount_paid > 0:
+            latest_settled_at = ob.updated_at
         if not latest_settled_at and ob and ob.status == "PAID":
             latest_settled_at = ob.updated_at
 
@@ -219,6 +257,12 @@ def get_daily_deposit_widget_summary(
     target_amount, records = _compute_member_deposit_states(
         session, group_id, day_start_ms, day_end_ms, membership.role, hide_contacts
     )
+    group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+    target_details = session.exec(
+        select(TargetSavingsGroupDetails).where(
+            TargetSavingsGroupDetails.group_id == group_id
+        )
+    ).first() if group and group.type == "GOAL_SAVINGS" else None
 
     full_members = [r for r in records if r["status"] == "FULL"]
     partial_members = [r for r in records if r["status"] == "PARTIAL"]
@@ -228,12 +272,17 @@ def get_daily_deposit_widget_summary(
     total_expected = sum(r["amount_required"] for r in records)
     total_collected = sum(r["amount_paid"] for r in records)
     collection_rate = round((total_collected / total_expected * 100.0), 1) if total_expected > 0 else 0.0
+    saved_amount = (
+        max(target_details.total_saved_amount, group.total_balance or 0)
+        if target_details and group
+        else 0
+    )
 
     rotating = session.exec(
         select(RotatingGroupDetails).where(RotatingGroupDetails.group_id == group_id)
     ).first()
 
-    if rotating and rotating.is_payout_order_locked:
+    if group and group.type != "GOAL_SAVINGS" and rotating and rotating.is_payout_order_locked:
         freq_ms = max(1, rotating.collection_frequency_days) * 86400000
         start_ms = rotating.group_start_time or day_start_ms
         if day_start_ms >= start_ms:
@@ -249,13 +298,36 @@ def get_daily_deposit_widget_summary(
         "status": "success",
         "data": {
             "group_id": group_id,
+            "group_type": group.type if group else "",
             "date": date_str,
             "target_amount_per_member": target_amount,
-            "current_cycle": rotating.current_cycle if rotating else 1,
-            "current_saving_day": rotating.current_saving_day if rotating else 0,
-            "saving_days_per_cycle": rotating.saving_days_per_cycle if rotating else None,
-            "collection_time": rotating.collection_time if rotating else None,
-            "collection_frequency_days": rotating.collection_frequency_days if rotating else 1,
+            "current_cycle": (
+                max(1, ((max(0, day_end_ms - group.start_date)
+                         // (target_details.collection_frequency_days * 86400000)) + 1))
+                if target_details and target_details.allow_collection_frequency
+                and target_details.collection_frequency_days > 0 and group and group.start_date
+                else rotating.current_cycle if rotating else 1
+            ),
+            "current_saving_day": (
+                rotating.current_saving_day
+                if rotating and group and group.type != "GOAL_SAVINGS"
+                else 0
+            ),
+            "saving_days_per_cycle": (
+                rotating.saving_days_per_cycle
+                if rotating and group and group.type != "GOAL_SAVINGS"
+                else None
+            ),
+            "collection_time": (
+                target_details.collection_time
+                if target_details
+                else rotating.collection_time if rotating else None
+            ),
+            "collection_frequency_days": (
+                target_details.collection_frequency_days
+                if target_details and target_details.allow_collection_frequency
+                else rotating.collection_frequency_days if rotating else 1
+            ),
             "total_members": total_members,
             "summary": {
                 "full": {
@@ -279,6 +351,26 @@ def get_daily_deposit_widget_summary(
                 "total_collected": total_collected,
                 "collection_rate": collection_rate
             },
+            "goal_progress": ({
+                "total_saved": saved_amount,
+                "target_amount": target_details.target_amount if target_details.allow_target_amount else None,
+                "target_date": target_details.target_date if target_details.allow_target_date else None,
+                "amount_remaining": (
+                    max(0, target_details.target_amount - saved_amount)
+                    if target_details.allow_target_amount and target_details.target_amount
+                    else None
+                ),
+                "progress_percent": (
+                    min(100.0, round(
+                        saved_amount / target_details.target_amount * 100.0, 1
+                    ))
+                    if target_details.allow_target_amount and target_details.target_amount
+                    else None
+                ),
+                "has_contribution_schedule": bool(target_details.allow_contribution_schedule),
+                "has_collection_frequency": bool(target_details.allow_collection_frequency),
+                "collection_frequency_days": target_details.collection_frequency_days,
+            } if target_details and group else None),
             "permissions": {
                 "user_role": membership.role,
                 "visibility_setting": getattr(vis_settings, "deposit_widget_visibility", "ALL_MEMBERS") if vis_settings else "ALL_MEMBERS",

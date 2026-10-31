@@ -4,7 +4,7 @@ from app.core.database import get_session
 from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import GroupMembership
-from app.models.group.bill_split import BillSplitOperationalSettings
+from app.models.group.bill_split import BillSplitConfig, BillSplitOperationalSettings
 
 router = APIRouter()
 
@@ -16,6 +16,7 @@ def get_bill_split_settings(
 ):
     """
     Get operational settings for a BILL_SPLIT group.
+    Returns both flat top-level fields and nested settings/data objects.
     """
     membership = db.exec(
         select(GroupMembership).where(
@@ -30,7 +31,9 @@ def get_bill_split_settings(
     if not ops:
         raise HTTPException(status_code=404, detail="Bill split operational settings not found.")
 
-    return {
+    config = db.exec(select(BillSplitConfig).where(BillSplitConfig.group_id == group_id)).first()
+
+    flat_settings = {
         "group_id": group_id,
         "allow_tip_or_extra": ops.allow_tip_or_extra,
         "auto_close_on_settlement": ops.auto_close_on_settlement,
@@ -42,4 +45,19 @@ def get_bill_split_settings(
         "total_collected": ops.total_collected,
         "total_tip_collected": ops.total_tip_collected,
         "updated_at": ops.updated_at,
+    }
+    cfg_dict = config.model_dump(mode="json") if config else {}
+
+    return {
+        "status": "success",
+        **flat_settings,
+        "bill_split_config": cfg_dict,
+        "operational_settings": flat_settings,
+        "settings": flat_settings,
+        "data": {
+            **flat_settings,
+            "bill_split_config": cfg_dict,
+            "operational_settings": flat_settings,
+            "settings": flat_settings,
+        },
     }

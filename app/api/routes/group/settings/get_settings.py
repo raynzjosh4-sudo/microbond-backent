@@ -123,6 +123,7 @@ def get_governance_settings(
     ).all()
     pending_count = len(pending_payouts) if pending_payouts else 0
 
+    response_data["pending_disbursals_count"] = pending_count
     response_data["total_signers_count"] = signers_count
     response_data["signers_display"] = f"{actual_approvals} of {signers_count} Signers"
     response_data["quorum_display"] = f"{actual_approvals} of {signers_count}"
@@ -170,21 +171,22 @@ def get_settings_summary(
     Merges base settings (financial, governance) with the group-type-specific
     settings table so the client sees one consistent object.
     Admins see everything; members see a stripped view based on visibility toggles.
+    Public groups can also be previewed by non-members before joining.
     """
+    group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found.")
+
     membership = session.exec(
         select(GroupMembership).where(
             GroupMembership.group_id == group_id,
             GroupMembership.user_id == current_user.id
         )
     ).first()
-    if not membership:
+    if not membership and (group.visibility or "").upper() != "PUBLIC":
         raise HTTPException(status_code=403, detail="You must be a member to view settings.")
 
-    is_admin = membership.role == "ADMIN"
-
-    group = session.exec(select(Group).where(Group.group_id == group_id)).first()
-    if not group:
-        raise HTTPException(status_code=404, detail="Group not found.")
+    is_admin = bool(membership and membership.role == "ADMIN")
 
     fin = session.exec(
         select(GroupFinancialSettings).where(GroupFinancialSettings.group_id == group_id)
@@ -199,20 +201,38 @@ def get_settings_summary(
         select(GroupCommunicationSettings).where(GroupCommunicationSettings.group_id == group_id)
     ).first()
 
-    base = {
+    fin_dict = fin.dict(exclude={"id", "group_id"}) if fin else {}
+    gov_dict = gov.dict(exclude={"id", "group_id"}) if gov else {}
+    comm_dict = comm.dict(exclude={"id", "group_id"}) if comm else {}
+    vis_dict = vis.dict(exclude={"id", "group_id"}) if vis and is_admin else {}
+
+    base: Dict[str, Any] = {
+        "id": group.group_id,
         "group_id": group.group_id,
         "name": group.name,
         "description": group.description,
+        "group_image_url": getattr(group, "group_image_url", None),
+        "avatar_color": getattr(group, "avatar_color", None),
         "type": group.type,
+        "payment_mode": getattr(group, "payment_mode", None),
+        "savings_term": getattr(group, "savings_term", None),
+        "status": getattr(group, "status", "ACTIVE"),
         "currency": group.currency,
         "visibility": group.visibility,
+        "total_balance": getattr(group, "total_balance", 0),
         "max_members": group.max_members,
         "start_date": group.start_date,
         "member_count": group.member_count,
-        "financial": fin.dict(exclude={"id", "group_id"}) if fin else {},
-        "governance": gov.dict(exclude={"id", "group_id"}) if gov else {},
-        "communication": comm.dict(exclude={"id", "group_id"}) if comm else {},
-        "member_visibility_toggles": vis.dict(exclude={"id", "group_id"}) if vis and is_admin else {}
+        "created_by_user_id": str(group.created_by_user_id) if getattr(group, "created_by_user_id", None) else None,
+        "invite_code": getattr(group, "invite_code", None) if membership else None,
+        "is_member": membership is not None,
+        "user_role": membership.role if membership else None,
+        "financial": fin_dict,
+        "financial_rules": fin_dict,
+        "governance": gov_dict,
+        "governance_gates": gov_dict,
+        "communication": comm_dict,
+        "member_visibility_toggles": vis_dict,
     }
 
     # ── Type-specific settings appended as their own section ─────────────────
@@ -224,6 +244,7 @@ def get_settings_summary(
         ).first()
         if rotating:
             type_specific = rotating.dict(exclude={"id", "group_id", "created_at"})
+        base["rotating_details"] = type_specific
 
     elif group.type == "GOAL_SAVINGS":
         target = session.exec(
@@ -267,9 +288,12 @@ def get_settings_summary(
                 WelfareFundOperationalSettings.group_id == group_id
             )
         ).first()
+        cfg_dict = config.dict(exclude={"id", "group_id", "created_at"}) if config else {}
+        ops_dict = ops.dict(exclude={"id", "group_id"}) if ops else {}
         type_specific = {
-            "welfare_config": config.dict(exclude={"id", "group_id", "created_at"}) if config else {},
-            "operational_settings": ops.dict(exclude={"id", "group_id"}) if ops else {}
+            "welfare_config": cfg_dict,
+            "fund_config": cfg_dict,
+            "operational_settings": ops_dict,
         }
 
     elif group.type == "EVENT_COMMITTEE":
@@ -281,9 +305,14 @@ def get_settings_summary(
                 EventCommitteeOperationalSettings.group_id == group_id
             )
         ).first()
+        cfg_dict = config.dict(exclude={"id", "group_id", "created_at"}) if config else {}
+        ops_dict = ops.dict(exclude={"id", "group_id"}) if ops else {}
+        if ops_dict:
+            ops_dict["milestone_unlocks_enabled"] = ops_dict.get("allow_partial_disbursements", False)
         type_specific = {
-            "event_config": config.dict(exclude={"id", "group_id", "created_at"}) if config else {},
-            "operational_settings": ops.dict(exclude={"id", "group_id"}) if ops else {}
+            "event_config": cfg_dict,
+            "committee_config": cfg_dict,
+            "operational_settings": ops_dict,
         }
 
     elif group.type == "INVESTMENT_CLUB":
@@ -301,9 +330,12 @@ def get_settings_summary(
                 InvestmentClubLoan.status.in_(["PENDING", "APPROVED", "DISBURSED"])
             )
         ).all()
+        cfg_dict = config.dict(exclude={"id", "group_id", "created_at"}) if config else {}
+        ops_dict = ops.dict(exclude={"id", "group_id"}) if ops else {}
         type_specific = {
-            "investment_config": config.dict(exclude={"id", "group_id", "created_at"}) if config else {},
-            "operational_settings": ops.dict(exclude={"id", "group_id"}) if ops else {},
+            "investment_config": cfg_dict,
+            "club_config": cfg_dict,
+            "operational_settings": ops_dict,
             "active_loans_count": len(active_loans)
         }
 
@@ -322,9 +354,16 @@ def get_settings_summary(
                 AssociationDuesExemption.is_active == True
             )
         ).all()
+        cfg_dict = config.dict(exclude={"id", "group_id", "created_at"}) if config else {}
+        ops_dict = ops.dict(exclude={"id", "group_id"}) if ops else {}
+        if ops_dict:
+            restrict_val = ops_dict.get("restrict_voting_on_arrears", True)
+            ops_dict["suspend_voting_rights_on_arrears"] = restrict_val
+            ops_dict["restrict_voting_rights_on_arrears"] = restrict_val
         type_specific = {
-            "association_config": config.dict(exclude={"id", "group_id", "created_at"}) if config else {},
-            "operational_settings": ops.dict(exclude={"id", "group_id"}) if ops else {},
+            "association_config": cfg_dict,
+            "dues_config": cfg_dict,
+            "operational_settings": ops_dict,
             "active_exemptions_count": len(active_exemptions)
         }
 
@@ -337,14 +376,18 @@ def get_settings_summary(
                 BillSplitOperationalSettings.group_id == group_id
             )
         ).first()
+        cfg_dict = config.dict(exclude={"id", "group_id", "created_at"}) if config else {}
+        ops_dict = ops.dict(exclude={"id", "group_id"}) if ops else {}
         type_specific = {
-            "bill_split_config": config.dict(exclude={"id", "group_id", "created_at"}) if config else {},
-            "operational_settings": ops.dict(exclude={"id", "group_id"}) if ops else {}
+            **ops_dict,
+            "bill_split_config": cfg_dict,
+            "operational_settings": ops_dict,
+            "settings": ops_dict,
         }
 
     base["type_specific_settings"] = type_specific
 
-    return {"status": "success", "data": base}
+    return {**base, "status": "success", "data": base}
 
 
 @router.get("/{group_id}/rotating-details", summary="Get Rotating Group Details (Direct Alias)")

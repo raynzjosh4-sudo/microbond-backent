@@ -42,17 +42,23 @@ def get_association_dashboard(
 
     # Ledger visibility handling
     settings_dict = settings.model_dump(mode="json")
+    restrict_val = settings_dict.get("restrict_voting_on_arrears", True)
+    settings_dict["suspend_voting_rights_on_arrears"] = restrict_val
+    settings_dict["restrict_voting_rights_on_arrears"] = restrict_val
+
     if settings.treasury_ledger_visibility == "ADMIN_ONLY" and member.role != "ADMIN":
         settings_dict["current_balance"] = None
         settings_dict["total_collected"] = None
         settings_dict["total_swept_to_treasury"] = None
 
     days_to_due = max(0, int(((standing_data["next_due_date"]) - now_ms) / (86400 * 1000)))
+    cfg_dict = config.model_dump(mode="json")
 
     return {
         "status": "success",
         "data": {
-            "association_config": config.model_dump(mode="json"),
+            "association_config": cfg_dict,
+            "dues_config": cfg_dict,
             "operational_settings": settings_dict,
             "my_standing": standing_data,
             "days_to_next_due_date": days_to_due

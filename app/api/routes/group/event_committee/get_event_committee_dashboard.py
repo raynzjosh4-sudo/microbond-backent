@@ -38,11 +38,16 @@ def get_event_committee_dashboard(
     days_to_deadline = max(0, int((config.collection_deadline - current_time_ms) / (86400 * 1000)))
     days_to_event = max(0, int((config.event_date - current_time_ms) / (86400 * 1000)))
 
+    cfg_dict = config.model_dump(mode="json")
+    ops_dict = settings.model_dump(mode="json")
+    ops_dict["milestone_unlocks_enabled"] = ops_dict.get("allow_partial_disbursements", False)
+
     return {
         "status": "success",
         "data": {
-            "event_config": config.model_dump(mode="json"),
-            "operational_settings": settings.model_dump(mode="json"),
+            "event_config": cfg_dict,
+            "committee_config": cfg_dict,
+            "operational_settings": ops_dict,
             "budget_progress_percentage": budget_pct,
             "pledge_fulfillment_percentage": pledge_fulfillment_pct,
             "days_to_deadline": days_to_deadline,
