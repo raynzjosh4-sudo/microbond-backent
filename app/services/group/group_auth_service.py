@@ -76,6 +76,7 @@ def evaluate_group_creation_permissions(session: Session, user_id: uuid.UUID) ->
         SavingsGroupType.INVESTMENT_CLUB,
         SavingsGroupType.FUNDRAISER,
         SavingsGroupType.WELFARE_FUND,
+        SavingsGroupType.EMERGENCY,
         SavingsGroupType.EVENT_COMMITTEE,
         SavingsGroupType.GOAL_SAVINGS,
         SavingsGroupType.SHARED_WALLET

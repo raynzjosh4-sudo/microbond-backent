@@ -7,6 +7,7 @@ pub mod shared;
 pub use groups::bill_split::bill_splitter;
 pub use groups::investment_club::auction_settlement;
 pub use groups::rotating_savings::{matrix_generator, payout, surplus_allocator, turn_swap_engine};
+pub use groups::welfare_fund::claim_evaluator;
 pub use shared::audit;
 pub use shared::escrow_engine;
 pub use shared::fees::fee_amortizer;
@@ -69,6 +70,10 @@ fn microbond_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(
         shared::fees::fee_amortizer::calculate_emergency_deposit_fee,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        groups::welfare_fund::claim_evaluator::evaluate_emergency_claim,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(

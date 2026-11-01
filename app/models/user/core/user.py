@@ -1,5 +1,5 @@
 from typing import Optional
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Column, BigInteger
 from datetime import datetime
 import uuid
 from app.utils.time.now_utc_datetime import now_utc_datetime
@@ -40,11 +40,11 @@ class User(SQLModel, table=True):
     # Session / Presence
     fcm_token: Optional[str] = Field(default=None)
     is_online: bool = Field(default=False)
-    last_seen_at: Optional[int] = Field(default=None) # Epoch ms
+    last_seen_at: Optional[int] = Field(default=None, sa_column=Column(BigInteger, nullable=True)) # Epoch ms
     
     # Security & Fraud Prevention (SIM-Swap Defense)
     primary_device_id: Optional[str] = Field(default=None, description="Hardware fingerprint to detect account takeovers")
-    security_cooldown_until: Optional[int] = Field(default=None, description="Epoch ms until withdrawals/payouts unlock after a device swap")
+    security_cooldown_until: Optional[int] = Field(default=None, sa_column=Column(BigInteger, nullable=True), description="Epoch ms until withdrawals/payouts unlock after a device swap")
     
     # Invite System
     referral_code: Optional[str] = Field(default=None, unique=True, index=True)

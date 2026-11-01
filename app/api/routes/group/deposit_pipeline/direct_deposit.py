@@ -12,6 +12,7 @@ from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.rotating import RotatingGroupDetails
 from app.models.group.target_savings import TargetSavingsGroupDetails
+from app.models.group.long_term import FundraiserCampaignConfig, FundraiserLiveStats
 from sqlalchemy import func
 from app.models.group.finance import MemberObligation
 from app.models.group.wallet import GroupWallet
@@ -93,6 +94,47 @@ async def direct_deposit(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Deposits are locked for this goal-savings group.",
             )
+
+    fundraiser_config = None
+    fundraiser_stats = None
+    if group.type == "FUNDRAISER":
+        fundraiser_config = session.exec(
+            select(FundraiserCampaignConfig).where(FundraiserCampaignConfig.group_id == group_id)
+        ).first()
+        fundraiser_stats = session.exec(
+            select(FundraiserLiveStats).where(FundraiserLiveStats.group_id == group_id)
+        ).first()
+        if not fundraiser_config or not fundraiser_stats:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Fundraiser campaign configuration not found."
+            )
+        if not fundraiser_stats.is_active or fundraiser_stats.is_paid_out:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This fundraiser campaign is closed or has already paid out."
+            )
+        if fundraiser_config.campaign_deadline and now_ms > fundraiser_config.campaign_deadline:
+            fundraiser_stats.is_active = False
+            fundraiser_stats.updated_at = now_ms
+            session.add(fundraiser_stats)
+            session.commit()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="This fundraiser campaign has reached its deadline."
+            )
+        if payload.amount < (fundraiser_stats.minimum_donation_amount or 0):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Minimum donation amount is {fundraiser_stats.minimum_donation_amount:,} {group.currency or 'UGX'}."
+            )
+        if not fundraiser_stats.allow_overfunding and fundraiser_config.target_amount > 0:
+            if (fundraiser_stats.total_raised or 0) + payload.amount > fundraiser_config.target_amount:
+                remaining = max(0, fundraiser_config.target_amount - (fundraiser_stats.total_raised or 0))
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Overfunding is disabled for this campaign. Maximum acceptable remaining contribution is {remaining:,} {group.currency or 'UGX'}."
+                )
 
     # 3. Determine cycle number & handle Rotating specifics
     rot = None
@@ -274,10 +316,41 @@ async def direct_deposit(
         target_details.total_saved_amount = (target_details.total_saved_amount or 0) + amount
         session.add(target_details)
 
+    if fundraiser_stats:
+        prior_deposit = session.exec(
+            select(LedgerEntry).where(
+                LedgerEntry.group_id == group_id,
+                LedgerEntry.user_id == current_user.id,
+                LedgerEntry.transaction_type == "DEPOSIT",
+                LedgerEntry.id != ledger_entry.id
+            )
+        ).first()
+        if not prior_deposit:
+            fundraiser_stats.donor_count = (fundraiser_stats.donor_count or 0) + 1
+        fundraiser_stats.total_raised = (fundraiser_stats.total_raised or 0) + amount
+        if (
+            fundraiser_stats.stop_on_target_reached
+            and fundraiser_config
+            and fundraiser_config.target_amount > 0
+            and fundraiser_stats.total_raised >= fundraiser_config.target_amount
+        ):
+            fundraiser_stats.is_active = False
+        fundraiser_stats.updated_at = now_ms
+        session.add(fundraiser_stats)
+
     # 8. Announce verified deposit into group thread via System Event Message
     depositor_name = current_user.full_name or "A member"
     remaining_due = max(0, obligation.amount_due - obligation.amount_paid)
-    if group.type == "GOAL_SAVINGS":
+    if group.type == "FUNDRAISER" and fundraiser_stats:
+        pct_text = ""
+        if fundraiser_config and fundraiser_config.target_amount > 0:
+            pct = round((fundraiser_stats.total_raised / fundraiser_config.target_amount) * 100, 1)
+            pct_text = f" ({pct}% of goal reached)"
+        msg_text = (
+            f"🎗️ Fundraiser Donation: {depositor_name} contributed {amount:,} {currency}{pct_text}! "
+            f"Total raised: {fundraiser_stats.total_raised:,} {currency} from {fundraiser_stats.donor_count} donor(s)."
+        )
+    elif group.type == "GOAL_SAVINGS":
         if target_details and target_details.allow_contribution_schedule:
             msg_text = (
                 f"💰 Goal contribution: {depositor_name} saved {amount:,} {currency}. "
@@ -357,6 +430,23 @@ async def direct_deposit(
                 group_id=group_id,
                 depositor_name=depositor_name,
                 amount=amount
+            )
+        if group.type == "FUNDRAISER" and fundraiser_stats:
+            pct_val = None
+            if fundraiser_config and fundraiser_config.target_amount > 0:
+                pct_val = round((fundraiser_stats.total_raised / fundraiser_config.target_amount) * 100, 2)
+            await ws_manager.broadcast_to_group(
+                group_id,
+                {
+                    "event_type": "FUNDRAISER_PROGRESS_UPDATED",
+                    "group_id": group_id,
+                    "total_raised": fundraiser_stats.total_raised,
+                    "target_amount": fundraiser_config.target_amount if fundraiser_config else 0,
+                    "donor_count": fundraiser_stats.donor_count,
+                    "progress_percentage": pct_val,
+                    "is_active": fundraiser_stats.is_active,
+                    "is_paid_out": fundraiser_stats.is_paid_out
+                }
             )
     except Exception as ws_err:
         logger.warning(f"[DIRECT_DEPOSIT] WebSocket broadcast warning: {ws_err}")

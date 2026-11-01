@@ -279,7 +279,7 @@ def get_settings_summary(
             "operational_settings": ops.dict(exclude={"id", "group_id"}) if ops else {}
         }
 
-    elif group.type == "WELFARE_FUND":
+    elif group.type in ["WELFARE_FUND", "EMERGENCY"]:
         config = session.exec(
             select(WelfareFundConfig).where(WelfareFundConfig.group_id == group_id)
         ).first()
@@ -293,7 +293,13 @@ def get_settings_summary(
         type_specific = {
             "welfare_config": cfg_dict,
             "fund_config": cfg_dict,
+            "emergency_config": cfg_dict,
             "operational_settings": ops_dict,
+            "emergency_settings": {
+                **cfg_dict,
+                **ops_dict,
+                "available_emergency_pool": max(0, ops_dict.get("current_balance", 0) - ops_dict.get("minimum_reserve_balance", 0))
+            }
         }
 
     elif group.type == "EVENT_COMMITTEE":
@@ -386,6 +392,7 @@ def get_settings_summary(
         }
 
     base["type_specific_settings"] = type_specific
+    base["settings_json"] = type_specific.get("emergency_settings", type_specific)
 
     return {**base, "status": "success", "data": base}
 
