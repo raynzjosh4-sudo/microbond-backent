@@ -6,7 +6,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 from sqlalchemy.pool import StaticPool
 from app.main import app
 from app.core.database import get_session
@@ -139,5 +139,72 @@ def test_user_privacy_full_flow():
         )
         assert resp_add.status_code == 403
         assert "privacy settings" in resp_add.json()["detail"].lower()
+
+        # A phone-number invite requires Alice's consent before membership activates.
+        active_user_id = user_alice_id
+        resp_patch = client.patch(
+            "/api/v1/users/me/privacy",
+            json={"group_add_permission": "EVERYONE"},
+        )
+        assert resp_patch.status_code == 200
+
+        active_user_id = user_bob_id
+        resp_invite = client.post(
+            f"/api/v1/groups/{group_id}/members/add",
+            json={"phone_number": "+256701111111", "role": "MEMBER"},
+        )
+        assert resp_invite.status_code == 200
+        assert resp_invite.json()["data"]["membership_status"] == "PENDING_ACCEPTANCE"
+
+        with Session(test_engine) as session:
+            group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+            membership = session.exec(
+                select(GroupMembership).where(
+                    GroupMembership.group_id == group_id,
+                    GroupMembership.user_id == user_alice_id,
+                )
+            ).first()
+            assert group.member_count == 1
+            assert membership.status == "PENDING_ACCEPTANCE"
+
+        active_user_id = user_alice_id
+        resp_pending = client.get("/api/v1/groups/members/invitations/pending")
+        assert resp_pending.status_code == 200
+        assert resp_pending.json()["data"][0]["group_id"] == group_id
+        resp_roster = client.get(f"/api/v1/groups/{group_id}/members")
+        assert resp_roster.status_code == 403
+
+        resp_reject = client.post(
+            f"/api/v1/groups/{group_id}/members/invitation/respond",
+            json={"action": "REJECT"},
+        )
+        assert resp_reject.status_code == 200
+        assert resp_reject.json()["membership_status"] == "DECLINED"
+
+        active_user_id = user_bob_id
+        resp_reinvite = client.post(
+            f"/api/v1/groups/{group_id}/members/add",
+            json={"phone_number": "+256701111111", "role": "MEMBER"},
+        )
+        assert resp_reinvite.status_code == 200
+
+        active_user_id = user_alice_id
+        resp_accept = client.post(
+            f"/api/v1/groups/{group_id}/members/invitation/respond",
+            json={"action": "ACCEPT"},
+        )
+        assert resp_accept.status_code == 200
+        assert resp_accept.json()["membership_status"] == "ACTIVE"
+
+        with Session(test_engine) as session:
+            group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+            membership = session.exec(
+                select(GroupMembership).where(
+                    GroupMembership.group_id == group_id,
+                    GroupMembership.user_id == user_alice_id,
+                )
+            ).first()
+            assert group.member_count == 2
+            assert membership.status == "ACTIVE"
     finally:
         app.dependency_overrides.clear()

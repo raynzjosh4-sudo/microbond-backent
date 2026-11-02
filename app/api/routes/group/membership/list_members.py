@@ -77,7 +77,8 @@ def list_group_members(
     membership = session.exec(
         select(GroupMembership).where(
             GroupMembership.group_id == group_id,
-            GroupMembership.user_id == current_user.id
+            GroupMembership.user_id == current_user.id,
+            GroupMembership.status == "ACTIVE",
         )
     ).first()
     
@@ -94,7 +95,8 @@ def list_group_members(
 
     # Base query combining Member and User
     stmt = select(GroupMembership, User).join(User, GroupMembership.user_id == User.id).where(
-        GroupMembership.group_id == group_id
+        GroupMembership.group_id == group_id,
+        GroupMembership.status == "ACTIVE",
     )
 
     # --- Apply Dynamic Filters ---
