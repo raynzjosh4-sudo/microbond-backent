@@ -1,9 +1,4 @@
-from sqlmodel import Session
-
-from app.api.routes.group.chat.messages import broadcast_system_message_sync
 from app.models.group.settings import GroupCommonSettings
-from app.models.user.user import User
-
 
 SETTING_LABELS = {
     "allow_partial_payments": "partial payments",
@@ -20,7 +15,7 @@ SETTING_LABELS = {
 }
 
 
-def _format_setting_value(field: str, value) -> str:
+def _format_setting_value(field: str, value: object) -> str:
     if field in {
         "allow_partial_payments",
         "require_guarantor",
@@ -92,37 +87,16 @@ def _setting_effect(field: str, settings: GroupCommonSettings) -> str:
     return "The updated setting now applies to this group."
 
 
-def broadcast_common_setting_changes(
-    *,
-    group_id: str,
-    changed_values: dict[str, tuple[object, object]],
+def format_common_setting(
+    field: str,
+    old_value: object,
+    new_value: object,
     settings: GroupCommonSettings,
-    admin: User,
-    session: Session,
-) -> None:
-    admin_name = admin.full_name or "Group Admin"
-
-    for field, (_, new_value) in changed_values.items():
-        label = SETTING_LABELS[field]
-        message_text = (
-            f"⚙️ {admin_name} changed {label} to "
-            f"{_format_setting_value(field, new_value)}. "
-            f"{_setting_effect(field, settings)}"
-        )
-        broadcast_system_message_sync(
-            group_id=group_id,
-            message_text=message_text,
-            message_type="SYSTEM_EVENT",
-            sender_id="SYSTEM",
-            session=session,
-            attachments=[
-                {
-                    "category": "SETTINGS_UPDATE",
-                    "setting_type": "COMMON",
-                    "setting": field,
-                    "admin_id": str(admin.id),
-                    "admin_name": admin_name,
-                    "changes_count": 1,
-                }
-            ],
-        )
+) -> tuple[str, str]:
+    label = SETTING_LABELS[field]
+    details = (
+        f"changed {label} from {_format_setting_value(field, old_value)} "
+        f"to {_format_setting_value(field, new_value)}. "
+        f"{_setting_effect(field, settings)}"
+    )
+    return label, details

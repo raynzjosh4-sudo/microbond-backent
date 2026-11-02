@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 from typing import Optional
 from pydantic import BaseModel, Field
@@ -28,7 +28,6 @@ class UpdateGroupProfileResponse(BaseModel):
 def update_group_profile(
     group_id: str,
     request: UpdateGroupProfileRequest,
-    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
@@ -76,15 +75,11 @@ def update_group_profile(
             )
 
     # 4. Processing: Apply updates
-    changes = []
     if request.name is not None and request.name != group.name:
-        changes.append(f"name to '{request.name}'")
         group.name = request.name
     if request.description is not None and request.description != group.description:
-        changes.append("description")
         group.description = request.description
     if request.group_image_url is not None and request.group_image_url != group.group_image_url:
-        changes.append("image")
         group.group_image_url = request.group_image_url
         
     session.add(group)
@@ -92,43 +87,6 @@ def update_group_profile(
     try:
         session.commit()
         session.refresh(group)
-        
-        # --- CHAT INTEGRATION ---
-        if changes:
-            import uuid
-            from app.models.group.chat import GroupChatMessage
-            from app.services.websocket_manager import ws_manager
-            
-            changes_str = " and ".join(changes)
-            system_text = f"{current_user.full_name} changed the group {changes_str}."
-            
-            chat_media_url = request.group_image_url if (request.group_image_url is not None and "image" in changes) else None
-            chat_media_type = "IMAGE" if chat_media_url else None
-
-            system_message = GroupChatMessage(
-                client_message_id=str(uuid.uuid4()),
-                group_id=group_id,
-                sender_id=str(current_user.id),
-                message_type="SYSTEM_EVENT",
-                message_text=system_text,
-                media_url=chat_media_url,
-                media_type=chat_media_type,
-                status="SENT"
-            )
-            session.add(system_message)
-            session.commit()
-            session.refresh(system_message)
-            
-            # Broadcast the system message to active users in the background
-            background_tasks.add_task(
-                ws_manager.broadcast_to_group,
-                group_id,
-                {
-                    "event_type": "NEW_MESSAGE",
-                    "message": system_message.model_dump()
-                }
-            )
-            
     except Exception as e:
         session.rollback()
         logger.error(f"Failed to update group profile for {group_id}: {e}")

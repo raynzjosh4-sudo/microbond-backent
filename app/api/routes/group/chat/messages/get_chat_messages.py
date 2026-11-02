@@ -10,6 +10,7 @@ from app.models.user.user import User
 from app.models.group.group import GroupMembership
 from app.models.group.settings import GroupVisibilitySettings
 from app.models.group.chat import GroupChatMessage, GroupChatReadReceipt
+from app.models.group.target_savings import TargetSavingsGroupDetails
 from app.services.privacy import can_view_profile_photo
 from app.utils.avatar_colors import resolve_vibrant_avatar_color
 from .schemas import ChatMessageItem, ReplyToSummary, ChatMessagesListResponse
@@ -32,7 +33,8 @@ async def get_chat_messages(
     """
     Retrieves the chat history for a group, supporting fast pagination,
     rich sender profile cards, quoted reply previews, and WhatsApp-style read ticks.
-    Enforces Group Visibility Rules and User Privacy Settings.
+    Enforces Group Visibility Rules and User Privacy Settings. A missing multi-payout
+    destination creates a persisted chat prompt on the newest-message request.
     """
     # 1. Verify User is a member
     membership = session.exec(
@@ -44,6 +46,35 @@ async def get_chat_messages(
     
     if not membership:
         raise HTTPException(status_code=403, detail="You must be a member to view messages.")
+
+    should_prompt_multi_payout = (
+        before_created_at is None
+        and membership.status == "ACTIVE"
+        and not membership.payout_destination_id
+    )
+    if should_prompt_multi_payout:
+        target_savings = session.exec(
+            select(TargetSavingsGroupDetails).where(
+                TargetSavingsGroupDetails.group_id == group_id,
+                TargetSavingsGroupDetails.allow_multi_payout.is_(True),
+            )
+        ).first()
+        if target_savings:
+            session.add(
+                GroupChatMessage(
+                    client_message_id=str(uuid.uuid4()),
+                    group_id=group_id,
+                    sender_id=str(current_user.id),
+                    message_type="MULTIPAYOUT_DESTINATION",
+                    message_text="Choose a verified payout destination for this group.",
+                    attachments={
+                        "category": "GOAL_PAYOUT_DESTINATION",
+                        "requester_id": str(current_user.id),
+                    },
+                    status="SENT",
+                )
+            )
+            session.commit()
 
     # 2. Query Group Visibility Settings (to check contact info hiding)
     vis_settings = session.exec(
@@ -225,4 +256,3 @@ async def get_chat_messages(
         )
 
     return ChatMessagesListResponse(data=output)
-

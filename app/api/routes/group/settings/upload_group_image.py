@@ -1,5 +1,4 @@
 import io
-import uuid
 import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status, BackgroundTasks
@@ -12,7 +11,6 @@ from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.settings import GroupGovernanceSettings
-from app.models.group.chat import GroupChatMessage
 from app.services.cloud_storage import upload_bytes_to_r2, delete_file_from_r2
 from app.services.websocket_manager import ws_manager
 
@@ -164,30 +162,7 @@ async def upload_group_image(
         session.commit()
         session.refresh(group)
 
-        # 7. Publish system chat event & broadcast via WebSocket
-        system_text = f"{current_user.full_name} updated the group icon."
-        system_message = GroupChatMessage(
-            client_message_id=str(uuid.uuid4()),
-            group_id=group_id,
-            sender_id=str(current_user.id),
-            message_type="SYSTEM_EVENT",
-            message_text=system_text,
-            media_url=new_image_url,
-            media_type="IMAGE",
-            status="SENT",
-        )
-        session.add(system_message)
-        session.commit()
-        session.refresh(system_message)
-
-        background_tasks.add_task(
-            ws_manager.broadcast_to_group,
-            group_id,
-            {
-                "event_type": "NEW_MESSAGE",
-                "message": system_message.model_dump(mode="json"),
-            },
-        )
+        # The settings announcement tracker publishes the image change in chat.
         background_tasks.add_task(
             ws_manager.broadcast_to_group,
             group_id,
@@ -283,26 +258,6 @@ def remove_group_image(
         session.commit()
         session.refresh(group)
 
-        system_text = f"{current_user.full_name} removed the group icon."
-        system_message = GroupChatMessage(
-            client_message_id=str(uuid.uuid4()),
-            group_id=group_id,
-            sender_id=str(current_user.id),
-            message_type="SYSTEM_EVENT",
-            message_text=system_text,
-            status="SENT",
-        )
-        session.add(system_message)
-        session.commit()
-
-        background_tasks.add_task(
-            ws_manager.broadcast_to_group,
-            group_id,
-            {
-                "event_type": "NEW_MESSAGE",
-                "message": system_message.model_dump(mode="json"),
-            },
-        )
         background_tasks.add_task(
             ws_manager.broadcast_to_group,
             group_id,
@@ -411,4 +366,3 @@ async def upload_standalone_group_image(
             "image_url": image_url
         }
     }
-

@@ -1,6 +1,6 @@
 import jwt
 from jwt.exceptions import InvalidTokenError
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlmodel import Session
 
@@ -11,6 +11,7 @@ from app.api.dependencies.auth.bearer_scheme import security
 from app.core.security import is_token_revoked
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     session: Session = Depends(get_session)
 ) -> User:
@@ -48,5 +49,15 @@ def get_current_user(
     user = session.get(User, user_uuid)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-        
+
+    session.info["settings_announcement_context"] = {
+        "group_id": request.path_params.get("group_id"),
+        "method": request.method,
+        "path": request.url.path,
+        "actor_id": str(user.id),
+        "actor_name": user.full_name or "Group Admin",
+    }
+    session.info.pop("settings_announcement_pending", None)
+    session.info.pop("settings_announcement_skip_tracker", None)
+
     return user

@@ -17,6 +17,9 @@ if settings.SENTRY_DSN:
 
 app = FastAPI(title="Microbond Backend API")
 
+from app.api.routes.group.settings.announcements import register_settings_announcement_events
+register_settings_announcement_events()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,

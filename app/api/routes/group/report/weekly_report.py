@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
-from typing import Optional, List, Dict, Any
-from datetime import datetime, timezone, timedelta
+from typing import Optional, List, Dict, Any, Literal
+from datetime import date, datetime, timezone, timedelta
+from pydantic import BaseModel, Field
 
 from app.core.database import get_session
 from app.api.dependencies import get_current_user
@@ -9,14 +10,193 @@ from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.finance import MemberObligation, GroupPayout
 from app.models.group.settings import GroupVisibilitySettings, GroupFinancialSettings
+from app.models.group.report import (
+    GroupFinancialReport,
+)
 from app.services.analytics.buckets import BucketError
 from app.services.analytics.period_summary import build_period_summary
+from app.services.group.report_visibility import (
+    REPORT_SECTION_BY_KEY,
+    REPORT_SECTION_KEYS,
+    available_report_sections,
+    load_report_section_visibility,
+    report_detail_visibility,
+)
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Reports"])
 
 def get_start_of_week(dt: datetime) -> datetime:
     # Assuming week starts on Monday
     return dt - timedelta(days=dt.weekday())
+
+
+class ReportPeriod(BaseModel):
+    type: Literal["WEEK", "MONTH", "CUSTOM"]
+    selected_date: date
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+
+
+class GenerateReportRequest(BaseModel):
+    included_sections: List[str] = Field(min_length=1)
+    period: ReportPeriod
+
+
+def _get_active_membership(session: Session, group_id: str, user_id) -> GroupMembership:
+    membership = session.exec(
+        select(GroupMembership).where(
+            GroupMembership.group_id == group_id,
+            GroupMembership.user_id == user_id,
+            GroupMembership.status == "ACTIVE",
+        )
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="You must be an active member of this group.")
+    return membership
+
+
+def _get_visibility_settings(session: Session, group_id: str) -> GroupVisibilitySettings:
+    settings = session.exec(
+        select(GroupVisibilitySettings).where(GroupVisibilitySettings.group_id == group_id)
+    ).first()
+    return settings or GroupVisibilitySettings(group_id=group_id)
+
+
+def _resolve_period(period: ReportPeriod) -> tuple[date, date]:
+    if period.type == "WEEK":
+        start = period.selected_date - timedelta(days=period.selected_date.weekday())
+        return start, start + timedelta(days=6)
+    if period.type == "MONTH":
+        start = period.selected_date.replace(day=1)
+        if start.month == 12:
+            next_month = start.replace(year=start.year + 1, month=1)
+        else:
+            next_month = start.replace(month=start.month + 1)
+        return start, next_month - timedelta(days=1)
+    if period.start_date is None or period.end_date is None:
+        raise HTTPException(
+            status_code=400,
+            detail="CUSTOM periods require start_date and end_date.",
+        )
+    if period.end_date < period.start_date:
+        raise HTTPException(status_code=400, detail="end_date must be on or after start_date.")
+    return period.start_date, period.end_date
+
+
+@router.get("/{group_id}/reports/available-sections", summary="List Report Sections Available to Me")
+def get_available_report_sections(
+    group_id: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    membership = _get_active_membership(session, group_id, current_user.id)
+    group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found.")
+    visibility = load_report_section_visibility(session, group_id)
+    return {
+        "status": "success",
+        "data": {
+            "group_id": group_id,
+            "group_type": group.type,
+            "viewer_role": membership.role,
+            "sections": available_report_sections(group.type, membership.role, visibility),
+            "detail_visibility": report_detail_visibility(
+                _get_visibility_settings(session, group_id)
+            ),
+        },
+    }
+
+
+@router.post("/{group_id}/reports", summary="Generate a Permission-Checked Group Report")
+def generate_group_report(
+    group_id: str,
+    request: GenerateReportRequest,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    membership = _get_active_membership(session, group_id, current_user.id)
+    group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found.")
+    visibility = load_report_section_visibility(session, group_id)
+    requested_keys = list(dict.fromkeys(request.included_sections))
+    unknown_keys = [key for key in requested_keys if key not in REPORT_SECTION_BY_KEY]
+    if unknown_keys:
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "Unknown report section keys.", "keys": unknown_keys},
+        )
+
+    allowed_keys = {
+        section["key"]
+        for section in available_report_sections(group.type, membership.role, visibility)
+    }
+    forbidden_keys = [key for key in requested_keys if key not in allowed_keys]
+    if forbidden_keys:
+        raise HTTPException(
+            status_code=403,
+            detail={"message": "One or more report sections are not visible to you.", "keys": forbidden_keys},
+        )
+    start_date, end_date = _resolve_period(request.period)
+    days = (end_date - start_date).days + 1
+    target_date_ms = int(
+        datetime.combine(end_date, datetime.min.time(), tzinfo=timezone.utc).timestamp() * 1000
+    )
+    report_data = get_custom_saving_report(
+        group_id=group_id,
+        days=days,
+        target_date_ms=target_date_ms,
+        session=session,
+        current_user=current_user,
+    )
+
+    section_payload = {}
+    for key in requested_keys:
+        definition = REPORT_SECTION_BY_KEY[key]
+        section_payload[key] = {
+            field: report_data[field]
+            for field in definition["fields"]
+            if field in report_data
+        }
+
+    report = GroupFinancialReport(
+        group_id=group_id,
+        requester_user_id=current_user.id,
+        period_type=request.period.type,
+        selected_date=request.period.selected_date,
+        start_date=start_date,
+        end_date=end_date,
+        included_sections=requested_keys,
+        payload=section_payload,
+    )
+    session.add(report)
+    session.commit()
+    session.refresh(report)
+
+    return {
+        "status": "success",
+        "data": {
+            "report_id": report.report_id,
+            "group_id": group_id,
+            "viewer_role": membership.role,
+            "included_sections": requested_keys,
+            "period": {
+                "type": request.period.type,
+                "selected_date": request.period.selected_date.isoformat(),
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+            },
+            "sections": [
+                {
+                    "key": key,
+                    "label": REPORT_SECTION_BY_KEY[key]["label"],
+                    "data": section_payload[key],
+                }
+                for key in requested_keys
+            ],
+        },
+    }
 
 @router.get("/{group_id}/reports/custom", summary="Get Custom Savings Report Data")
 def get_custom_saving_report(
@@ -30,14 +210,7 @@ def get_custom_saving_report(
     Generates the comprehensive Weekly Savings Report data for the frontend to display.
     """
     # 1. Verify access
-    membership = session.exec(
-        select(GroupMembership).where(
-            GroupMembership.group_id == group_id,
-            GroupMembership.user_id == current_user.id
-        )
-    ).first()
-    if not membership:
-        raise HTTPException(status_code=403, detail="Not a member of this group.")
+    membership = _get_active_membership(session, group_id, current_user.id)
 
     # 2. Determine time window
     if target_date_ms:
@@ -52,7 +225,12 @@ def get_custom_saving_report(
     end_ms = int(end_of_period.timestamp() * 1000)
 
     # 3. Members stats
-    all_members = session.exec(select(GroupMembership).where(GroupMembership.group_id == group_id)).all()
+    all_members = session.exec(
+        select(GroupMembership).where(
+            GroupMembership.group_id == group_id,
+            GroupMembership.status == "ACTIVE",
+        )
+    ).all()
     total_members = len(all_members)
     
     # 4. Obligations for this period
@@ -65,7 +243,7 @@ def get_custom_saving_report(
     ).all()
     
     # Fetch settings for visibility and reserve fund math
-    vis_settings = session.exec(select(GroupVisibilitySettings).where(GroupVisibilitySettings.group_id == group_id)).first()
+    vis_settings = _get_visibility_settings(session, group_id)
     fin_settings = session.exec(select(GroupFinancialSettings).where(GroupFinancialSettings.group_id == group_id)).first()
     is_admin = membership.role == "ADMIN"
     
@@ -178,7 +356,48 @@ def get_custom_saving_report(
     except BucketError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    # 7. Build the final report payload matching UI exactly
+    member_ids = [member.user_id for member in all_members]
+    user_rows = session.exec(
+        select(User.id, User.full_name).where(User.id.in_(member_ids))
+    ).all() if member_ids else []
+    names_by_id = {str(user_id): full_name or "Member" for user_id, full_name in user_rows}
+
+    members_who_saved = []
+    members_who_missed = []
+    for user_id, stats in member_stats.items():
+        entry = {
+            "user_id": user_id,
+            "name": names_by_id.get(user_id, "Member"),
+            "full_deposits": stats["full_deposits"],
+            "partial_deposits": stats["half_deposits"],
+            "missed_deposits": stats["not_deposited"],
+        }
+        if stats["full_deposits"] + stats["half_deposits"] > 0:
+            members_who_saved.append(entry)
+        if stats["not_deposited"] > 0:
+            members_who_missed.append(entry)
+
+    contribution_history = [
+        {
+            "user_id": str(obligation.user_id),
+            "member_name": names_by_id.get(str(obligation.user_id), "Member"),
+            "due_date": obligation.due_date,
+            "amount_due": obligation.amount_due,
+            "amount_paid": obligation.amount_paid,
+            "status": obligation.status,
+        }
+        for obligation in period_obligations
+    ]
+    all_member_names = [
+        {
+            "user_id": str(member.user_id),
+            "name": names_by_id.get(str(member.user_id), "Member"),
+            "role": member.role,
+        }
+        for member in all_members
+    ]
+
+    # 7. Build the report payload from persisted group and payment data.
     report_data = {
         "report_period": f"{start_of_period.strftime('%d %b')} - {end_of_period.strftime('%d %b %Y')}",
         "days_analyzed": days,
@@ -190,13 +409,22 @@ def get_custom_saving_report(
         "week_totals": week_totals,
         "balance_counts": summary["balance_counts"],
         "activity": summary["activity"],
-        "payout_rotation": summary["payout_rotation"]
+        "payout_rotation": summary["payout_rotation"],
+        "members_who_saved": members_who_saved,
+        "members_who_missed": members_who_missed,
+        "contribution_history": contribution_history,
+        "all_members": all_member_names,
     }
-    
-    # Apply Payout Rules Visibility
-    if not is_admin and (not vis_settings or not vis_settings.vis_manage_payout_order):
-        # Hide payout rotation details from members if the admin toggled it off
-        report_data.pop("payout_rotation", None)
+
+    section_visibility = load_report_section_visibility(session, group_id)
+    if not is_admin:
+        for section in REPORT_SECTION_BY_KEY.values():
+            if not section_visibility[section["key"]]:
+                for field_name in section["fields"]:
+                    report_data.pop(field_name, None)
+        if not vis_settings.vis_member_total_savings:
+            report_data.pop("balance_counts", None)
+            report_data.pop("member_stats", None)
     
     # Add privacy-gated financial metrics
     if is_admin or (vis_settings and vis_settings.vis_report_expected_revenue):

@@ -9,6 +9,7 @@ from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.finance import MemberObligation, GroupPayout
 from app.models.group.rotating import RotatingGroupDetails
+from app.models.group.target_savings import TargetSavingsGroupDetails
 from app.models.group.chat import GroupChatMessage, GroupChatReadReceipt
 from app.schemas.group_dashboard_summary import (
     RingStatus,
@@ -103,6 +104,29 @@ class GroupDashboardSummaryService:
         ).all()
         current_cycles: Dict[str, int] = {rd.group_id: rd.current_cycle for rd in rot_details_list}
         rot_details_by_group: Dict[str, RotatingGroupDetails] = {rd.group_id: rd for rd in rot_details_list}
+
+        target_details_list = session.exec(
+            select(TargetSavingsGroupDetails).where(
+                TargetSavingsGroupDetails.group_id.in_(group_ids)
+            )
+        ).all()
+        target_details_by_group: Dict[str, TargetSavingsGroupDetails] = {
+            details.group_id: details for details in target_details_list
+        }
+        for group in groups:
+            target = target_details_by_group.get(group.group_id)
+            if (
+                group.type == "GOAL_SAVINGS"
+                and target
+                and target.allow_contribution_schedule
+                and target.allow_collection_frequency
+                and target.collection_frequency_days > 0
+                and group.start_date
+            ):
+                elapsed_ms = max(0, now_ms - group.start_date)
+                current_cycles[group.group_id] = (
+                    elapsed_ms // (target.collection_frequency_days * 86400000)
+                ) + 1
 
         # -------------------------------------------------------------
         # QUERY 4: Bulk Obligations Calculation (In-memory grouping)
@@ -218,9 +242,17 @@ class GroupDashboardSummaryService:
             max_m = group.max_members or tot_members
 
             if group.status in ["FORMING", "PENDING"]:
+                target = target_details_by_group.get(gid)
+                has_goal_schedule = bool(
+                    target
+                    and target.allow_contribution_schedule
+                    and target.allow_collection_frequency
+                    and target.collection_frequency_days > 0
+                )
+                show_join_ring = group.type != "GOAL_SAVINGS" or has_goal_schedule
                 ring_status = RingStatus(
-                    total_expected_members=max_m,
-                    paid_on_time_count=tot_members,
+                    total_expected_members=max_m if show_join_ring else 0,
+                    paid_on_time_count=tot_members if show_join_ring else 0,
                     missed_deadline_count=0
                 )
                 ticker_messages: List[ActionMessage] = []
@@ -267,11 +299,21 @@ class GroupDashboardSummaryService:
                     elif ob.due_date and now_ms > ob.due_date and ob.amount_paid == 0:
                         missed_count += 1
 
+                target = target_details_by_group.get(gid)
+                scheduled_goal_ring = (
+                    group.type != "GOAL_SAVINGS"
+                    or (
+                        target is not None
+                        and target.allow_contribution_schedule
+                        and target.allow_collection_frequency
+                        and target.collection_frequency_days > 0
+                    )
+                )
                 ring_status = RingStatus(
-                    total_expected_members=tot_members,
-                    paid_on_time_count=paid_count,
-                    partial_paid_count=partial_count,
-                    missed_deadline_count=missed_count
+                    total_expected_members=tot_members if scheduled_goal_ring else 0,
+                    paid_on_time_count=paid_count if scheduled_goal_ring else 0,
+                    partial_paid_count=partial_count if scheduled_goal_ring else 0,
+                    missed_deadline_count=missed_count if scheduled_goal_ring else 0,
                 )
 
                 # Compute Ticker Messages in Memory
@@ -324,12 +366,60 @@ class GroupDashboardSummaryService:
                                     is_alert=False
                                 ))
                 elif group.type in ["EVENT_COMMITTEE", "FUNDRAISER", "GOAL_SAVINGS"]:
-                    ticker_messages.append(ActionMessage(
-                        text=f"Total collected: {group.total_balance:,} {group.currency}",
-                        type="GOAL_PROGRESS",
-                        has_blue_ticks=False,
-                        is_alert=False
-                    ))
+                    if group.type == "GOAL_SAVINGS":
+                        saved = max(
+                            target.total_saved_amount if target else 0,
+                            group.total_balance or 0
+                        )
+                        if target and target.allow_target_amount and target.target_amount:
+                            remaining = max(0, target.target_amount - saved)
+                            progress = min(100, round(saved / target.target_amount * 100))
+                            ticker_messages.append(ActionMessage(
+                                text=(
+                                    f"Goal progress: {saved:,}/{target.target_amount:,} "
+                                    f"{group.currency} ({progress}%) · {remaining:,} remaining"
+                                ),
+                                type="GOAL_PROGRESS",
+                                has_blue_ticks=False,
+                                is_alert=False
+                            ))
+                        else:
+                            ticker_messages.append(ActionMessage(
+                                text=f"Total saved: {saved:,} {group.currency}",
+                                type="GOAL_PROGRESS",
+                                has_blue_ticks=False,
+                                is_alert=False
+                            ))
+                        if (
+                            target
+                            and target.allow_contribution_schedule
+                            and target.allow_collection_frequency
+                            and target.collection_frequency_days > 0
+                        ):
+                            user_ob = next(
+                                (
+                                    ob for ob in obs_by_group.get(gid, [])
+                                    if str(ob.user_id) == user_id_str
+                                ),
+                                None,
+                            )
+                            if user_ob and user_ob.amount_due > user_ob.amount_paid:
+                                ticker_messages.insert(0, ActionMessage(
+                                    text=(
+                                        f"Contribution due: "
+                                        f"{user_ob.amount_due - user_ob.amount_paid:,} {group.currency}"
+                                    ),
+                                    type="GOAL_CONTRIBUTION_DUE",
+                                    has_blue_ticks=False,
+                                    is_alert=bool(user_ob.due_date and user_ob.due_date < now_ms)
+                                ))
+                    else:
+                        ticker_messages.append(ActionMessage(
+                            text=f"Total collected: {group.total_balance:,} {group.currency}",
+                            type="GOAL_PROGRESS",
+                            has_blue_ticks=False,
+                            is_alert=False
+                        ))
                 elif group.type == "BILL_SPLIT":
                     ticker_messages.append(ActionMessage(
                         text="Split obligation cycle due soon",
@@ -460,6 +550,26 @@ class GroupDashboardSummaryService:
         ).first()
         target_cycle = rot_detail.current_cycle if (rot_detail and rot_detail.current_cycle) else 1
 
+        group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+        target = session.exec(
+            select(TargetSavingsGroupDetails).where(
+                TargetSavingsGroupDetails.group_id == group_id
+            )
+        ).first()
+        if group and group.type == "GOAL_SAVINGS":
+            if not (
+                target
+                and target.allow_contribution_schedule
+                and target.allow_collection_frequency
+                and target.collection_frequency_days > 0
+            ):
+                return RingStatus(total_expected_members=0)
+            if group.start_date:
+                target_cycle = (
+                    max(0, now_ms - group.start_date)
+                    // (target.collection_frequency_days * 86400000)
+                ) + 1
+
         # 3. Obligations for this cycle
         obligations = session.exec(
             select(MemberObligation).where(
@@ -485,4 +595,3 @@ class GroupDashboardSummaryService:
             partial_paid_count=partial_count,
             missed_deadline_count=missed_count
         )
-

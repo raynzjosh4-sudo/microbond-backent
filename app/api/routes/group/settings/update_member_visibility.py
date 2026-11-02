@@ -1,22 +1,37 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
+import uuid
+from datetime import datetime, timezone
 
 from app.core.database import get_session
 from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
-from app.models.group.settings import GroupVisibilitySettings
+from app.models.group.settings import GroupCommunicationSettings, GroupVisibilitySettings
+from app.models.group.report import GroupReportSectionVisibility
+from app.models.group.chat import GroupChatMessage
 from app.models.group.long_term import TargetSavingsGroupDetails
 from app.services.audit_service import AuditService
-from app.api.routes.group.chat.messages import broadcast_system_message_sync
-from app.services.websocket_manager import ws_manager
+from app.services.group.report_visibility import (
+    REPORT_SECTION_CATALOG,
+    REPORT_SECTION_KEYS,
+    load_report_section_visibility,
+)
+from app.api.routes.group.chat.messages.helpers.messages_helpers import (
+    publish_saved_system_message_sync,
+)
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Settings"])
 
 
 class UpdateMemberVisibilityScreenRequest(BaseModel):
+    report_sections: Dict[str, bool] = Field(
+        default_factory=dict,
+        description="Visibility for the nine stable report section keys.",
+    )
+
     # 1. Goal controls
     lock_funds: Optional[bool] = Field(default=None, description="Lock/freeze contributions until goal is reached")
     is_locked: Optional[bool] = Field(default=None, description="Alias for lock_funds")
@@ -131,8 +146,10 @@ def get_member_visibility_screen(
             "late_fee_escalation": vis.vis_late_fee_escalation,
         },
         "privacy_and_records": {
+            "member_total_savings": vis.vis_member_total_savings,
             "download_official_statement": vis.vis_download_official_statement,
             "chat_history_cleanup": vis.vis_chat_history_cleanup,
+            "deposit_widget_visibility": getattr(vis, "deposit_widget_visibility", "ALL_MEMBERS"),
         },
         "contribution_messages": {
             "broadcast_individual_contribution_receipts": vis.vis_broadcast_individual_deposit_receipts,
@@ -176,8 +193,10 @@ def get_member_visibility_screen(
         "vis_liquidity_buffer_coverage": vis.vis_liquidity_buffer_coverage,
         "vis_late_fee_escalation": vis.vis_late_fee_escalation,
         # Privacy & records
+        "vis_member_total_savings": vis.vis_member_total_savings,
         "vis_download_official_statement": vis.vis_download_official_statement,
         "vis_chat_history_cleanup": vis.vis_chat_history_cleanup,
+        "deposit_widget_visibility": getattr(vis, "deposit_widget_visibility", "ALL_MEMBERS"),
         # Contribution messages
         "vis_broadcast_individual_deposit_receipts": vis.vis_broadcast_individual_deposit_receipts,
         "vis_announce_payout_updates": vis.vis_announce_payout_updates,
@@ -202,6 +221,12 @@ def get_member_visibility_screen(
         "data": {
             "group_id": group_id,
             "is_admin": is_admin,
+            "deposit_widget_visibility": getattr(vis, "deposit_widget_visibility", "ALL_MEMBERS"),
+            "report_sections": load_report_section_visibility(session, group_id),
+            "report_section_catalog": [
+                {key: section[key] for key in ("key", "label", "description")}
+                for section in REPORT_SECTION_CATALOG
+            ],
             "sections": sections,
             "toggles": flat_toggles
         }
@@ -212,7 +237,6 @@ def get_member_visibility_screen(
 def update_member_visibility_screen(
     group_id: str,
     request: UpdateMemberVisibilityScreenRequest,
-    background_tasks: BackgroundTasks = BackgroundTasks(),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
@@ -231,6 +255,29 @@ def update_member_visibility_screen(
     if not admin_membership:
         raise HTTPException(status_code=403, detail="Only the Group Admin can update visibility settings.")
 
+    unsupported_keys = set(request.report_sections) - set(REPORT_SECTION_KEYS)
+    if unsupported_keys:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Unsupported visibility setting keys.",
+                "keys": sorted(unsupported_keys),
+            },
+        )
+
+    if request.deposit_widget_visibility is not None:
+        allowed_values = ["ALL_MEMBERS", "ADMIN_ONLY", "ADMIN_AND_TREASURER"]
+        normalized = request.deposit_widget_visibility.upper()
+        if normalized not in allowed_values:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": "Invalid deposit widget visibility.",
+                    "allowed_values": allowed_values,
+                    "value": request.deposit_widget_visibility,
+                },
+            )
+
     settings = session.exec(
         select(GroupVisibilitySettings).where(GroupVisibilitySettings.group_id == group_id)
     ).first()
@@ -238,6 +285,32 @@ def update_member_visibility_screen(
     if not settings:
         settings = GroupVisibilitySettings(group_id=group_id)
         session.add(settings)
+
+    section_rows = session.exec(
+        select(GroupReportSectionVisibility).where(
+            GroupReportSectionVisibility.group_id == group_id
+        )
+    ).all()
+    sections_by_key = {row.section_key: row for row in section_rows}
+    changed_report_sections = []
+    for key, value in request.report_sections.items():
+        row = sections_by_key.get(key)
+        old_value = row.visible_to_members if row else False
+        if old_value == value:
+            continue
+        if row is None:
+            row = GroupReportSectionVisibility(
+                group_id=group_id,
+                section_key=key,
+                visible_to_members=value,
+                updated_by=current_user.id,
+            )
+        else:
+            row.visible_to_members = value
+            row.updated_by = current_user.id
+            row.updated_at = datetime.now(timezone.utc)
+        session.add(row)
+        changed_report_sections.append((key, old_value, value))
 
     # 1. Goal controls
     details = session.exec(
@@ -292,6 +365,8 @@ def update_member_visibility_screen(
         settings.vis_chat_history_cleanup = request.vis_chat_history_cleanup
     if request.vis_member_total_savings is not None:
         settings.vis_member_total_savings = request.vis_member_total_savings
+    if request.deposit_widget_visibility is not None:
+        settings.deposit_widget_visibility = request.deposit_widget_visibility.upper()
 
     # 6. Contribution messages
     if request.vis_broadcast_individual_deposit_receipts is not None:
@@ -338,49 +413,68 @@ def update_member_visibility_screen(
         entity_id=group_id,
         payload={
             "updated_by": str(current_user.id),
-            "updated_fields": {k: v for k, v in request.dict().items() if v is not None}
+            "updated_fields": {
+                k: v
+                for k, v in request.model_dump(exclude={"report_sections"}).items()
+                if v is not None
+            },
+            "report_sections": request.report_sections,
         },
         actor_user_id=current_user.id
     )
 
-    session.commit()
-    session.refresh(settings)
-
     admin_name = current_user.full_name or "Admin"
-    system_msg = broadcast_system_message_sync(
-        group_id=group_id,
-        message_text=f"👁️ Group Visibility Settings updated by {admin_name}. Information and report transparency rules have been refreshed for this group.",
-        message_type="SYSTEM_EVENT",
-        sender_id="SYSTEM",
-        session=session,
-        background_tasks=background_tasks,
-        attachments=[{
-            "category": "SETTINGS_UPDATE",
-            "setting_type": "VISIBILITY",
-            "admin_id": str(current_user.id),
-            "admin_name": admin_name
-        }]
-    )
-    if background_tasks is None and system_msg:
-        try:
-            import asyncio
-            asyncio.create_task(
-                ws_manager.broadcast_to_group(
-                    group_id,
-                    {
-                        "event_type": "NEW_MESSAGE",
-                        "message": system_msg.model_dump(mode="json")
-                    }
+    communication = session.exec(
+        select(GroupCommunicationSettings).where(
+            GroupCommunicationSettings.group_id == group_id
+        )
+    ).first()
+    section_messages = []
+    if communication is None or communication.announce_system_events:
+        labels = {section["key"]: section["label"] for section in REPORT_SECTION_CATALOG}
+        for key, old_value, new_value in changed_report_sections:
+            old_label = "shown" if old_value else "hidden"
+            new_label = "shown" if new_value else "hidden"
+            section_messages.append(
+                GroupChatMessage(
+                    client_message_id=str(uuid.uuid4()),
+                    group_id=group_id,
+                    sender_id=str(current_user.id),
+                    message_type="SYSTEM_EVENT",
+                    message_text=(
+                        f"{admin_name} changed the {labels[key]} report section "
+                        f"from {old_label} to {new_label} for members."
+                    ),
+                    attachments=[
+                        {
+                            "category": "SETTINGS_UPDATE",
+                            "setting_type": "REPORT_SECTION_VISIBILITY",
+                            "setting": key,
+                            "setting_label": labels[key],
+                            "old_value": old_value,
+                            "new_value": new_value,
+                            "admin_id": str(current_user.id),
+                            "admin_name": admin_name,
+                        }
+                    ],
+                    status="SENT",
                 )
             )
-        except Exception:
-            pass
+    session.add_all(section_messages)
+    session.commit()
+    session.refresh(settings)
+    for message in section_messages:
+        session.refresh(message)
+        publish_saved_system_message_sync(message)
 
     return {
         "status": "success",
         "message": "Member visibility settings updated successfully.",
         "data": {
             "group_id": group_id,
+            "report_sections": load_report_section_visibility(session, group_id),
+            "lock_funds": details.lock_funds if details else False,
+            "hide_leaderboard": details.hide_leaderboard if details else False,
             "vis_multi_signature_roster": settings.vis_multi_signature_roster,
             "vis_active_audit_status": settings.vis_active_audit_status,
             "vis_approval_quorum": settings.vis_approval_quorum,
@@ -391,8 +485,10 @@ def update_member_visibility_screen(
             "vis_contribution_reminder_schedule": settings.vis_contribution_reminder_schedule,
             "vis_liquidity_buffer_coverage": settings.vis_liquidity_buffer_coverage,
             "vis_late_fee_escalation": settings.vis_late_fee_escalation,
+            "vis_member_total_savings": settings.vis_member_total_savings,
             "vis_download_official_statement": settings.vis_download_official_statement,
             "vis_chat_history_cleanup": settings.vis_chat_history_cleanup,
+            "deposit_widget_visibility": settings.deposit_widget_visibility,
             "vis_broadcast_individual_deposit_receipts": settings.vis_broadcast_individual_deposit_receipts,
             "vis_announce_payout_updates": settings.vis_announce_payout_updates,
             "vis_show_transfer_receipts": settings.vis_show_transfer_receipts,
