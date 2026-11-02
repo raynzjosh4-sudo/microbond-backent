@@ -10,6 +10,7 @@ from .investment_club import router as investment_club_router
 from .association_dues import router as association_dues_router
 from .bill_split import router as bill_split_router
 from .settings.update_general import router as settings_router
+from .settings.commonsetting.common_settings import router as common_settings_router
 from .settings.update_group_profile import router as update_group_profile_router
 from .settings.update_privacy import router as privacy_router
 from .settings.update_permissions import router as permissions_router
@@ -95,6 +96,7 @@ router.include_router(investment_club_router)
 router.include_router(association_dues_router)
 router.include_router(bill_split_router)
 router.include_router(settings_router)
+router.include_router(common_settings_router)
 router.include_router(update_group_profile_router)
 router.include_router(upload_group_image_router)
 router.include_router(privacy_router)
