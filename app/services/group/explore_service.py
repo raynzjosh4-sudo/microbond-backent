@@ -451,3 +451,4 @@ class ExploreGroupService:
             cycle_summary=cycle_summary,
             join_requirements_checklist=checklist,
         )
+

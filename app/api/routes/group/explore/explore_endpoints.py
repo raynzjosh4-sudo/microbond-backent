@@ -94,3 +94,4 @@ def get_explore_group_preview(
             detail="Group not found or is private/invite-only.",
         )
     return preview
+

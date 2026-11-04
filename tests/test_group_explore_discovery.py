@@ -330,3 +330,4 @@ def test_categories_and_preview_endpoints(db_session: Session):
     assert prev_404.status_code == 404
 
     app.dependency_overrides.clear()
+

@@ -78,3 +78,4 @@ class ExplorePreviewResponse(BaseModel):
     payout_order_strategy: Optional[str] = None
     cycle_summary: Optional[str] = None
     join_requirements_checklist: List[Dict[str, Any]] = Field(default_factory=list)
+

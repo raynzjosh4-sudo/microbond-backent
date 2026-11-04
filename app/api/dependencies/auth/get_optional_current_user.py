@@ -43,3 +43,4 @@ def get_optional_current_user(
         return session.get(User, user_uuid)
     except Exception:
         return None
+
