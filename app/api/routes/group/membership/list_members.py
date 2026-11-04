@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from app.core.database import get_session
 from app.api.dependencies import get_current_user
 from app.models.user.user import User
-from app.models.group.group import GroupMembership
+from app.models.group.group import Group, GroupMembership
 from app.models.group.finance import MemberObligation
 from app.models.group.settings import GroupVisibilitySettings
 
@@ -15,11 +15,14 @@ router = APIRouter(prefix="/api/v1/groups", tags=["Group Membership"])
 class MemberListResponse(BaseModel):
     user_id: str
     full_name: str
+    profile_name: Optional[str] = None
+    name: Optional[str] = None
     phone_number: str
-    profile_picture_url: Optional[str]
+    profile_picture_url: Optional[str] = None
     role: str
     is_signer: bool
-    payout_position: Optional[int]
+    payout_position: Optional[int] = None
+    slot_number: Optional[int] = None
     status: str
     total_contributed: int
     trust_score: int
@@ -73,7 +76,9 @@ def list_group_members(
     import time
     current_time_ms = int(time.time() * 1000)
 
-    # Verify the requester is actually in the group
+    group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+
+    # Verify the requester is actually in the group (or group is PUBLIC for preview)
     membership = session.exec(
         select(GroupMembership).where(
             GroupMembership.group_id == group_id,
@@ -82,16 +87,18 @@ def list_group_members(
         )
     ).first()
     
-    if not membership:
+    if not membership and (not group or (group.visibility or "").upper() != "PUBLIC"):
         raise HTTPException(status_code=403, detail="You must be a member of the group to view the roster.")
 
     # Check contact privacy settings
     vis_settings = session.exec(
         select(GroupVisibilitySettings).where(GroupVisibilitySettings.group_id == group_id)
     ).first()
-    hide_member_contacts = vis_settings.hide_member_contact_info if vis_settings else True
-    is_viewer_admin = (membership.role == "ADMIN")
-    show_savings = is_viewer_admin or (getattr(vis_settings, "vis_member_total_savings", True) if vis_settings else True)
+    hide_member_contacts = (vis_settings.hide_member_contact_info if vis_settings else True) or (membership is None)
+    is_viewer_admin = bool(membership and membership.role == "ADMIN")
+    show_savings = is_viewer_admin or (
+        bool(membership) and (getattr(vis_settings, "vis_member_total_savings", True) if vis_settings else True)
+    )
 
     # Base query combining Member and User
     stmt = select(GroupMembership, User).join(User, GroupMembership.user_id == User.id).where(
@@ -194,7 +201,7 @@ def list_group_members(
     results = session.exec(stmt).all()
     
     response_list = []
-    for mem, usr in results:
+    for idx, (mem, usr) in enumerate(results, start=1):
         # Calculate outstanding balance
         obligations = session.exec(
             select(MemberObligation).where(
@@ -207,7 +214,7 @@ def list_group_members(
         
         from app.services.privacy import can_view_profile_photo
         allow_photo = can_view_profile_photo(
-            usr, viewer_user_id=current_user.id, shares_group=True
+            usr, viewer_user_id=current_user.id, shares_group=bool(membership)
         )
 
         if is_viewer_admin or usr.id == current_user.id or not hide_member_contacts:
@@ -216,14 +223,20 @@ def list_group_members(
             p = str(usr.phone_number or "").strip()
             display_phone = f"{p[:5]} *** {p[-3:]}" if len(p) > 6 else "***"
 
+        resolved_name = usr.full_name or "Unknown User"
+        resolved_pos = mem.payout_position if mem.payout_position is not None else idx
+
         response_list.append(MemberListResponse(
             user_id=str(usr.id),
-            full_name=usr.full_name or "Unknown User",
+            full_name=resolved_name,
+            profile_name=resolved_name,
+            name=resolved_name,
             phone_number=display_phone,
             profile_picture_url=usr.profile_picture_url if allow_photo else None,
             role=mem.role,
             is_signer=mem.is_signer,
             payout_position=mem.payout_position,
+            slot_number=resolved_pos,
             status=mem.status,
             total_contributed=mem.total_contributed if show_savings else 0,
             trust_score=usr.trust_score,

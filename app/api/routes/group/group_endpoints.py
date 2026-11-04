@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter
 from .rotating.rotating_endpoints import router as rotating_router
 from .target_savings import router as target_savings_router
@@ -78,9 +77,11 @@ from .deposits.daily_deposit_widget import router as daily_deposit_widget_router
 
 from .settings.pending_disbursals import router as pending_disbursals_router
 from .create_group import router as create_group_router
+from .explore import router as explore_router
 
 router = APIRouter()
 router.include_router(create_group_router)
+router.include_router(explore_router)
 router.include_router(audit_report_delivery_router)
 router.include_router(dashboard_summary_router)
 router.include_router(deposit_pipeline_router)
@@ -158,3 +159,28 @@ router.include_router(chat_polls_router)
 router.include_router(pending_disbursals_router)
 router.include_router(trust_members_router)
 router.include_router(records_settings_router)
+
+# Compatibility aliases for singular /api/v1/group/association-dues/pay & /api/v1/group/obligations/{obligation_id}/pay
+from .association_dues.pay_dues import pay_association_dues_direct
+from .deposit_pipeline.direct_deposit import pay_member_obligation
+router.add_api_route(
+    "/api/v1/group/association-dues/pay",
+    pay_association_dues_direct,
+    methods=["POST"],
+    tags=["Association Dues Groups"],
+    summary="Pay Association Dues or Queued Obligation (Singular Alias)",
+)
+router.add_api_route(
+    "/api/v1/group/obligations/{obligation_id}/pay",
+    pay_member_obligation,
+    methods=["POST"],
+    tags=["Group Deposit Pipeline"],
+    summary="Pay Member Obligation (Singular Alias)",
+)
+router.add_api_route(
+    "/api/v1/group/obligations/{obligation_id}/cover-default",
+    pay_member_obligation,
+    methods=["POST"],
+    tags=["Group Deposit Pipeline"],
+    summary="Cover Defaulted Member Obligation (Singular Alias)",
+)

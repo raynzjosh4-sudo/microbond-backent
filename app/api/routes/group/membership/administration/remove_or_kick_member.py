@@ -25,7 +25,7 @@ async def remove_or_kick_member(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Allows a Group Admin to remove or ban a member from the group.
+    Allows a Group Admin to remove or ban a member (or decline a pending join request) from the group.
     - Prevents kicking the group creator
     - Checks for pending obligations/debts (flags warning in audit)
     - Automatically updates member count
@@ -55,12 +55,14 @@ async def remove_or_kick_member(
         select(GroupMembership).where(
             GroupMembership.group_id == group_id,
             GroupMembership.user_id == target_uuid,
-            GroupMembership.status == "ACTIVE"
+            GroupMembership.status.in_(["ACTIVE", "PENDING"])
         )
     ).first()
 
     if not target_membership:
-        raise HTTPException(status_code=404, detail="Target member is not active in this group.")
+        raise HTTPException(status_code=404, detail="Target member or pending request not found in this group.")
+
+    was_pending = target_membership.status == "PENDING"
 
     # Check if target has unpaid debts
     pending_debt = session.exec(
@@ -74,7 +76,7 @@ async def remove_or_kick_member(
     target_user = session.get(User, target_uuid)
     target_name = target_user.full_name if target_user else "Member"
 
-    # Action: BAN (mark as BANNED) or KICK (delete membership)
+    # Action: BAN (mark as BANNED) or KICK/DECLINE (delete membership)
     now_ms = int(time.time() * 1000)
     if payload.ban:
         target_membership.status = "BANNED"
@@ -83,9 +85,29 @@ async def remove_or_kick_member(
     else:
         session.delete(target_membership)
 
-    group.member_count = max(0, group.member_count - 1)
-    session.add(group)
+    if not was_pending:
+        group.member_count = max(0, group.member_count - 1)
+        session.add(group)
     session.commit()
+
+    if was_pending:
+        if target_user and target_user.fcm_token:
+            send_push_notification(
+                token=target_user.fcm_token,
+                title="Join Request Declined",
+                body=f"Your request to join '{group.name}' was declined by an admin.",
+                data={"type": "JOIN_REQUEST_DECLINED", "group_id": group_id}
+            )
+        return {
+            "status": "success",
+            "message": f"Join request for {target_name} declined.",
+            "data": {
+                "group_id": group_id,
+                "target_user_id": str(target_uuid),
+                "action": "BANNED" if payload.ban else "DECLINED",
+                "had_outstanding_debt": False
+            }
+        }
 
     # Disconnect live WebSocket for the kicked user
     await ws_manager.force_disconnect_user(str(target_uuid), reason="Removed from group by administrator")

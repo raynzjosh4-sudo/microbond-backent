@@ -5,6 +5,9 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from app.api.dependencies import get_current_user
+from app.api.routes.group.settings.common_settings_messages import (
+    broadcast_common_setting_changes,
+)
 from app.core.database import get_session
 from app.models.group.group import Group, GroupMembership
 from app.models.group.rotating import RotatingGroupDetails
@@ -321,7 +324,6 @@ def update_common_settings(
     session.info["settings_announcement_skip_tracker"] = True
     session.info["settings_announcement_common_changes"] = changed_values
     session.info["settings_announcement_common_settings"] = settings
-
     for field, value in updates.items():
         if value is None and field not in {
             "maximum_member_capacity",
@@ -339,6 +341,14 @@ def update_common_settings(
         exclude={"id", "group_id", "updated_at"}
     )
 
+    if changed_values:
+        broadcast_common_setting_changes(
+            group_id=group_id,
+            changed_values=changed_values,
+            settings=settings,
+            admin=current_user,
+            session=session,
+        )
     return {
         "status": "success",
         "message": "Common settings updated.",

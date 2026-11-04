@@ -17,6 +17,7 @@ from app.models.group.settings import (
 )
 from app.api.dependencies import get_current_user
 from app.api.routes.group.chat.messages import broadcast_system_message_sync
+from app.models.group.welfare_event import WelfareFundConfig, WelfareFundOperationalSettings
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Core"])
 
@@ -167,6 +168,40 @@ def create_unified_group(
     )
     session.add(GroupCommunicationSettings(group_id=new_group_id))
     session.add(GroupVisibilitySettings(group_id=new_group_id))
+    
+    # 4b. Setup Emergency / Welfare Fund Configuration
+    if request.type in ["EMERGENCY", "WELFARE_FUND"]:
+        is_emerg = (request.type == "EMERGENCY")
+        now_ts = int(time.time() * 1000)
+        session.add(
+            WelfareFundConfig(
+                group_id=new_group_id,
+                contribution_amount=50000,
+                collection_frequency_days=30,
+                waiting_period_days=0 if is_emerg else 30,
+                max_claim_amount_per_incident=500000,
+                annual_claim_limit_per_member=1500000,
+                payout_destination_type="MEMBER_ACCOUNT",
+                requires_documentary_evidence=True,
+                claim_approval_policy="ADMIN_ONLY" if is_emerg else "MAJORITY_VOTE",
+                created_at=now_ts
+            )
+        )
+        session.add(
+            WelfareFundOperationalSettings(
+                group_id=new_group_id,
+                minimum_reserve_balance=0,
+                approval_timeout_hours=24 if is_emerg else 48,
+                missed_payment_action="SUSPEND_CLAIM_RIGHTS",
+                enable_late_fees=request.enable_late_fees,
+                allow_annual_dividend_split=False,
+                current_balance=0,
+                total_collected=0,
+                total_paid_out=0,
+                is_active=True,
+                updated_at=now_ts
+            )
+        )
     
     # 5. Create Creator's Membership (Admin)
     new_membership = GroupMembership(

@@ -7,8 +7,9 @@ from uuid import UUID
 from app.core.database import get_session
 from app.api.dependencies import get_current_user
 from app.models.user.user import User
-from app.models.group.group import GroupMembership
+from app.models.group.group import Group, GroupMembership
 from app.models.group.rotating import RotatingGroupDetails
+from app.models.group.settings import GroupVisibilitySettings
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Rotating Group"])
 
@@ -36,22 +37,54 @@ def get_payout_order_roster(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
+    group = session.query(Group).filter_by(group_id=group_id).first()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found.")
+
+    membership = session.query(GroupMembership).filter_by(
+        group_id=group_id, user_id=current_user.id
+    ).first()
+
+    if not membership and (group.visibility or "").upper() != "PUBLIC":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You must be a member of this group to view the payout roster."
+        )
+
     rotating_details = session.query(RotatingGroupDetails).filter_by(group_id=group_id).first()
     if not rotating_details:
         raise HTTPException(status_code=404, detail="This is not a rotating savings group.")
+
+    vis_settings = session.query(GroupVisibilitySettings).filter_by(group_id=group_id).first()
+    hide_contacts = (vis_settings.hide_member_contact_info if vis_settings else True) or (membership is None)
+    is_admin = bool(membership and membership.role == "ADMIN")
 
     members = session.query(GroupMembership).filter_by(group_id=group_id, status="ACTIVE").all()
     sorted_members = sorted(members, key=lambda m: (m.payout_position or 999))
     
     roster = []
-    for m in sorted_members:
+    for idx, m in enumerate(sorted_members, start=1):
         user = session.query(User).filter_by(id=m.user_id).first()
+        resolved_name = (user.full_name if user and user.full_name else "Member")
+        raw_phone = user.phone_number if user and user.phone_number else ""
+        if not membership:
+            display_phone = ""
+        elif is_admin or m.user_id == current_user.id or not hide_contacts:
+            display_phone = raw_phone
+        else:
+            p = str(raw_phone).strip()
+            display_phone = f"{p[:5]} *** {p[-3:]}" if len(p) > 6 else "***"
+
+        pos = m.payout_position if m.payout_position is not None else idx
         roster.append({
             "user_id": str(m.user_id),
-            "name": user.full_name if user else "Member",
-            "phone_number": user.phone_number if user else "",
+            "name": resolved_name,
+            "full_name": resolved_name,
+            "profile_name": resolved_name,
+            "phone_number": display_phone,
             "role": m.role,
-            "payout_position": m.payout_position
+            "payout_position": m.payout_position,
+            "slot_number": pos,
         })
 
     return {

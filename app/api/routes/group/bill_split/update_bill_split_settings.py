@@ -64,15 +64,24 @@ def update_bill_split_settings(
 
     db.commit()
 
+    settings_payload = {
+        "group_id": group_id,
+        "allow_tip_or_extra": ops.allow_tip_or_extra,
+        "auto_close_on_settlement": ops.auto_close_on_settlement,
+        "send_reminder_hours_before": ops.send_reminder_hours_before,
+        "enable_late_fees": ops.enable_late_fees,
+        "late_fee_amount": ops.late_fee_amount,
+        "grace_period_hours": ops.grace_period_hours,
+        "is_settled": ops.is_settled,
+        "total_collected": ops.total_collected,
+        "total_tip_collected": ops.total_tip_collected,
+        "updated_at": ops.updated_at,
+    }
+
     return {
         "status": "success",
         "message": "Bill Split operational settings updated successfully.",
-        "settings": {
-            "allow_tip_or_extra": ops.allow_tip_or_extra,
-            "auto_close_on_settlement": ops.auto_close_on_settlement,
-            "send_reminder_hours_before": ops.send_reminder_hours_before,
-            "enable_late_fees": ops.enable_late_fees,
-            "late_fee_amount": ops.late_fee_amount,
-            "grace_period_hours": ops.grace_period_hours,
-        }
+        **settings_payload,
+        "settings": settings_payload,
+        "data": settings_payload,
     }

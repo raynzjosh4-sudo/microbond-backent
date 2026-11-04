@@ -8,4 +8,5 @@ class UpdateEventCommitteeSettingsRequest(BaseModel):
     member_quota_amount: Optional[int] = Field(default=None, ge=0)
     allow_guest_deposits: Optional[bool] = Field(default=None)
     allow_partial_disbursements: Optional[bool] = Field(default=None)
+    milestone_unlocks_enabled: Optional[bool] = Field(default=None)
     signoff_trustee_user_ids: Optional[List[str]] = Field(default=None, description="User IDs required to approve payments")

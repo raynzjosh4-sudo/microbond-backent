@@ -160,7 +160,7 @@ def process_daily_late_fees():
                 if obligation.status == "PENDING" and obligation.due_date < current_time_epoch <= cutoff_time:
                     if obligation.last_reminder_tier != 0:
                         user = session.get(User, obligation.user_id)
-                        group = session.get(Group, obligation.group_id)
+                        group = session.exec(select(Group).where(Group.group_id == obligation.group_id)).first()
                         unpaid = max(0, obligation.amount_due - obligation.amount_paid)
                         curr = group.currency or "UGX" if group else "UGX"
                         if user and user.fcm_token:

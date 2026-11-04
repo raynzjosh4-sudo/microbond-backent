@@ -2,7 +2,7 @@ import time
 from fastapi import HTTPException
 from sqlmodel import Session, select
 
-from app.models.group.group import GroupMembership
+from app.models.group.group import Group, GroupMembership
 from app.models.user.user import User
 from app.models.group.long_term import FundraiserCampaignConfig, FundraiserLiveStats
 
@@ -30,6 +30,9 @@ def require_admin(group_id: str, user: User, session: Session):
         )
     ).first()
     if not membership:
+        group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+        if group and group.created_by_user_id == user.id:
+            return None
         raise HTTPException(status_code=403, detail="Only the group admin can do this.")
     return membership
 
@@ -42,5 +45,8 @@ def require_member(group_id: str, user: User, session: Session):
         )
     ).first()
     if not membership:
+        group = session.exec(select(Group).where(Group.group_id == group_id)).first()
+        if group and group.created_by_user_id == user.id:
+            return None
         raise HTTPException(status_code=403, detail="You must be an active member of this group.")
     return membership

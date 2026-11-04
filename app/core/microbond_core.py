@@ -1639,3 +1639,102 @@ def calculate_escalated_late_fee(
 
 
 
+
+
+def evaluate_emergency_claim(
+    current_balance: int,
+    minimum_reserve_balance: int,
+    requested_amount: int,
+    max_claim_per_incident: int,
+    member_annual_claimed: int,
+    annual_limit: int,
+    member_in_arrears: bool,
+    missed_payment_action: str = "SUSPEND_CLAIM_RIGHTS",
+) -> str:
+    """
+    Evaluates an emergency assistance claim against pool liquidity, incident caps,
+    annual member allowances, and arrears enforcement.
+    Delegates to compiled Rust engine when available, with a verified native reference implementation.
+    Returns a JSON string matching EmergencyClaimEvaluationResult.
+    """
+    if _NATIVE_LOADED and _rust_core is not None and hasattr(_rust_core, "evaluate_emergency_claim"):
+        return _rust_core.evaluate_emergency_claim(
+            current_balance,
+            minimum_reserve_balance,
+            requested_amount,
+            max_claim_per_incident,
+            member_annual_claimed,
+            annual_limit,
+            member_in_arrears,
+            missed_payment_action,
+        )
+
+    if requested_amount <= 0:
+        return json.dumps({
+            "is_eligible": False,
+            "status": "REJECTED",
+            "reason": "Requested amount must be greater than zero.",
+            "requested_amount": requested_amount,
+            "net_disbursable": 0,
+            "remaining_reserve": current_balance,
+            "remaining_member_annual_limit": max(0, annual_limit - member_annual_claimed),
+        })
+
+    if member_in_arrears and missed_payment_action == "SUSPEND_CLAIM_RIGHTS":
+        return json.dumps({
+            "is_eligible": False,
+            "status": "REJECTED",
+            "reason": "Member emergency claim rights are suspended due to arrears in routine dues.",
+            "requested_amount": requested_amount,
+            "net_disbursable": 0,
+            "remaining_reserve": current_balance,
+            "remaining_member_annual_limit": max(0, annual_limit - member_annual_claimed),
+        })
+
+    if requested_amount > max_claim_per_incident:
+        return json.dumps({
+            "is_eligible": False,
+            "status": "REJECTED",
+            "reason": f"Requested amount (UGX {requested_amount:,}) exceeds maximum per-incident claim cap of UGX {max_claim_per_incident:,}.",
+            "requested_amount": requested_amount,
+            "net_disbursable": 0,
+            "remaining_reserve": current_balance,
+            "remaining_member_annual_limit": max(0, annual_limit - member_annual_claimed),
+        })
+
+    total_annual_after = member_annual_claimed + requested_amount
+    if total_annual_after > annual_limit:
+        return json.dumps({
+            "is_eligible": False,
+            "status": "REJECTED",
+            "reason": f"Requested amount breaches annual member claim limit. Already claimed: UGX {member_annual_claimed:,}, Requested: UGX {requested_amount:,}, Annual Limit: UGX {annual_limit:,}.",
+            "requested_amount": requested_amount,
+            "net_disbursable": 0,
+            "remaining_reserve": current_balance,
+            "remaining_member_annual_limit": max(0, annual_limit - member_annual_claimed),
+        })
+
+    if (current_balance - requested_amount) < minimum_reserve_balance:
+        max_available = max(0, current_balance - minimum_reserve_balance)
+        return json.dumps({
+            "is_eligible": False,
+            "status": "REJECTED",
+            "reason": f"Insufficient fund reserve balance. The fund requires maintaining a minimum reserve of UGX {minimum_reserve_balance:,}. Maximum available for disbursement is UGX {max_available:,}.",
+            "requested_amount": requested_amount,
+            "net_disbursable": 0,
+            "remaining_reserve": current_balance,
+            "remaining_member_annual_limit": max(0, annual_limit - member_annual_claimed),
+        })
+
+    remaining_reserve = current_balance - requested_amount
+    remaining_annual = max(0, annual_limit - total_annual_after)
+
+    return json.dumps({
+        "is_eligible": True,
+        "status": "APPROVED",
+        "reason": None,
+        "requested_amount": requested_amount,
+        "net_disbursable": requested_amount,
+        "remaining_reserve": remaining_reserve,
+        "remaining_member_annual_limit": remaining_annual,
+    })

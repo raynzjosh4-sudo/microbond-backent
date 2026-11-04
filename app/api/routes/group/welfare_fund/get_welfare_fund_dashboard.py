@@ -35,11 +35,15 @@ def get_welfare_fund_dashboard(
     is_eligible = current_time_ms >= member_eligible_at
     waiting_days_remaining = max(0, int((member_eligible_at - current_time_ms) / (86400 * 1000))) if not is_eligible else 0
 
+    cfg_dict = config.model_dump(mode="json")
+    ops_dict = settings.model_dump(mode="json")
+
     return {
         "status": "success",
         "data": {
-            "welfare_config": config.model_dump(mode="json"),
-            "operational_settings": settings.model_dump(mode="json"),
+            "welfare_config": cfg_dict,
+            "fund_config": cfg_dict,
+            "operational_settings": ops_dict,
             "claimable_balance": claimable_balance,
             "fund_health": fund_health,
             "member_claim_eligibility": {
