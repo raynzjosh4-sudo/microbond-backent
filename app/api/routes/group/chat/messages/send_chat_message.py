@@ -169,7 +169,13 @@ async def send_chat_message(
         sender_id=str(current_user.id),
         title=title,
         body=body,
-        data={"type": "chat_message", "group_id": group_id, "message_id": str(new_message.id)}
+        data={
+            "type": "chat_message",
+            "group_id": group_id,
+            "message_id": str(new_message.id),
+            "actor_id": str(current_user.id),
+            "can_reply": "true",
+        }
     )
 
     return {"message": "Message sent successfully", "data": msg_payload}

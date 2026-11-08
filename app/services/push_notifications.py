@@ -21,7 +21,7 @@ async def notify_all_group_members(
     Sends an FCM push notification to all active members of the group except the sender.
     (Note: iOS/Android natively suppresses the UI banner if the app is already open in the foreground).
     """
-    def _fetch_tokens():
+    def _fetch_recipients():
         # Connect to DB synchronously inside threadpool
         with Session(engine) as session:
             # 1. Get all active members except sender
@@ -42,17 +42,34 @@ async def notify_all_group_members(
                 select(User).where(User.id.in_(user_ids))
             ).all()
             
-            return [u.fcm_token for u in users if u.fcm_token]
+            return [(u.id, u.fcm_token) for u in users]
 
     # Run DB query in a thread to avoid blocking event loop
     loop = asyncio.get_running_loop()
-    tokens = await loop.run_in_executor(None, _fetch_tokens)
+    recipients = await loop.run_in_executor(None, _fetch_recipients)
+    if not recipients:
+        return
+
+    from app.services.notification_delivery import create_notifications_for_users
+
+    await loop.run_in_executor(
+        None,
+        create_notifications_for_users,
+        [user_id for user_id, _ in recipients],
+        title,
+        body,
+        data,
+    )
     
     # Send FCM notifications concurrently using gather
     tasks = [
         loop.run_in_executor(None, send_push_notification, token, title, body, data) 
-        for token in tokens
+        for _, token in recipients
+        if token
     ]
+    tokens = [token for _, token in recipients if token]
+    if not tasks:
+        return
     
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
