@@ -47,7 +47,8 @@ def broadcast_system_message_sync(
     sender_id: str = "SYSTEM",
     session: Optional[Session] = None,
     background_tasks: Optional[BackgroundTasks] = None,
-    attachments: Optional[list] = None
+    attachments: Optional[list] = None,
+    include_sender_in_inbox: bool = False,
 ):
     """
     Utility function to save a system message to the DB and broadcast it via WebSockets & Push in the background.
@@ -151,7 +152,8 @@ def broadcast_system_message_sync(
             sender_id=sender_id,
             title=title,
             body=body,
-            data=data
+            data=data,
+            include_sender_in_inbox=include_sender_in_inbox,
         )
     else:
         notify_all_group_members_sync(
@@ -159,7 +161,8 @@ def broadcast_system_message_sync(
             sender_id=sender_id,
             title=title,
             body=body,
-            data=data
+            data=data,
+            include_sender_in_inbox=include_sender_in_inbox,
         )
 
     return system_message

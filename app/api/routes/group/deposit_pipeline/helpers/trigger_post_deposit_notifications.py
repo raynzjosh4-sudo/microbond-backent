@@ -21,7 +21,8 @@ def trigger_post_deposit_notifications(
     obligation_status: str = "PAID",
     remaining_due: int = 0,
     cycle_number: int = 1,
-    ref_id: str = None
+    ref_id: str = None,
+    transaction_id: str = None,
 ):
     """
     Called by the payment webhook/confirmation handler after a successful deposit.
@@ -87,7 +88,9 @@ def trigger_post_deposit_notifications(
                 data={
                     "type": "DEPOSIT_RECEIPT",
                     "group_id": group_id,
-                    "cycle_number": str(cycle_number)
+                    "cycle_number": str(cycle_number),
+                    "transaction_id": transaction_id,
+                    "dedupe_key": f"group_deposit:{transaction_id}" if transaction_id else None,
                 }
             )
 
@@ -107,7 +110,14 @@ def trigger_post_deposit_notifications(
                 sender_id=str(user_id),
                 title=broadcast_title,
                 body=broadcast_body,
-                data={"type": "DEPOSIT_BROADCAST", "group_id": group_id}
+                data={
+                    "type": "DEPOSIT_BROADCAST",
+                    "group_id": group_id,
+                    "transaction_id": transaction_id,
+                    "dedupe_key": f"group_deposit:{transaction_id}" if transaction_id else None,
+                    "actor_id": str(user_id),
+                },
+                include_sender_in_inbox=True,
             )
         except Exception as push_err:
             logger.warning(f"[DEPOSIT_BROADCAST_PUSH] Failed: {push_err}")

@@ -140,6 +140,26 @@ def execute_obligation_payment(
         session.add(ledger_entry)
         session.commit()
         session.refresh(obligation)
+        if not is_cover_default:
+            from app.services.push_notifications import notify_all_group_members_sync
+
+            member_name = current_user.full_name or "A member"
+            group_name = group.name if group else "the group"
+            currency = group.currency if group and group.currency else "UGX"
+            notify_all_group_members_sync(
+                group_id=resolved_group_id,
+                sender_id=str(current_user.id),
+                title=f"💰 {member_name} just deposited",
+                body=f"{member_name} deposited {currency} {int(pay_amount):,} in '{group_name}'.",
+                data={
+                    "type": "DEPOSIT_BROADCAST",
+                    "group_id": resolved_group_id,
+                    "transaction_id": str(ledger_entry.id),
+                    "dedupe_key": f"group_deposit:{ledger_entry.id}",
+                    "actor_id": str(current_user.id),
+                },
+                include_sender_in_inbox=True,
+            )
 
         result = {
             "id": str(obligation.id),
@@ -331,7 +351,8 @@ def pay_dues(
         message_type="SYSTEM_EVENT",
         sender_id=str(current_user.id),
         session=session,
-        background_tasks=background_tasks
+        background_tasks=background_tasks,
+        include_sender_in_inbox=True,
     )
 
     return {

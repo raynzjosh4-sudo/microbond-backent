@@ -60,7 +60,7 @@ def _notification_values(
             else "activity"
         )[:50]
     )
-    dedupe_key = (
+    dedupe_key = data.get("dedupe_key") or (
         f"{event_type}:{source_type or ''}:{source_id}" if source_id else None
     )
     payload = {str(key): str(value) for key, value in data.items() if value is not None}
@@ -74,6 +74,7 @@ def _notification_values(
         body=body,
         source_type=str(source_type)[:100] if source_type else None,
         source_id=source_id[:200] if source_id else None,
+        group_id=str(data["group_id"])[:200] if data.get("group_id") else None,
         payload=payload,
         can_reply=(
             event_type == "chat_message"

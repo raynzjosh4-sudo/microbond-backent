@@ -34,6 +34,7 @@ def _notification_payload(notification: Notification) -> dict:
         "body": notification.body,
         "source_type": notification.source_type,
         "source_id": notification.source_id,
+        "group_id": notification.group_id,
         "payload": notification.payload,
         "can_reply": notification.can_reply,
         "created_at": notification.created_at,
@@ -65,24 +66,24 @@ def list_notifications(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     unread_only: bool = False,
+    group_id: Optional[str] = Query(default=None, min_length=1, max_length=200),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    unread_count = session.exec(
-        select(func.count())
-        .select_from(Notification)
-        .where(
-            Notification.recipient_user_id == current_user.id,
-            Notification.read_at.is_(None),
-        )
-    ).one()
-
     query = select(Notification).where(
         Notification.recipient_user_id == current_user.id
     )
+    unread_query = select(func.count()).select_from(Notification).where(
+        Notification.recipient_user_id == current_user.id,
+        Notification.read_at.is_(None),
+    )
+    if group_id:
+        query = query.where(Notification.group_id == group_id)
+        unread_query = unread_query.where(Notification.group_id == group_id)
     if unread_only:
         query = query.where(Notification.read_at.is_(None))
 
+    unread_count = session.exec(unread_query).one()
     notifications = session.exec(
         query.order_by(Notification.created_at.desc(), Notification.id.desc())
         .offset(offset)
@@ -93,6 +94,7 @@ def list_notifications(
         "limit": limit,
         "offset": offset,
         "unread_count": unread_count,
+        "group_id": group_id,
     }
 
 
@@ -166,18 +168,18 @@ def mark_notification_read(
 
 @router.post("/read-all")
 def mark_all_notifications_read(
+    group_id: Optional[str] = Query(default=None, min_length=1, max_length=200),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
     read_at = now_utc_datetime()
-    result = session.exec(
-        update(Notification)
-        .where(
-            Notification.recipient_user_id == current_user.id,
-            Notification.read_at.is_(None),
-        )
-        .values(read_at=read_at)
+    statement = update(Notification).where(
+        Notification.recipient_user_id == current_user.id,
+        Notification.read_at.is_(None),
     )
+    if group_id:
+        statement = statement.where(Notification.group_id == group_id)
+    result = session.exec(statement.values(read_at=read_at))
     session.commit()
     return {"status": "success", "updated_count": result.rowcount}
 

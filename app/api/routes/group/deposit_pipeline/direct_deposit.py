@@ -462,7 +462,8 @@ async def direct_deposit(
         obligation_status=obligation.status,
         remaining_due=remaining_due,
         cycle_number=current_cycle,
-        ref_id=ref_id
+        ref_id=ref_id,
+        transaction_id=str(ledger_entry.id),
     )
 
     # Calculate group ring completion fraction
@@ -519,4 +520,3 @@ def pay_member_obligation(
         obligation_id=obligation_id,
         body_data=body_dict,
     )
-

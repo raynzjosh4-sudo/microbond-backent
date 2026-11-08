@@ -1,4 +1,5 @@
 import uuid
+import asyncio
 
 import pytest
 from fastapi import FastAPI
@@ -11,6 +12,7 @@ from app.api.routes.user.general.notifications import router
 from app.core.database import get_session
 from app.models.user.notification import Notification
 from app.models.user.notification import NotificationReply
+from app.models.group.group import Group, GroupMembership
 from app.models.user.user import User
 
 
@@ -25,6 +27,8 @@ def notification_context(monkeypatch):
         engine,
         tables=[
             User.__table__,
+            Group.__table__,
+            GroupMembership.__table__,
             Notification.__table__,
             NotificationReply.__table__,
         ],
@@ -214,3 +218,113 @@ def test_notification_is_saved_without_an_fcm_token(notification_context):
     assert stored is not None
     assert stored.category == "transactions"
     assert owner.fcm_token is None
+
+
+def test_group_filter_and_unread_count_only_include_selected_group(
+    notification_context,
+):
+    client, session, owner, _, _, notification = notification_context
+    notification.group_id = "group-one"
+    session.add(notification)
+    session.add(
+        Notification(
+            recipient_user_id=owner.id,
+            event_type="deposit_broadcast",
+            category="transactions",
+            title="Deposit in another group",
+            body="A separate group deposit.",
+            group_id="group-two",
+            payload={},
+        )
+    )
+    session.commit()
+
+    response = client.get(
+        "/api/v1/users/me/notifications",
+        params={"group_id": "group-one", "unread_only": "true"},
+    )
+    assert response.status_code == 200
+    assert response.json()["unread_count"] == 1
+    assert len(response.json()["items"]) == 1
+    assert response.json()["items"][0]["group_id"] == "group-one"
+
+    response = client.post(
+        "/api/v1/users/me/notifications/read-all",
+        params={"group_id": "group-one"},
+    )
+    assert response.status_code == 200
+    assert response.json()["updated_count"] == 1
+    assert session.exec(
+        select(Notification).where(
+            Notification.recipient_user_id == owner.id,
+            Notification.group_id == "group-two",
+            Notification.read_at.is_(None),
+        )
+    ).first()
+
+
+def test_group_deposit_notification_includes_depositor_and_members(
+    notification_context,
+    monkeypatch,
+):
+    _, session, owner, actor, other_user, _ = notification_context
+    group_id = "deposit-notification-group"
+    session.add(
+        Group(
+            group_id=group_id,
+            name="Deposit Group",
+            group_image_url="",
+            type="MERRY_GO_ROUND",
+            payment_mode="OBLIGATION",
+            created_by_user_id=owner.id,
+        )
+    )
+    session.add_all(
+        [
+            GroupMembership(
+                membership_id=str(uuid.uuid4()),
+                group_id=group_id,
+                user_id=user.id,
+                role="MEMBER",
+                status="ACTIVE",
+            )
+            for user in (owner, actor, other_user)
+        ]
+    )
+    session.commit()
+
+    import app.services.push_notifications as push_module
+
+    monkeypatch.setattr(push_module, "engine", session.get_bind())
+    monkeypatch.setattr(push_module, "send_push_notification", lambda *args: True)
+    transaction_id = str(uuid.uuid4())
+    data = {
+        "type": "DEPOSIT_BROADCAST",
+        "group_id": group_id,
+        "transaction_id": transaction_id,
+        "dedupe_key": f"group_deposit:{transaction_id}",
+        "actor_id": str(owner.id),
+    }
+
+    asyncio.run(
+        push_module.notify_all_group_members(
+            group_id=group_id,
+            sender_id=str(owner.id),
+            title="Member just deposited",
+            body="A deposit was made in Deposit Group.",
+            data=data,
+            include_sender_in_inbox=True,
+        )
+    )
+
+    saved = session.exec(
+        select(Notification).where(
+            Notification.group_id == group_id,
+            Notification.source_id == transaction_id,
+        )
+    ).all()
+    assert {item.recipient_user_id for item in saved} == {
+        owner.id,
+        actor.id,
+        other_user.id,
+    }

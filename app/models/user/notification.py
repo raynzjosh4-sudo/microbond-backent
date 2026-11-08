@@ -38,6 +38,7 @@ class Notification(SQLModel, table=True):
     body: str = Field(sa_column=Column(Text, nullable=False))
     source_type: Optional[str] = Field(default=None, max_length=100)
     source_id: Optional[str] = Field(default=None, max_length=200)
+    group_id: Optional[str] = Field(default=None, index=True, max_length=200)
     payload: Dict[str, Any] = Field(
         default_factory=dict,
         sa_column=Column(JSON, nullable=False),
