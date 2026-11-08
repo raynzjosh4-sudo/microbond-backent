@@ -3,7 +3,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import func, update
+from sqlalchemy import delete, func, update
 from sqlmodel import Session, and_, or_, select
 
 from app.api.dependencies import get_current_user
@@ -61,7 +61,15 @@ def _accessible_notification(
     ).first()
 
 
-@router.get("")
+@router.get(
+    "",
+    summary="List current user's notifications",
+    description=(
+        "Returns the authenticated user's notifications, newest first. "
+        "Use group_id to scope the list and unread_count to a group. "
+        "Set unread_only=true to return only unread notifications."
+    ),
+)
 def list_notifications(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
@@ -98,7 +106,14 @@ def list_notifications(
     }
 
 
-@router.get("/{notification_id}")
+@router.get(
+    "/{notification_id}",
+    summary="Get notification details and replies",
+    description=(
+        "Returns the full notification and its reply thread. Opening a notification "
+        "as its recipient marks it read; viewing as the other participant does not."
+    ),
+)
 def get_notification(
     notification_id: uuid.UUID,
     session: Session = Depends(get_session),
@@ -145,7 +160,41 @@ def get_notification(
     return payload
 
 
-@router.patch("/{notification_id}/read")
+@router.delete(
+    "/{notification_id}",
+    summary="Delete a notification",
+    description=(
+        "Deletes a notification belonging to the authenticated user and its replies."
+    ),
+)
+def delete_notification(
+    notification_id: uuid.UUID,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    notification = session.exec(
+        select(Notification).where(
+            Notification.id == notification_id,
+            Notification.recipient_user_id == current_user.id,
+        )
+    ).first()
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found.")
+
+    session.exec(
+        delete(NotificationReply).where(
+            NotificationReply.notification_id == notification.id
+        )
+    )
+    session.delete(notification)
+    session.commit()
+    return {"status": "success", "message": "Notification deleted."}
+
+
+@router.patch(
+    "/{notification_id}/read",
+    summary="Mark a notification as read",
+)
 def mark_notification_read(
     notification_id: uuid.UUID,
     session: Session = Depends(get_session),
@@ -166,7 +215,11 @@ def mark_notification_read(
     return {"status": "success", "read_at": notification.read_at}
 
 
-@router.post("/read-all")
+@router.post(
+    "/read-all",
+    summary="Mark notifications as read",
+    description="Marks all unread notifications as read, optionally limited to a group.",
+)
 def mark_all_notifications_read(
     group_id: Optional[str] = Query(default=None, min_length=1, max_length=200),
     session: Session = Depends(get_session),
@@ -187,6 +240,11 @@ def mark_all_notifications_read(
 @router.post(
     "/{notification_id}/replies",
     status_code=status.HTTP_201_CREATED,
+    summary="Reply to a notification",
+    description=(
+        "Adds a reply to a notification that allows replies. The other thread "
+        "participant receives a notification in their inbox."
+    ),
 )
 def reply_to_notification(
     notification_id: uuid.UUID,

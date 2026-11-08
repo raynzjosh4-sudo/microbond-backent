@@ -128,17 +128,58 @@ def test_notification_list_detail_read_and_replies(notification_context):
 
 
 def test_notification_access_is_scoped_to_authenticated_user(notification_context):
-    client, _, _, _, other_user, notification = notification_context
+    client, session, _, _, other_user, notification = notification_context
     client.app.dependency_overrides[get_current_user] = lambda: other_user
 
     response = client.get(f"/api/v1/users/me/notifications/{notification.id}")
     assert response.status_code == 404
+
+    response = client.delete(
+        f"/api/v1/users/me/notifications/{notification.id}"
+    )
+    assert response.status_code == 404
+    assert session.get(Notification, notification.id) is not None
 
     response = client.post(
         f"/api/v1/users/me/notifications/{notification.id}/replies",
         json={"body": "Unauthorized reply"},
     )
     assert response.status_code == 404
+
+
+def test_notification_recipient_can_delete_notification_and_replies(
+    notification_context,
+):
+    client, session, owner, actor, _, notification = notification_context
+    reply = NotificationReply(
+        notification_id=notification.id,
+        sender_user_id=actor.id,
+        body="Original reply",
+    )
+    session.add(reply)
+    session.commit()
+    session.refresh(reply)
+    nested_reply = NotificationReply(
+        notification_id=notification.id,
+        sender_user_id=owner.id,
+        parent_reply_id=reply.id,
+        body="Nested reply",
+    )
+    session.add(nested_reply)
+    session.commit()
+    reply_ids = [reply.id, nested_reply.id]
+
+    response = client.delete(
+        f"/api/v1/users/me/notifications/{notification.id}"
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "success",
+        "message": "Notification deleted.",
+    }
+    assert session.get(Notification, notification.id) is None
+    assert all(session.get(NotificationReply, reply_id) is None for reply_id in reply_ids)
 
 
 def test_notification_actor_can_view_and_reply_without_marking_recipient_read(
