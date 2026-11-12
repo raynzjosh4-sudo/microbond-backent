@@ -40,7 +40,7 @@ jmespath==1.1.0
 Mako==1.4.3
 MarkupSafe==3.0.4
 msgpack==1.2.3
-numpy==2.4.6
+numpy==2.5.3
 opentelemetry-api==1.45.1
 pandas==3.0.6
 passlib==1.7.4

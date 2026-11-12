@@ -42,7 +42,6 @@ import app.models.group.finance
 import app.models.group.report
 import app.models.user.userpayoutaccount.payout_destination
 import app.models.user.userpaymentmethod.payment_method
-import app.models.user.notification
 
 # Override sqlalchemy.url with the real settings.DATABASE_URL
 escaped_url = str(settings.DATABASE_URL).replace('%', '%%')

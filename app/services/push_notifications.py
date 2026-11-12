@@ -15,23 +15,24 @@ async def notify_all_group_members(
     sender_id: str, 
     title: str, 
     body: str, 
-    data: dict,
-    include_sender_in_inbox: bool = False,
+    data: dict
 ):
     """
     Sends an FCM push notification to all active members of the group except the sender.
     (Note: iOS/Android natively suppresses the UI banner if the app is already open in the foreground).
     """
-    def _fetch_recipients():
+    def _fetch_tokens():
         # Connect to DB synchronously inside threadpool
         with Session(engine) as session:
-            # 1. Get all active members
+            # 1. Get all active members except sender
             member_query = select(GroupMembership).where(
                 GroupMembership.group_id == group_id,
                 GroupMembership.status == "ACTIVE",
             )
+            if sender_id != "SYSTEM":
+                member_query = member_query.where(GroupMembership.user_id != sender_id)
             members = session.exec(member_query).all()
-
+            
             user_ids = [m.user_id for m in members]
             if not user_ids:
                 return []
@@ -41,42 +42,17 @@ async def notify_all_group_members(
                 select(User).where(User.id.in_(user_ids))
             ).all()
             
-            return [
-                (u.id, u.fcm_token, str(u.id) != sender_id if sender_id != "SYSTEM" else True)
-                for u in users
-            ]
+            return [u.fcm_token for u in users if u.fcm_token]
 
     # Run DB query in a thread to avoid blocking event loop
     loop = asyncio.get_running_loop()
-    recipients = await loop.run_in_executor(None, _fetch_recipients)
-    if not recipients:
-        return
-
-    from app.services.notification_delivery import create_notifications_for_users
-
-    inbox_recipients = [
-        user_id
-        for user_id, _, is_not_sender in recipients
-        if include_sender_in_inbox or is_not_sender
-    ]
-    await loop.run_in_executor(
-        None,
-        create_notifications_for_users,
-        inbox_recipients,
-        title,
-        body,
-        data,
-    )
+    tokens = await loop.run_in_executor(None, _fetch_tokens)
     
     # Send FCM notifications concurrently using gather
     tasks = [
         loop.run_in_executor(None, send_push_notification, token, title, body, data) 
-        for _, token, is_not_sender in recipients
-        if token and is_not_sender
+        for token in tokens
     ]
-    tokens = [token for _, token, is_not_sender in recipients if token and is_not_sender]
-    if not tasks:
-        return
     
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
@@ -96,8 +72,7 @@ def notify_all_group_members_sync(
     sender_id: str, 
     title: str, 
     body: str, 
-    data: dict,
-    include_sender_in_inbox: bool = False,
+    data: dict
 ):
     """
     Synchronous wrapper to broadcast push notifications to all group members.
@@ -110,27 +85,9 @@ def notify_all_group_members_sync(
         except RuntimeError:
             pass
         if loop and loop.is_running():
-            asyncio.create_task(
-                notify_all_group_members(
-                    group_id,
-                    sender_id,
-                    title,
-                    body,
-                    data,
-                    include_sender_in_inbox,
-                )
-            )
+            asyncio.create_task(notify_all_group_members(group_id, sender_id, title, body, data))
         else:
-            asyncio.run(
-                notify_all_group_members(
-                    group_id,
-                    sender_id,
-                    title,
-                    body,
-                    data,
-                    include_sender_in_inbox,
-                )
-            )
+            asyncio.run(notify_all_group_members(group_id, sender_id, title, body, data))
     except Exception as e:
         logger.warning(f"notify_all_group_members_sync error: {e}")
 

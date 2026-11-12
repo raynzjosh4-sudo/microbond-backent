@@ -1,14 +1,12 @@
 import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, Header, Request, status
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app.core.database import get_session
-from app.models.group.group import Group
 from app.models.user.user import User
 from app.services.finance.ledger import process_incoming_payment, broadcast_group_ring_update
 from app.services.cloud_tasks import enqueue_push_task, enqueue_sms_task
-from app.services.push_notifications import notify_all_group_members
 from .schemas import InboundPaymentConfirmationPayload, InboundPaymentConfirmationResponse
 from .helpers.verify_payment_signature import verify_payment_signature
 
@@ -97,11 +95,6 @@ async def inbound_payment_confirmation(
     # 5. Fetch user details for real-time announcements & notification receipts
     user = session.get(User, payload.user_id)
     depositor_name = user.full_name if (user and user.full_name) else "A member"
-    group = session.exec(
-        select(Group).where(Group.group_id == payload.group_id)
-    ).first()
-    group_name = group.name if group else "the group"
-    currency = group.currency if group and group.currency else "UGX"
 
     # 6. Real-time WebSocket Ring Status Broadcast
     try:
@@ -113,40 +106,13 @@ async def inbound_payment_confirmation(
     except Exception as ex:
         logger.warning(f"[PAYMENT_INBOUND] WebSocket broadcast failed: {ex}")
 
-    try:
-        await notify_all_group_members(
-            group_id=payload.group_id,
-            sender_id=str(payload.user_id),
-            title=f"💰 {depositor_name} just deposited",
-            body=f"{depositor_name} deposited {currency} {payload.amount:,} in '{group_name}'.",
-            data={
-                "type": "DEPOSIT_BROADCAST",
-                "group_id": payload.group_id,
-                "transaction_id": str(ledger_entry.id),
-                "dedupe_key": f"group_deposit:{ledger_entry.id}",
-                "actor_id": str(payload.user_id),
-            },
-            include_sender_in_inbox=True,
-        )
-    except Exception:
-        logger.exception(
-            "[PAYMENT_INBOUND] Failed to create group deposit notifications "
-            "for transaction %s",
-            ledger_entry.id,
-        )
-
     # 7. Asynchronous Notification Tasks (Push / SMS)
     if user and user.fcm_token:
         enqueue_push_task(
             token=user.fcm_token,
             title="Deposit Confirmed!",
             body=f"Your deposit of {payload.amount:,} UGX has been credited to group pool.",
-            data={
-                "group_id": payload.group_id,
-                "type": "DEPOSIT_RECEIPT",
-                "transaction_id": str(ledger_entry.id),
-                "dedupe_key": f"group_deposit:{ledger_entry.id}",
-            },
+            data={"group_id": payload.group_id, "type": "DEPOSIT_SUCCESS"},
         )
 
     user_phone = (user.phone_number if user else None) or payload.source_account

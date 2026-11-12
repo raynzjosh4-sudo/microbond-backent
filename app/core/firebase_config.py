@@ -1,9 +1,6 @@
 import firebase_admin
 from firebase_admin import credentials, messaging
 from app.core.config import settings
-import logging
-
-logger = logging.getLogger(__name__)
 
 def init_firebase():
     if not firebase_admin._apps:
@@ -14,13 +11,6 @@ def init_firebase():
             print(f"Warning: Could not initialize Firebase: {e}")
 
 def send_push_notification(token: str, title: str, body: str, data: dict = None):
-    try:
-        from app.services.notification_delivery import record_push_notification
-
-        record_push_notification(token, title, body, data)
-    except Exception:
-        logger.exception("Failed to save push notification to the user's inbox")
-
     try:
         message = messaging.Message(
             notification=messaging.Notification(title=title, body=body),
