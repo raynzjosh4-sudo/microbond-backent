@@ -27,6 +27,7 @@ from app.core.config import settings
 import app.models.user.user
 import app.models.user.kyc
 import app.models.user.invite
+import app.models.user.security_email.user_security_email
 import app.models.auth.otp
 import app.models.group.group
 import app.models.group.settings
