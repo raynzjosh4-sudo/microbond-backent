@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
     "/request-otp",
     summary="Login / Register: Request OTP",
     description=(
-        "Generates a 6-digit OTP and sends it via Africa's Talking SMS. "
+        "Generates a 6-digit OTP and submits it to Africa's Talking for SMS delivery. "
         "Only a one-way hash is stored in the database."
     ),
     status_code=status.HTTP_200_OK,
@@ -117,7 +117,7 @@ def request_otp(
 
     return OTPRequestResponse(
         status="success",
-        message=f"A verification code was sent to {mask_phone(phone)}.",
+        message=f"A verification code was submitted for delivery to {mask_phone(phone)}.",
         expires_in_seconds=OTP_TTL_SECONDS,
     )
 

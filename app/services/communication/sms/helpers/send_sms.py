@@ -17,14 +17,36 @@ else:
 
 
 def send_sms(phone_number: str, message: str) -> bool:
-    """Internal helper — formats phone, sends via Africa's Talking."""
+    """Return whether Africa's Talking accepted the SMS, not carrier delivery."""
     if not sms:
-        print("[SMS ERROR] Africa's Talking API key or Username not configured.")
+        logger.error("Africa's Talking API key or username is not configured.")
         return False
-    formatted_phone = sanitize_uganda_phone(phone_number)
+
     try:
-        sms.send(message, [formatted_phone])
-        return True
+        response = sms.send(message, [sanitize_uganda_phone(phone_number)])
     except Exception as exc:
         logger.error("Africa's Talking SMS request failed (%s).", type(exc).__name__)
         return False
+
+    sms_data = response.get("SMSMessageData") if isinstance(response, dict) else None
+    recipients = sms_data.get("Recipients") if isinstance(sms_data, dict) else None
+    if not isinstance(recipients, list) or not recipients:
+        logger.warning("Africa's Talking returned an unrecognized SMS response.")
+        return False
+
+    accepted_status_codes = {100, 101, 102}
+    for recipient in recipients:
+        status_code = recipient.get("statusCode") if isinstance(recipient, dict) else None
+        try:
+            accepted = int(status_code) in accepted_status_codes
+        except (TypeError, ValueError):
+            accepted = False
+
+        if not accepted:
+            logger.warning(
+                "Africa's Talking did not accept SMS recipient (status code: %s).",
+                status_code,
+            )
+            return False
+
+    return True
