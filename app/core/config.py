@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = ""
     # Configure with a stable, high-entropy secret; changing it invalidates active OTPs.
     OTP_PEPPER: str = ""
-    OTP_DAILY_REQUEST_LIMIT: int = 3
+    OTP_DAILY_REQUEST_LIMIT: int = 20
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 # 7 days
     
