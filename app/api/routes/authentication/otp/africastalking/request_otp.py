@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.models.auth.otp import OTPRecord
 from app.communications.sms_service import send_real_otp_sms, sanitize_uganda_phone
 from app.core.database import get_session
+from app.core.config import settings
 from app.core.otp_security import OTP_TTL_SECONDS, generate_otp_code, hash_otp
 from .schemas import OTPRequest, OTPRequestResponse
 
@@ -46,11 +47,12 @@ def request_otp(
         )
     ).all()
 
-    if len(recent_otps) >= 3:
+    if len(recent_otps) >= settings.OTP_DAILY_REQUEST_LIMIT:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
-                "You have reached the maximum limit of 3 free OTP requests per day. "
+                "You have reached the maximum limit of "
+                f"{settings.OTP_DAILY_REQUEST_LIMIT} free OTP requests per day. "
                 "Please try again later."
             ),
         )

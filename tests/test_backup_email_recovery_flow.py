@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 import unittest
 from unittest.mock import patch
 from fastapi.testclient import TestClient
@@ -92,6 +93,27 @@ class TestBackupEmailRecoveryFlow(unittest.TestCase):
         self.assertEqual(verify_response.json()["status"], "success")
         self.session.refresh(otp_record)
         self.assertTrue(otp_record.is_used)
+
+    def test_login_otp_daily_limit_is_configurable(self):
+        now = datetime.now(timezone.utc)
+        self.session.add(
+            OTPRecord(
+                phone_number=self.old_phone,
+                code_hash="already-requested",
+                created_at=now,
+                expires_at=now + timedelta(minutes=5),
+            )
+        )
+        self.session.commit()
+
+        with patch.object(settings, "OTP_DAILY_REQUEST_LIMIT", 1):
+            response = self.client.post(
+                "/api/v1/auth/at-otp/request-otp",
+                json={"phone_number": self.old_phone},
+            )
+
+        self.assertEqual(response.status_code, 429)
+        self.assertIn("maximum limit of 1", response.json()["detail"])
 
     def test_get_backup_email_empty(self):
         """GET /email/backup returns has_backup_email=False when none configured."""
