@@ -6,7 +6,7 @@ from app.core.database import get_session
 from app.models.user.user import User
 from app.models.auth.otp import OTPRecord
 from app.communications.sms_service import send_real_otp_sms, sanitize_uganda_phone
-from app.utils.codes import generate_6digit_code
+from app.core.otp_security import OTP_TTL_SECONDS, generate_otp_code, hash_otp
 from .schemas import RequestForgotPinOTPRequest, RequestForgotPinOTPResponse
 
 router = APIRouter()
@@ -47,18 +47,22 @@ def request_forgot_pin_otp(payload: RequestForgotPinOTPRequest, session: Session
             )
 
     # 3. Generate and invalidate old OTPs
-    otp_code = generate_6digit_code()
-    expiry = datetime.now(timezone.utc) + timedelta(minutes=5)
+    otp_code = generate_otp_code()
+    otp_hash = hash_otp(phone, otp_code)
+    expiry = datetime.now(timezone.utc) + timedelta(seconds=OTP_TTL_SECONDS)
 
     try:
         existing_otps = session.exec(
-            select(OTPRecord).where(OTPRecord.phone_number == phone, OTPRecord.is_used == False)
+            select(OTPRecord).where(
+                OTPRecord.phone_number == phone,
+                OTPRecord.is_used.is_(False),
+            )
         ).all()
         for record in existing_otps:
             record.is_used = True
             session.add(record)
     
-        new_otp = OTPRecord(phone_number=phone, code=otp_code, expires_at=expiry)
+        new_otp = OTPRecord(phone_number=phone, code_hash=otp_hash, expires_at=expiry)
         session.add(new_otp)
         session.commit()
     except SQLAlchemyError:
@@ -80,5 +84,5 @@ def request_forgot_pin_otp(payload: RequestForgotPinOTPRequest, session: Session
     return RequestForgotPinOTPResponse(
         status="success",
         message=f"OTP sent to {phone} to reset your PIN.",
-        expires_in_seconds=300
+        expires_in_seconds=OTP_TTL_SECONDS
     )

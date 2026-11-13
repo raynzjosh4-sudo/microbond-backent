@@ -9,6 +9,7 @@ from app.core.database import get_session
 from app.models.user.user import User
 from app.models.auth.otp import OTPRecord
 from app.communications.sms_service import sanitize_uganda_phone
+from app.core.otp_security import hash_otp
 from app.api.dependencies import get_email_recovery_user
 from app.api.routes.kyc.phone.fetch_and_save_kyc import fetch_and_save_kyc
 from app.core.rate_limit import RateLimiter
@@ -46,8 +47,8 @@ def confirm_recovery_phone(
 
     otp_statement = select(OTPRecord).where(
         OTPRecord.phone_number == new_phone,
-        OTPRecord.code == payload.code.strip(),
-        OTPRecord.is_used == False,
+        OTPRecord.code_hash == hash_otp(new_phone, payload.code.strip()),
+        OTPRecord.is_used.is_(False),
         OTPRecord.expires_at > datetime.now(timezone.utc)
     )
     otp_record = session.exec(otp_statement).first()

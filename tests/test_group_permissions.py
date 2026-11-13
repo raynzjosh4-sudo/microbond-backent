@@ -10,6 +10,7 @@ from app.api.dependencies import get_current_user
 from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.models.group.settings import GroupGovernanceSettings, GroupVisibilitySettings
+from app.models.user.invite import Invite
 
 @pytest.fixture(name="db_session")
 def db_session_fixture():
@@ -18,6 +19,7 @@ def db_session_fixture():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    assert Invite.__tablename__ in SQLModel.metadata.tables
     SQLModel.metadata.create_all(engine)
     with Session(engine) as session:
         yield session

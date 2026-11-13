@@ -1,7 +1,7 @@
 from typing import Optional
-from sqlmodel import SQLModel, Field, UniqueConstraint
+from sqlmodel import SQLModel, Field
 import uuid
-from sqlalchemy import Column, BigInteger, Text
+from sqlalchemy import Column, BigInteger, Index, Text
 from app.utils.time.now_epoch_ms import now_epoch_ms
 
 class CommandIdempotency(SQLModel, table=True):
@@ -11,7 +11,12 @@ class CommandIdempotency(SQLModel, table=True):
     """
     __tablename__ = "command_idempotency"
     __table_args__ = (
-        UniqueConstraint("user_id", "client_request_id", name="uq_user_client_request_id"),
+        Index(
+            "uq_user_client_request_id",
+            "user_id",
+            "client_request_id",
+            unique=True,
+        ),
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)

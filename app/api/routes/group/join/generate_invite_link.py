@@ -1,14 +1,21 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session
-from typing import Optional
-from pydantic import BaseModel
+from sqlalchemy import func
+from sqlmodel import Session, select
+from pydantic import BaseModel, Field
 import urllib.parse
 
 from app.core.database import get_session
 from app.api.dependencies import get_current_user
 from app.models.user.user import User
-from app.models.group.group import Group, GroupMembership
+from app.models.group.group import Group
+from app.models.group.core.membership_join_request import MembershipJoinRequest
 from app.models.group.finance import GuarantorPledge
+from app.models.user.user import User
+from app.core.token_security import generate_opaque_token, hash_opaque_token
+from app.services.group.join_requests import maybe_activate_join_request
+from app.services.audit_service import AuditService
 
 router = APIRouter(prefix="/api/v1/groups/join/guarantor", tags=["Guarantor Invites"])
 
@@ -21,18 +28,31 @@ def generate_invite_link(
     """
     Generates a pre-filled message containing the cryptographic deep link for the Guarantor.
     """
-    pledge = session.query(GuarantorPledge).filter(
-        GuarantorPledge.id == pledge_id,
-        GuarantorPledge.borrower_user_id == current_user.id
+    pledge = session.exec(
+        select(GuarantorPledge)
+        .where(
+            GuarantorPledge.id == pledge_id,
+            GuarantorPledge.borrower_user_id == current_user.id,
+            GuarantorPledge.status == "PENDING_CONSENT",
+        )
+        .with_for_update()
     ).first()
     
     if not pledge:
         raise HTTPException(status_code=404, detail="Guarantor pledge not found or unauthorized.")
-        
-    group = session.query(Group).filter(Group.group_id == pledge.group_id).first()
-    
-    # Create the cryptographic deep link (intercepted by the Android app)
-    deep_link = f"microbond://vouch?token={pledge.pledge_token}"
+
+    group = session.exec(
+        select(Group).where(Group.group_id == pledge.group_id)
+    ).first()
+    if group is None:
+        raise HTTPException(status_code=404, detail="Group not found.")
+
+    # Keep only a hash in storage; the bearer token is returned once in the link.
+    token = generate_opaque_token()
+    pledge.pledge_token_hash = hash_opaque_token(token)
+    session.add(pledge)
+    session.commit()
+    deep_link = f"microbond://vouch?token={token}"
     
     # Create the human-readable message
     message = f"Hey, I am joining a savings group on Microbond ({group.name}). The system requires 1 person to vouch for my reliability. Please click this link to guarantee my membership: {deep_link}"
@@ -48,7 +68,7 @@ def generate_invite_link(
     }
 
 class AcceptPledgeRequest(BaseModel):
-    pledge_token: str
+    pledge_token: str = Field(min_length=32, max_length=256)
 
 @router.post("/accept")
 def accept_guarantor_pledge(
@@ -60,9 +80,11 @@ def accept_guarantor_pledge(
     The endpoint the Guarantor calls (via the deep link) to legally accept liability.
     """
     # 1. Fetch the Pledge
-    pledge = session.query(GuarantorPledge).filter(
-        GuarantorPledge.pledge_token == request.pledge_token
-    ).with_for_update().first()
+    pledge = session.exec(
+        select(GuarantorPledge)
+        .where(GuarantorPledge.pledge_token_hash == hash_opaque_token(request.pledge_token))
+        .with_for_update()
+    ).first()
     
     if not pledge:
         raise HTTPException(status_code=404, detail="Invalid or expired pledge token.")
@@ -73,13 +95,34 @@ def accept_guarantor_pledge(
     if pledge.guarantor_user_id != current_user.id:
         raise HTTPException(status_code=403, detail="You are not the designated guarantor for this pledge.")
         
+    join_request = session.exec(
+        select(MembershipJoinRequest)
+        .where(
+            MembershipJoinRequest.group_id == pledge.group_id,
+            MembershipJoinRequest.user_id == pledge.borrower_user_id,
+            MembershipJoinRequest.public_status.notin_(
+                ["APPROVED", "REJECTED", "CANCELLED", "EXPIRED"]
+            ),
+        )
+        .with_for_update()
+    ).first()
+    if join_request is None or not join_request.requires_guarantor:
+        raise HTTPException(status_code=409, detail="The related join request is no longer pending.")
+
     # 2. Check Guarantor's capacity
+    locked_user = session.exec(
+        select(User).where(User.id == current_user.id).with_for_update()
+    ).first()
+    if locked_user is None:
+        raise HTTPException(status_code=404, detail="Guarantor account not found.")
+
     # If the Guarantor is already guaranteeing too many people, reject it.
-    from sqlalchemy import func
-    total_liability = session.query(func.sum(GuarantorPledge.maximum_liability_amount)).filter(
-        GuarantorPledge.guarantor_user_id == current_user.id,
-        GuarantorPledge.status == "ACTIVE"
-    ).scalar() or 0.0
+    total_liability = session.exec(
+        select(func.sum(GuarantorPledge.maximum_liability_amount)).where(
+            GuarantorPledge.guarantor_user_id == current_user.id,
+            GuarantorPledge.status == "ACTIVE",
+        )
+    ).one() or 0
     
     # Hard limit of 2,000,000 UGX total exposure across the platform
     if (total_liability + pledge.maximum_liability_amount) > 2000000:
@@ -87,25 +130,95 @@ def accept_guarantor_pledge(
 
     # 3. Accept the Pledge
     pledge.status = "ACTIVE"
-    
-    # 4. Upgrade the Borrower's Membership Status
-    borrower_membership = session.query(GroupMembership).filter(
-        GroupMembership.group_id == pledge.group_id,
-        GroupMembership.user_id == pledge.borrower_user_id
-    ).with_for_update().first()
-    
-    if borrower_membership and borrower_membership.status == "PENDING_GUARANTOR":
-        borrower_membership.status = "ACTIVE"
-        
-        # Increase group member count
-        group = session.query(Group).filter(Group.group_id == pledge.group_id).first()
-        if group:
-            group.member_count += 1
-            
-    session.commit()
-    
+    session.add(pledge)
+    activated = maybe_activate_join_request(
+        session,
+        join_request,
+        current_user.id,
+    )
+    AuditService.record_event(
+        session=session,
+        action="GUARANTOR_PLEDGE_ACCEPTED",
+        entity_type="membership_join_request",
+        entity_id=str(join_request.id),
+        payload={"pledge_id": pledge.id, "activated": activated},
+        actor_user_id=current_user.id,
+        tenant_group_id=pledge.group_id,
+    )
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+
     return {
         "status": "success",
-        "message": "You have successfully vouched for this user. They are now an active member of the group."
+        "message": (
+            "You have vouched for this user. Their membership is now active."
+            if activated
+            else "You have vouched for this user. Their request is awaiting remaining approvals."
+        ),
+        "membership_status": join_request.public_status,
     }
 
+
+@router.post("/{pledge_id}/decline")
+def decline_guarantor_pledge(
+    pledge_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+):
+    pledge = session.exec(
+        select(GuarantorPledge)
+        .where(
+            GuarantorPledge.id == pledge_id,
+            GuarantorPledge.guarantor_user_id == current_user.id,
+            GuarantorPledge.status == "PENDING_CONSENT",
+        )
+        .with_for_update()
+    ).first()
+    if pledge is None:
+        raise HTTPException(status_code=404, detail="Pending guarantor pledge not found.")
+
+    join_request = session.exec(
+        select(MembershipJoinRequest)
+        .where(
+            MembershipJoinRequest.group_id == pledge.group_id,
+            MembershipJoinRequest.user_id == pledge.borrower_user_id,
+            MembershipJoinRequest.public_status.notin_(
+                ["APPROVED", "REJECTED", "CANCELLED", "EXPIRED"]
+            ),
+        )
+        .with_for_update()
+    ).first()
+    if join_request is None:
+        raise HTTPException(status_code=409, detail="The related join request is no longer pending.")
+
+    now = datetime.now(timezone.utc)
+    pledge.status = "REJECTED"
+    join_request.public_status = "REJECTED"
+    join_request.guarantor_status = "REJECTED"
+    join_request.rejection_reason = "A required guarantor declined the request."
+    join_request.rejected_at = now
+    join_request.updated_at = now
+    session.add_all([pledge, join_request])
+    AuditService.record_event(
+        session=session,
+        action="GUARANTOR_PLEDGE_DECLINED",
+        entity_type="membership_join_request",
+        entity_id=str(join_request.id),
+        payload={"pledge_id": pledge.id},
+        actor_user_id=current_user.id,
+        tenant_group_id=pledge.group_id,
+    )
+    try:
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+
+    return {
+        "status": "success",
+        "message": "The guarantor request was declined.",
+        "membership_status": join_request.public_status,
+    }

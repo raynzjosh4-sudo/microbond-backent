@@ -17,6 +17,7 @@ from app.models.group.long_term import FundraiserCampaignConfig, FundraiserLiveS
 from app.api.routes.group.chat.messages import broadcast_system_message_sync
 from .schemas import FundraiserGroupCreateRequest
 from .helpers import now_ms
+from app.services.group.authorization import grant_role
 
 logger = logging.getLogger(__name__)
 
@@ -119,6 +120,7 @@ def create_fundraiser(
         status="ACTIVE",
         joined_at=current_time_ms
     ))
+    grant_role(session, new_group_id, creator.id, "ADMIN", creator.id)
 
     try:
         session.commit()

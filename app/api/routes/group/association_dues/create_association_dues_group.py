@@ -11,6 +11,7 @@ from app.models.group.investment_association import AssociationDuesConfig, Assoc
 from app.api.routes.group.chat.messages import broadcast_system_message_sync
 from .schemas import AssociationDuesGroupCreateRequest
 from .helpers import now_ms as _now_ms
+from app.services.group.authorization import grant_role
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,7 @@ def create_association_dues_group(
         status="ACTIVE",
         joined_at=now_ms
     ))
+    grant_role(session, new_group_id, creator.id, "ADMIN", creator.id)
 
     # 8. Creator dues standing
     session.add(AssociationMemberDuesStanding(

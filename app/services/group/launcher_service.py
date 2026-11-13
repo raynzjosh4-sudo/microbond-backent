@@ -1,5 +1,5 @@
 from sqlmodel import Session
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 import logging
 
@@ -73,6 +73,7 @@ def execute_group_launch(session: Session, group_id: str) -> bool:
         
         # 4. Lock and Activate Group
         details.is_payout_order_locked = True
+        details.locked_at = datetime.now(timezone.utc)
         details.current_saving_day = 1
         saving_days = details.saving_days_per_cycle or 1
         details.total_expected_pool_per_cycle = details.contribution_amount * saving_days * len(active_members)

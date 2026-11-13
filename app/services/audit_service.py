@@ -23,6 +23,9 @@ class AuditService:
         entity_id: str,
         payload: Any,
         actor_user_id: Optional[uuid.UUID] = None,
+        tenant_group_id: Optional[str] = None,
+        request_id: Optional[uuid.UUID] = None,
+        source: str = "PYTHON_API",
     ) -> AuditEvent:
         """
         Appends an immutable audit event to the database with cryptographically chained SHA-256 hash.
@@ -50,6 +53,9 @@ class AuditService:
             payload_json=payload_json,
             previous_hash=previous_hash,
             current_hash=current_hash,
+            tenant_group_id=tenant_group_id,
+            request_id=request_id,
+            source=source,
         )
         session.add(audit_event)
         return audit_event

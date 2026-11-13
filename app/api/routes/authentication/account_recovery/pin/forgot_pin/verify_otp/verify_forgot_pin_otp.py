@@ -1,4 +1,5 @@
 import jwt
+import hmac
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import SQLAlchemyError
@@ -8,6 +9,7 @@ from app.core.database import get_session
 from app.models.user.user import User
 from app.models.auth.otp import OTPRecord
 from app.communications.sms_service import sanitize_uganda_phone
+from app.core.otp_security import hash_otp
 from app.core.rate_limit import RateLimiter
 from .schemas import VerifyForgotPinOTPRequest, VerifyForgotPinOTPResponse
 
@@ -50,7 +52,7 @@ def verify_forgot_pin_otp(payload: VerifyForgotPinOTPRequest, session: Session =
             detail="OTP has expired. Please request a new one."
         )
 
-    if otp_record.code != payload.code:
+    if not hmac.compare_digest(otp_record.code_hash, hash_otp(phone, payload.code)):
         otp_record.attempts += 1
         if otp_record.attempts >= 3:
             otp_record.is_used = True

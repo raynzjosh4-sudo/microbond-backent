@@ -9,6 +9,7 @@ from app.models.group.group import Group, GroupMembership
 from app.models.group.settings import GroupFinancialSettings, GroupGovernanceSettings, GroupCommunicationSettings, GroupVisibilitySettings
 from app.models.group.bill_split import BillSplitConfig, BillSplitOperationalSettings, BillSplitMemberShare
 from app.core.microbond_core import validate_custom_split
+from app.services.group.authorization import grant_role
 from .schemas import BillSplitCreateRequest
 
 router = APIRouter()
@@ -59,6 +60,7 @@ def create_bill_split_group(
         status="ACTIVE"
     )
     db.add(membership)
+    grant_role(db, group_id, current_user.id, "ADMIN", current_user.id)
 
     # 3. BillSplitConfig (Immutable)
     config = BillSplitConfig(

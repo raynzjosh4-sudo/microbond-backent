@@ -770,7 +770,7 @@ class TestOption2WiredServices:
             collection_frequency_days = 7
             contribution_amount = 50000
 
-        members = [MockMember(f"user_{i}") for i in range(1, 11)]
+        members = [MockMember(uuid.UUID(int=i)) for i in range(1, 11)]
         session = MagicMock()
 
         num_cycles = generate_standard_fixed_matrix(
@@ -803,7 +803,7 @@ class TestOption2WiredServices:
         assert payouts[0]["group_id"] == "grp_fixed_100"
         assert payouts[0]["amount_expected"] == 475000
         assert payouts[0]["amount_received"] == 0
-        assert payouts[0]["user_id"] == "user_1"
+        assert payouts[0]["user_id"] == uuid.UUID(int=1)
 
     def test_auction_bidding_matrix_generator_service(self):
         from unittest.mock import MagicMock
@@ -988,7 +988,11 @@ class TestOption2WiredServices:
         now_ms = int(time.time() * 1000)
         session = MagicMock()
         session.exec.return_value.one.return_value = 10
-        session.exec.return_value.first.return_value = RotatingGroupDetails(group_id="grp_ring_1", current_cycle=1)
+        session.exec.return_value.first.side_effect = [
+            RotatingGroupDetails(group_id="grp_ring_1", current_cycle=1),
+            None,
+            None,
+        ]
 
         ob_paid = MemberObligation(group_id="grp_ring_1", user_id="00000000-0000-0000-0000-000000000001", cycle_number=1, amount_due=50000, amount_paid=50000, status="PAID", due_date=now_ms + 100000)
         ob_overdue = MemberObligation(group_id="grp_ring_1", user_id="00000000-0000-0000-0000-000000000002", cycle_number=1, amount_due=50000, amount_paid=0, status="PENDING", due_date=now_ms - 100000)
@@ -1000,8 +1004,6 @@ class TestOption2WiredServices:
         assert ring.paid_on_time_count == 1
         assert ring.missed_deadline_count == 1
         assert ring.ring_fraction == 0.1
-
-
 
 
 

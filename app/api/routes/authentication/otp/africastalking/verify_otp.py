@@ -6,9 +6,10 @@ from app.models.auth.otp import OTPRecord
 from app.models.user.user import User
 from app.communications.sms_service import sanitize_uganda_phone
 from app.core.database import get_session
+from app.core.otp_security import hash_otp
 from app.core.security import create_access_token
 from app.api.routes.kyc.phone.fetch_and_save_kyc import fetch_and_save_kyc
-from .schemas import OTPVerify, OTPVerifyResponse
+from .schemas import OTPVerifyRequest, OTPVerifyResponse
 
 router = APIRouter()
 
@@ -20,7 +21,7 @@ router = APIRouter()
     response_model=OTPVerifyResponse,
 )
 def verify_otp(
-    payload: OTPVerify,
+    payload: OTPVerifyRequest,
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
@@ -33,8 +34,8 @@ def verify_otp(
         # Look up active OTP record
         statement = select(OTPRecord).where(
             OTPRecord.phone_number == phone,
-            OTPRecord.code == payload.code,
-            OTPRecord.is_used == False,
+            OTPRecord.code_hash == hash_otp(phone, payload.code),
+            OTPRecord.is_used.is_(False),
             OTPRecord.expires_at > datetime.now(timezone.utc),
         )
         otp_record = session.exec(statement).first()

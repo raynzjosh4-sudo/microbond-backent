@@ -6,7 +6,7 @@ from app.core.database import get_session
 from app.models.user.user import User
 from app.models.auth.otp import OTPRecord
 from app.communications.sms_service import send_real_otp_sms, sanitize_uganda_phone
-from app.utils.codes import generate_6digit_code
+from app.core.otp_security import OTP_TTL_SECONDS, generate_otp_code, hash_otp
 from app.api.dependencies import get_current_user
 from .schemas import RequestChangePhoneOTPRequest, RequestChangePhoneOTPResponse
 
@@ -49,21 +49,22 @@ def request_change_phone_otp(
                 detail="Please wait at least 1 minute before requesting another OTP."
             )
 
-    otp_code = generate_6digit_code()
-    expiry = datetime.now(timezone.utc) + timedelta(minutes=5)
+    otp_code = generate_otp_code()
+    otp_hash = hash_otp(new_phone, otp_code)
+    expiry = datetime.now(timezone.utc) + timedelta(seconds=OTP_TTL_SECONDS)
 
     try:
         existing_otps = session.exec(
             select(OTPRecord).where(
                 OTPRecord.phone_number == new_phone, 
-                OTPRecord.is_used == False
+                OTPRecord.is_used.is_(False)
             )
         ).all()
         for record in existing_otps:
             record.is_used = True
             session.add(record)
     
-        new_otp = OTPRecord(phone_number=new_phone, code=otp_code, expires_at=expiry)
+        new_otp = OTPRecord(phone_number=new_phone, code_hash=otp_hash, expires_at=expiry)
         session.add(new_otp)
         session.commit()
     except SQLAlchemyError:
@@ -84,5 +85,5 @@ def request_change_phone_otp(
     return RequestChangePhoneOTPResponse(
         status="success",
         message=f"OTP sent to {new_phone}",
-        expires_in_seconds=300
+        expires_in_seconds=OTP_TTL_SECONDS
     )

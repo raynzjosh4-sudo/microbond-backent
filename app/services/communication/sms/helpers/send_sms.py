@@ -1,6 +1,10 @@
+import logging
+
 import africastalking
 from app.core.config import settings
 from app.utils.phone.sanitize_uganda_phone import sanitize_uganda_phone
+
+logger = logging.getLogger(__name__)
 
 USERNAME = settings.AT_USERNAME
 API_KEY = settings.AT_API_KEY
@@ -19,9 +23,8 @@ def send_sms(phone_number: str, message: str) -> bool:
         return False
     formatted_phone = sanitize_uganda_phone(phone_number)
     try:
-        response = sms.send(message, [formatted_phone])
-        print(f"[AT LIVE SMS RESPONSE]: {response}")
+        sms.send(message, [formatted_phone])
         return True
-    except Exception as e:
-        print(f"[AT SMS ERROR]: {str(e)}")
+    except Exception as exc:
+        logger.error("Africa's Talking SMS request failed (%s).", type(exc).__name__)
         return False

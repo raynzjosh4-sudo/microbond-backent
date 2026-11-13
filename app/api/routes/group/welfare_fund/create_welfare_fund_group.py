@@ -17,6 +17,7 @@ from app.models.group.welfare_event import WelfareFundConfig, WelfareFundOperati
 from app.api.routes.group.chat.messages import broadcast_system_message_sync
 from .schemas import WelfareFundGroupCreateRequest
 from .helpers import now_ms
+from app.services.group.authorization import grant_role
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +121,7 @@ def create_welfare_fund_group(
         status="ACTIVE",
         joined_at=current_time_ms
     ))
+    grant_role(session, new_group_id, creator.id, "ADMIN", creator.id)
 
     try:
         session.commit()

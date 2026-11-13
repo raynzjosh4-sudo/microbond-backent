@@ -45,6 +45,8 @@ def _run_create_all():
         import app.models.group.bill_split
         import app.models.group.report
         import app.models.infrastructure
+        import app.models.group.access
+        import app.models.group.core.membership_join_request
 
         SQLModel.metadata.create_all(engine)
     except Exception as e:

@@ -5,6 +5,7 @@ from sqlalchemy import desc, asc
 from app.models.user.user import User
 from app.models.group.core.group import Group
 from app.models.group.core.group_membership import GroupMembership
+from app.models.group.core.membership_join_request import MembershipJoinRequest
 from app.models.group.settings.group_visibility_settings import GroupVisibilitySettings
 from app.models.group.settings.group_governance_settings import GroupGovernanceSettings
 from app.models.group.settings.group_common_settings import GroupCommonSettings
@@ -160,7 +161,15 @@ class ExploreGroupService:
                     GroupMembership.status == "PENDING_APPROVAL",
                 )
             ).all()
-            pending_gids_set = set(pending_memberships)
+            pending_join_requests = session.exec(
+                select(MembershipJoinRequest.group_id).where(
+                    MembershipJoinRequest.user_id == current_user.id,
+                    MembershipJoinRequest.public_status.notin_(
+                        ["APPROVED", "REJECTED", "CANCELLED", "EXPIRED"]
+                    ),
+                )
+            ).all()
+            pending_gids_set = set(pending_memberships) | set(pending_join_requests)
 
         cards: List[ExploreGroupCard] = []
         for g in all_candidate_groups:
@@ -451,4 +460,3 @@ class ExploreGroupService:
             cycle_summary=cycle_summary,
             join_requirements_checklist=checklist,
         )
-

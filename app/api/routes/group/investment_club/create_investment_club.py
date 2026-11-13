@@ -11,6 +11,7 @@ from app.models.group.investment_association import InvestmentClubConfig, Invest
 from app.api.routes.group.chat.messages import broadcast_system_message_sync
 from .schemas import InvestmentClubGroupCreateRequest
 from .helpers import now_ms as _now_ms
+from app.services.group.authorization import grant_role
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +115,7 @@ def create_investment_club(
         status="ACTIVE",
         joined_at=now_ms
     ))
+    grant_role(session, new_group_id, creator.id, "ADMIN", creator.id)
 
     # 8. Creator share ledger
     session.add(InvestmentClubMemberShare(

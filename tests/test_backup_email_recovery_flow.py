@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 from fastapi.testclient import TestClient
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
 import uuid
 
@@ -11,10 +11,16 @@ from app.models.user.user import User
 from app.models.user.security_email import UserSecurityEmail
 from app.models.auth.otp import OTPRecord
 from app.core.security import hash_pin, create_access_token
+from app.core.config import settings
+from app.core.otp_security import hash_otp
 
 
 class TestBackupEmailRecoveryFlow(unittest.TestCase):
     def setUp(self):
+        self.otp_pepper_patch = patch.object(settings, "OTP_PEPPER", "test-otp-pepper")
+        self.otp_pepper_patch.start()
+        self.addCleanup(self.otp_pepper_patch.stop)
+
         # In-memory SQLite for clean isolated tests
         self.engine = create_engine(
             "sqlite:///:memory:",
@@ -57,6 +63,35 @@ class TestBackupEmailRecoveryFlow(unittest.TestCase):
     def tearDown(self):
         app.dependency_overrides.clear()
         self.session.close()
+
+    @patch("app.api.routes.authentication.otp.africastalking.request_otp.send_real_otp_sms")
+    def test_login_otp_is_hashed_and_verifies(self, mock_sms):
+        mock_sms.return_value = True
+
+        request_response = self.client.post(
+            "/api/v1/auth/at-otp/request-otp",
+            json={"phone_number": self.old_phone},
+        )
+        self.assertEqual(request_response.status_code, 200)
+        self.assertIn("••••", request_response.json()["message"])
+
+        otp_record = self.session.exec(
+            select(OTPRecord).where(OTPRecord.phone_number == self.old_phone)
+        ).first()
+        self.assertIsNotNone(otp_record)
+        otp_code = mock_sms.call_args.kwargs["code"]
+        self.assertNotEqual(otp_record.code_hash, otp_code)
+        self.assertEqual(otp_record.code_hash, hash_otp(self.old_phone, otp_code))
+        self.assertNotIn(otp_code, request_response.text)
+
+        verify_response = self.client.post(
+            "/api/v1/auth/at-otp/verify-otp",
+            json={"phone_number": self.old_phone, "code": otp_code},
+        )
+        self.assertEqual(verify_response.status_code, 200)
+        self.assertEqual(verify_response.json()["status"], "success")
+        self.session.refresh(otp_record)
+        self.assertTrue(otp_record.is_used)
 
     def test_get_backup_email_empty(self):
         """GET /email/backup returns has_backup_email=False when none configured."""
@@ -153,9 +188,12 @@ class TestBackupEmailRecoveryFlow(unittest.TestCase):
         mock_sms.assert_called_once()
 
         # Retrieve SMS OTP from database
-        otp_rec = self.session.query(OTPRecord).filter_by(phone_number=self.new_phone).first()
+        otp_rec = self.session.exec(
+            select(OTPRecord).where(OTPRecord.phone_number == self.new_phone)
+        ).first()
         self.assertIsNotNone(otp_rec)
-        sms_code = otp_rec.code
+        sms_code = mock_sms.call_args.kwargs["code"]
+        self.assertEqual(otp_rec.code_hash, hash_otp(self.new_phone, sms_code))
 
         # 5. Step 4: Confirm SMS OTP and update phone number
         with patch("app.api.routes.authentication.account_recovery.backup_email.confirm_phone.fetch_and_save_kyc"):

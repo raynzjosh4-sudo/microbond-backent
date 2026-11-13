@@ -18,6 +18,7 @@ from app.models.group.settings import (
 from app.api.dependencies import get_current_user
 from app.api.routes.group.chat.messages import broadcast_system_message_sync
 from app.models.group.welfare_event import WelfareFundConfig, WelfareFundOperationalSettings
+from app.services.group.authorization import grant_role
 
 router = APIRouter(prefix="/api/v1/groups", tags=["Group Core"])
 
@@ -213,6 +214,7 @@ def create_unified_group(
         status="ACTIVE"
     )
     session.add(new_membership)
+    grant_role(session, new_group_id, current_user.id, "ADMIN", current_user.id)
     
     # 6. Commit Atomically
     try:

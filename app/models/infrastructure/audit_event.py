@@ -1,4 +1,5 @@
 from typing import Optional
+from uuid import UUID
 from sqlmodel import SQLModel, Field
 import uuid
 from sqlalchemy import Column, BigInteger, Text
@@ -19,3 +20,10 @@ class AuditEvent(SQLModel, table=True):
     previous_hash: str = Field(default="0" * 64, max_length=64)
     current_hash: str = Field(max_length=64, index=True)
     created_at: int = Field(default_factory=now_epoch_ms, sa_column=Column(BigInteger, nullable=False))
+    tenant_group_id: Optional[str] = Field(
+        default=None,
+        foreign_key="group.group_id",
+        index=True,
+    )
+    request_id: Optional[UUID] = Field(default=None, index=True)
+    source: str = Field(default="PYTHON_API", max_length=64)

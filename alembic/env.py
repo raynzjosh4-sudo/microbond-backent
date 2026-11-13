@@ -39,6 +39,9 @@ import app.models.group.bill_split
 import app.models.group.chat
 import app.models.group.wallet
 import app.models.group.finance
+import app.models.group.access
+import app.models.group.core.membership_join_request
+import app.models.infrastructure
 import app.models.group.report
 import app.models.user.userpayoutaccount.payout_destination
 import app.models.user.userpaymentmethod.payment_method

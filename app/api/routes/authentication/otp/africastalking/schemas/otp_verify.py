@@ -1,8 +1,18 @@
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
-class OTPVerify(BaseModel):
-    phone_number: str
-    code: str
+class OTPVerifyRequest(BaseModel):
+    phone_number: str = Field(min_length=7, max_length=20)
+    code: str = Field(min_length=6, max_length=6)
     device_id: Optional[str] = None
+
+    @field_validator("code")
+    @classmethod
+    def code_must_be_digits(cls, value: str) -> str:
+        if not value.isdigit():
+            raise ValueError("OTP must contain six digits")
+        return value
+
+
+OTPVerify = OTPVerifyRequest

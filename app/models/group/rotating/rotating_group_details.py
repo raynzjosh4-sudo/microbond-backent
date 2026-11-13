@@ -1,7 +1,10 @@
+from datetime import datetime, time
+from decimal import Decimal
 from typing import Optional
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, BigInteger
+from sqlalchemy import Column, BigInteger, DateTime, Numeric, Text, Time
 from app.utils.time.now_epoch_ms import now_epoch_ms
+from app.utils.time.now_utc_datetime import now_utc_datetime
 
 def utc_now():
     return now_epoch_ms()
@@ -16,7 +19,7 @@ class RotatingGroupDetails(SQLModel, table=True):
     number_of_cycles: Optional[int] = Field(default=None) # Automatically calculated or None if infinite
     collection_frequency_days: int
     collection_time: Optional[str] = Field(default=None)
-    group_start_time: int = Field(sa_column=Column(BigInteger))
+    group_start_time: Optional[int] = Field(default=None, sa_column=Column(BigInteger))
     
     payout_order_strategy: str
     is_payout_order_locked: bool = Field(default=False)
@@ -54,4 +57,27 @@ class RotatingGroupDetails(SQLModel, table=True):
     
     current_cycle: int = Field(default=1)
     current_saving_day: int = Field(default=0, description="Tracks the current saving day within the active cycle (0 = not started, 1-N = active)")
+
+    currency_code: str = Field(default="UGX", max_length=3)
+    timezone_name: str = Field(default="Africa/Kampala", sa_type=Text)
+    collection_start_time: time = Field(default=time(13, 0), sa_type=Time)
+    collection_end_time: time = Field(default=time(23, 0), sa_type=Time)
+    cycle_length_days: int = Field(default=30, ge=1, le=366)
+    recipients_per_cycle: int = Field(default=2, ge=1)
+    reserve_percentage: Decimal = Field(
+        default=Decimal("0"),
+        sa_column=Column(Numeric, nullable=False),
+    )
+    reserve_purpose: Optional[str] = Field(default=None, sa_type=Text)
+    payout_calculation_mode: str = Field(default="EQUAL_SPLIT", sa_type=Text)
+    payout_requires_full_collection: bool = Field(default=True)
+    late_payment_grace_minutes: int = Field(default=0, ge=0)
+    locked_at: Optional[datetime] = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),
+    )
+    updated_at: datetime = Field(
+        default_factory=now_utc_datetime,
+        sa_type=DateTime(timezone=True),
+    )
     created_at: int = Field(default_factory=now_epoch_ms, sa_column=Column(BigInteger))

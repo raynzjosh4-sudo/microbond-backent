@@ -51,9 +51,7 @@ async def log_requests_and_errors(request: Request, call_next):
             status_code=500,
             content={
                 "status": "error",
-                "message": "Internal Server Error",
-                "detail": str(exc),
-                "traceback": err_msg
+                "message": "Internal Server Error"
             }
         )
 

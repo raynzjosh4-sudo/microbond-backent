@@ -13,6 +13,7 @@ from app.core.database import get_session
 from app.models.group.group import Group, GroupMembership
 from app.models.user.user import User
 from app.api.dependencies import get_current_user
+from app.services.group.authorization import grant_role
 
 router = APIRouter(prefix="/api/v1/groups/rotating", tags=["Rotating Groups"])
 
@@ -210,6 +211,7 @@ def create_group(
         status="ACTIVE"
     )
     session.add(new_membership)
+    grant_role(session, new_group_id, creator.id, "ADMIN", creator.id)
 
     # 5. Create the Group Wallet
     from app.models.group.wallet import GroupWallet

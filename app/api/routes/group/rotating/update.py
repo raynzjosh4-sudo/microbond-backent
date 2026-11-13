@@ -2,8 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlmodel import Session, select
 from typing import Optional
 from pydantic import BaseModel, Field
-import datetime
-
 from app.core.database import get_session
 from app.api.dependencies import get_current_user
 from app.models.user.user import User
@@ -96,8 +94,14 @@ def get_rotating_group_settings(
         select(GroupFinancialSettings).where(GroupFinancialSettings.group_id == group_id)
     ).first()
 
-    is_cycle_active = bool(details.is_payout_order_locked)
+    is_cycle_active = bool(details.is_payout_order_locked or details.locked_at)
     current_cycle = details.current_cycle or 1
+    lock_reason = (
+        f"Cycle {current_cycle} is currently active. Financial settings are locked "
+        "to protect member deposits."
+        if is_cycle_active
+        else None
+    )
 
     return {
         "status": "success",
@@ -106,8 +110,8 @@ def get_rotating_group_settings(
             "group_name": group.name,
             "is_admin": membership.role == "ADMIN",
             "is_cycle_active": is_cycle_active,
-            "is_financial_editable": True,
-            "edit_lock_reason": None,
+            "is_financial_editable": not is_cycle_active,
+            "edit_lock_reason": lock_reason,
             "contribution_amount": details.contribution_amount,
             "saving_days_per_cycle": details.saving_days_per_cycle,
             "payouts_per_cycle": details.payouts_per_cycle,
@@ -188,7 +192,37 @@ def update_rotating_group_settings(
     current_cycle = details.current_cycle or 1
     change_notices = []
 
-    # 1. Financial & Contribution Terms (Admins can update even while group is running)
+    # Financial terms become immutable when the first cycle is launched.
+    locked_financial_fields = (
+        ("contribution_amount", details.contribution_amount),
+        ("saving_days_per_cycle", details.saving_days_per_cycle),
+        ("payouts_per_cycle", details.payouts_per_cycle),
+        ("collection_frequency_days", details.collection_frequency_days),
+        ("group_start_time", details.group_start_time),
+        ("collection_time", details.collection_time),
+        ("payout_order_strategy", details.payout_order_strategy),
+    )
+    if details.is_payout_order_locked or details.locked_at:
+        changed_locked_fields = [
+            field_name
+            for field_name, current_value in locked_financial_fields
+            if getattr(request, field_name) is not None
+            and getattr(request, field_name) != current_value
+        ]
+        if changed_locked_fields:
+            changed_labels = ", ".join(
+                field_name.replace("_", " ")
+                for field_name in changed_locked_fields
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Cycle {current_cycle} is currently active. Financial settings "
+                    f"are locked to protect member deposits. Cannot change: {changed_labels}."
+                ),
+            )
+
+    # 1. Financial & Contribution Terms
     if request.contribution_amount is not None and request.contribution_amount != details.contribution_amount:
         old_amt = int(details.contribution_amount or 0)
         new_amt = int(request.contribution_amount)
@@ -492,4 +526,3 @@ def update_rotating_group_settings(
             "current_saving_day": details.current_saving_day
         }
     }
-

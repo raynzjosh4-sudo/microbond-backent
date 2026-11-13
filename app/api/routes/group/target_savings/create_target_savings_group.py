@@ -17,6 +17,7 @@ from app.models.group.settings import (
 from app.models.group.target_savings import TargetSavingsGroupDetails
 from app.api.routes.group.chat.messages import broadcast_system_message_sync
 from .schemas import TargetSavingsGroupCreateRequest
+from app.services.group.authorization import grant_role
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +131,7 @@ def create_target_savings_group(
         joined_at=now_ms
     )
     session.add(new_membership)
+    grant_role(session, new_group_id, creator.id, "ADMIN", creator.id)
 
     try:
         session.commit()

@@ -239,7 +239,6 @@ def submit_endorsement(
         "message": f"You have successfully vouched for {borrower_name}.",
         "data": {
             "pledge_id": new_pledge.id,
-            "pledge_token": new_pledge.pledge_token,
             "borrower_user_id": str(new_pledge.borrower_user_id),
             "borrower_name": borrower_name,
             "note": request.note,
@@ -287,7 +286,6 @@ def get_my_endorsements(
             "vouched_for_others": [
                 {
                     "pledge_id": p.id,
-                    "pledge_token": p.pledge_token,
                     "borrower_user_id": str(u.id),
                     "borrower_name": u.full_name or "Member",
                     "borrower_phone": u.phone_number,
@@ -302,7 +300,6 @@ def get_my_endorsements(
             "vouched_by_others": [
                 {
                     "pledge_id": p.id,
-                    "pledge_token": p.pledge_token,
                     "guarantor_user_id": str(u.id),
                     "guarantor_name": u.full_name or "Guarantor",
                     "guarantor_phone": u.phone_number,
@@ -316,4 +313,3 @@ def get_my_endorsements(
             ]
         }
     }
-

@@ -8,6 +8,7 @@ from app.models.user.user import User
 from app.models.group.group import Group, GroupMembership
 from app.api.routes.group.chat.messages import broadcast_system_message_sync
 from app.core.firebase_config import send_push_notification
+from app.services.group.authorization import grant_role
 from .schemas import TransferOwnershipRequest
 
 router = APIRouter()
@@ -66,6 +67,13 @@ def transfer_group_ownership(
     new_owner_membership.role = "ADMIN"
     new_owner_membership.title = "Owner"
     session.add(new_owner_membership)
+    grant_role(
+        session,
+        group_id,
+        new_owner_uuid,
+        "ADMIN",
+        current_user.id,
+    )
 
     session.commit()
 
