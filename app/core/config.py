@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     AT_API_KEY: str = ""
     AT_USERNAME: str = "microbondapp"
     ENVIRONMENT: str = "production"
+    DEBUG_ERROR_DETAILS: bool = False
     
     SUMSUB_APP_TOKEN: str = ""
     SUMSUB_SECRET_KEY: str = ""

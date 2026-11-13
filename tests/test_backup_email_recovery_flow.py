@@ -4,6 +4,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine, select
 from sqlmodel.pool import StaticPool
+from sqlalchemy.exc import SQLAlchemyError
 import uuid
 
 from app.main import app
@@ -114,6 +115,31 @@ class TestBackupEmailRecoveryFlow(unittest.TestCase):
 
         self.assertEqual(response.status_code, 429)
         self.assertIn("maximum limit of 1", response.json()["detail"])
+
+    def test_login_otp_verification_returns_database_error_in_debug_mode(self):
+        otp = OTPRecord(
+            phone_number=self.old_phone,
+            code_hash=hash_otp(self.old_phone, "123456"),
+            created_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        )
+        self.session.add(otp)
+        self.session.commit()
+
+        with (
+            patch.object(settings, "DEBUG_ERROR_DETAILS", True),
+            patch(
+                "app.api.routes.authentication.otp.africastalking.verify_otp.Session.commit",
+                side_effect=SQLAlchemyError("test database failure"),
+            ),
+        ):
+            response = self.client.post(
+                "/api/v1/auth/at-otp/verify-otp",
+                json={"phone_number": self.old_phone, "code": "123456"},
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertIn("test database failure", response.json()["detail"])
 
     def test_get_backup_email_empty(self):
         """GET /email/backup returns has_backup_email=False when none configured."""

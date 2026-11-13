@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlmodel import Session, select
@@ -5,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.models.auth.otp import OTPRecord
 from app.models.user.user import User
 from app.communications.sms_service import sanitize_uganda_phone
+from app.core.config import settings
 from app.core.database import get_session
 from app.core.otp_security import hash_otp
 from app.core.security import create_access_token
@@ -12,6 +14,7 @@ from app.api.routes.kyc.phone.fetch_and_save_kyc import fetch_and_save_kyc
 from .schemas import OTPVerifyRequest, OTPVerifyResponse
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 @router.post(
     "/verify-otp",
@@ -132,9 +135,19 @@ def verify_otp(
     except HTTPException:
         # Re-raise HTTP exceptions so they aren't caught by the general DB exception handler
         raise
-    except SQLAlchemyError:
+    except SQLAlchemyError as exc:
         session.rollback()
+        database_error = str(getattr(exc, "orig", exc))
+        logger.error(
+            "Database error during OTP verification (%s): %s",
+            type(exc).__name__,
+            database_error,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred during verification.",
+            detail=(
+                f"Database error during verification: {database_error}"
+                if settings.DEBUG_ERROR_DETAILS
+                else "Database error occurred during verification."
+            ),
         )

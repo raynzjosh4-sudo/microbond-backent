@@ -9,6 +9,8 @@ services:
     envVars:
       - key: ENVIRONMENT
         value: staging
+      - key: DEBUG_ERROR_DETAILS
+        value: "true"
       - key: ENABLE_IN_PROCESS_SCHEDULER
         value: "true"
       - key: DATABASE_URL
