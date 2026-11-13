@@ -10,9 +10,10 @@ class OTPVerifyRequest(BaseModel):
     @field_validator("code")
     @classmethod
     def code_must_be_digits(cls, value: str) -> str:
-        if not value.isdigit():
+        normalized = value.strip()
+        if not normalized.isdigit():
             raise ValueError("OTP must contain six digits")
-        return value
+        return normalized
 
 
 OTPVerify = OTPVerifyRequest
