@@ -88,17 +88,16 @@ def verify_otp(
                     # 3. Fire Out-of-Band Email Alert if verified backup email exists
                     from app.models.user.security_email import UserSecurityEmail
                     sec_email = session.exec(
-                        select(UserSecurityEmail).where(
+                        select(UserSecurityEmail.email).where(
                             UserSecurityEmail.user_id == user.id,
                             UserSecurityEmail.is_verified == True
                         )
                     ).first()
-
                     if sec_email:
                         from app.services.communication.email_service import EmailNotificationService
                         background_tasks.add_task(
                             EmailNotificationService.send_security_alert_new_device,
-                            sec_email.email,
+                            sec_email,
                             user.phone_number,
                             payload.device_id,
                             48

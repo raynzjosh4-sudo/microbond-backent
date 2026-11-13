@@ -141,6 +141,46 @@ class TestBackupEmailRecoveryFlow(unittest.TestCase):
         self.assertEqual(response.status_code, 500)
         self.assertIn("test database failure", response.json()["detail"])
 
+    def test_login_otp_verification_works_when_email_verification_columns_are_missing(self):
+        self.user.primary_device_id = "old-device"
+        self.session.add(
+            UserSecurityEmail(
+                user_id=self.user_id,
+                email=self.test_email,
+                is_verified=True,
+            )
+        )
+        otp = OTPRecord(
+            phone_number=self.old_phone,
+            code_hash=hash_otp(self.old_phone, "123456"),
+            created_at=datetime.now(timezone.utc),
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        )
+        self.session.add(otp)
+        self.session.commit()
+        self.session.connection().exec_driver_sql(
+            "ALTER TABLE usersecurityemail DROP COLUMN verification_token"
+        )
+        self.session.connection().exec_driver_sql(
+            "ALTER TABLE usersecurityemail DROP COLUMN verification_expires_at"
+        )
+        self.session.commit()
+
+        with patch(
+            "app.services.communication.email_service.EmailNotificationService."
+            "send_security_alert_new_device"
+        ):
+            response = self.client.post(
+                "/api/v1/auth/at-otp/verify-otp",
+                json={
+                    "phone_number": self.old_phone,
+                    "code": "123456",
+                    "device_id": "new-device",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+
     def test_get_backup_email_empty(self):
         """GET /email/backup returns has_backup_email=False when none configured."""
         res = self.client.get("/email/backup", headers=self.auth_headers)
