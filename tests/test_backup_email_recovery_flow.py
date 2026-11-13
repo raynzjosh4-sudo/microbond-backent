@@ -127,7 +127,7 @@ class TestBackupEmailRecoveryFlow(unittest.TestCase):
         self.session.commit()
 
         with (
-            patch.object(settings, "DEBUG_ERROR_DETAILS", True),
+            patch.object(settings, "DEBUG_ERROR_DETAILS", False),
             patch(
                 "app.api.routes.authentication.otp.africastalking.verify_otp.Session.commit",
                 side_effect=SQLAlchemyError("test database failure"),

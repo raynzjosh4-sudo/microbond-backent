@@ -6,7 +6,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.models.auth.otp import OTPRecord
 from app.models.user.user import User
 from app.communications.sms_service import sanitize_uganda_phone
-from app.core.config import settings
 from app.core.database import get_session
 from app.core.otp_security import hash_otp
 from app.core.security import create_access_token
@@ -145,9 +144,5 @@ def verify_otp(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=(
-                f"Database error during verification: {database_error}"
-                if settings.DEBUG_ERROR_DETAILS
-                else "Database error occurred during verification."
-            ),
+            detail=f"Database error during verification: {database_error}",
         )
